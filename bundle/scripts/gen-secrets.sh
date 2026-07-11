@@ -45,6 +45,10 @@ def gen(tok):
         # base64 case — oauth2-proxy retired 2026-07-11, #80.)
         if tok in ("__G_FERNET__",):
             cache[tok] = base64.urlsafe_b64encode(os.urandom(32)).decode()
+        elif tok in ("__G_JUPYTERHUB_CRYPT__",):
+            # JupyterHub auth_state encryption requires EXACTLY 32 bytes; emit it
+            # as 64 hex chars (token_hex(20) = 20 bytes was rejected at startup).
+            cache[tok] = secrets.token_hex(32)
         else:
             cache[tok] = secrets.token_hex(20)
     return cache[tok]

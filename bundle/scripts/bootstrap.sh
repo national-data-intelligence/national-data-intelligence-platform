@@ -253,6 +253,29 @@ else
   echo "  minio-datalake console OIDC already initialised ✓"
 fi
 
+# ─── 5.2 · reconcile the Superset metadata DB/role. 31_superset_db.sh provisions
+# it during postgres-vault's ONE-TIME initdb, which needs SUPERSET_DB_PASSWORD
+# from the superset-secrets Secret — but that env ref is optional and races the
+# secret (both land in the same kustomize apply), so on a cold boot the role is
+# silently never created and Superset then can't authenticate. Re-run the
+# idempotent provisioning now that postgres-vault is up and the secret exists,
+# then bounce Superset so it picks up the role (non-blocking; nothing gates on it).
+step "5.2 · reconcile superset metadata DB/role (initdb secret-race guard)"
+SS_PW=$(kubectl -n "$NS" get secret superset-secrets -o jsonpath='{.data.DB_PASSWORD}' 2>/dev/null | base64 -d)
+PGU=$(kubectl -n "$NS" exec postgres-vault-0 -- printenv POSTGRES_USER 2>/dev/null)
+if [ -n "$SS_PW" ] && [ -n "$PGU" ]; then
+  if cat "$REPO/3_storage/postgres/init/31_superset_db.sh" \
+       | kubectl -n "$NS" exec -i postgres-vault-0 -- \
+           env SUPERSET_DB_PASSWORD="$SS_PW" POSTGRES_USER="$PGU" bash -s >/dev/null 2>&1; then
+    echo "  ✓ superset_writer + nhdw_superset reconciled"
+    kubectl -n "$NS" rollout restart deploy/superset >/dev/null 2>&1 || true
+  else
+    echo "  ! superset metadata reconcile failed — Superset may not start" >&2
+  fi
+else
+  echo "  ! superset-secrets.DB_PASSWORD or postgres user unavailable — skipping" >&2
+fi
+
 # ─── 5.5 packed runtime state (optional — factory bundles have none) ────────
 step "5.5 · packed state (bundle/state — restored before seeds, if present)"
 bash "$SCRIPTS/restore-state.sh"
