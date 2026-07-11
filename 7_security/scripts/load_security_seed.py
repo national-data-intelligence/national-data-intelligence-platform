@@ -297,6 +297,88 @@ def upsert_roles(cur, rows: list[dict]) -> dict[str, int]:
     return code_to_id
 
 
+# ── Task #88 · normalized permission store ──────────────────────────────────
+# The per-role permission tuples in bundle/roles/*.yaml are normalized into the
+# reusable ops_perm.permission (ONE row per distinct tuple) + ops_perm.role_permission
+# links. A tuple shared by N roles → one permission row + N links. compile.py then
+# sources these from the DB to emit the SAME rego (equivalence-gated before cutover).
+
+def _perm_norm(p: dict) -> dict:
+    """Role-YAML permission entry → ops_perm.permission columns (lists SORTED so a
+    tuple shared across roles canonicalizes to a single row)."""
+    subj, gran = p["subject"], p["granularity"]
+    verbs = sorted(p.get("verbs") or [])
+    return {
+        "subject":      subj,
+        "members":      p.get("members", "scoped"),
+        "granularity":  gran,
+        "verbs":        verbs,
+        "purposes":     sorted(p.get("purpose_of_use") or []),
+        "data_classes": sorted(p.get("data_class") or []),
+        "sensitivity":  sorted(p.get("sensitivity") or []),
+        "description":  f"{subj}/{gran} — {', '.join(verbs)}",
+    }
+
+
+def _perm_key(d: dict) -> tuple:
+    return (d["subject"], d["members"], d["granularity"], tuple(d["verbs"]),
+            tuple(d["purposes"]), tuple(d["data_classes"]), tuple(d["sensitivity"]))
+
+
+def upsert_permissions_from_roles(cur, roles_dir, code_to_id: dict) -> tuple:
+    """Populate ops_perm.permission + role_permission from bundle/roles/*.yaml.
+    Seed links are delete-synced (managed_by='seed'); runtime links survive.
+    Returns (unique_permissions, seed_links)."""
+    if not roles_dir.is_dir():
+        log.warning("roles dir not found: %s — permission store not seeded", roles_dir)
+        return (0, 0)
+    role_perms = []                                    # [(role_code, normalized perm)]
+    for f in sorted(roles_dir.glob("r-*.yaml")):
+        doc = yaml.safe_load(f.open())["role"]
+        for p in (doc.get("permissions") or []):
+            role_perms.append((doc["id"], _perm_norm(p)))
+    if not role_perms:
+        return (0, 0)
+
+    key_to_id = {}                                     # dedup: one row per unique tuple
+    for _code, d in role_perms:
+        k = _perm_key(d)
+        if k in key_to_id:
+            continue
+        cur.execute("""
+            INSERT INTO ops_perm.permission
+                (subject, members, granularity, verbs, purposes, data_classes, sensitivity, description)
+            VALUES (%(subject)s, %(members)s, %(granularity)s, %(verbs)s, %(purposes)s,
+                    %(data_classes)s, %(sensitivity)s, %(description)s)
+            ON CONFLICT ON CONSTRAINT uq_permission_tuple DO UPDATE
+              SET description = EXCLUDED.description, updated_at = now()
+            RETURNING id
+        """, d)
+        key_to_id[k] = cur.fetchone()[0]
+
+    seed_links = set()
+    for code, d in role_perms:
+        rid = code_to_id.get(code)
+        if rid is None:
+            log.warning("role %s (bundle/roles) has no ops_perm.role row — skipped", code)
+            continue
+        seed_links.add((rid, key_to_id[_perm_key(d)]))
+    if seed_links:
+        cur.executemany("""
+            INSERT INTO ops_perm.role_permission (role_id, permission_id, managed_by)
+            VALUES (%s, %s, 'seed')
+            ON CONFLICT (role_id, permission_id) DO UPDATE SET managed_by='seed'
+        """, list(seed_links))
+
+    # Delete-sync seed links the YAMLs no longer declare (runtime links preserved).
+    cur.execute("SELECT role_id, permission_id FROM ops_perm.role_permission WHERE managed_by='seed'")
+    stale = {tuple(r) for r in cur.fetchall()} - seed_links
+    for rid, pid in stale:
+        cur.execute("DELETE FROM ops_perm.role_permission "
+                    "WHERE role_id=%s AND permission_id=%s AND managed_by='seed'", (rid, pid))
+    return (len(key_to_id), len(seed_links))
+
+
 def upsert_role_scope(cur, roles_rows: list[dict], code_to_id: dict[str, int]) -> int:
     """Seed ops_perm.role_scope from each role's optional `scope:` block
     ({ dimension: [values] }, dimension ∈ geography/programme/facility/
@@ -763,6 +845,11 @@ def main() -> int:
             # Phase-1: role-level default data scope (ops_perm.role_scope).
             n = upsert_role_scope(cur, data.get("roles.yaml", []), code_to_id)
             log.info("role_scope:           %d", n)
+
+            # Task #88: normalized permission store from bundle/roles/*.yaml.
+            pn, ln = upsert_permissions_from_roles(
+                cur, seed_dir.parents[1] / "roles", code_to_id)
+            log.info("permissions:          %d unique · %d role links", pn, ln)
 
             counts = upsert_role_grants(cur, data.get("role_grants.yaml", []), code_to_id)
             log.info("role_dashboard:       %d", counts["role_dashboard"])
