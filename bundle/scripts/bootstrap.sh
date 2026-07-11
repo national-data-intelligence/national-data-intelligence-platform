@@ -298,6 +298,17 @@ fi
 step "7 · APP/SECURITY seed (RBAC + workshop groups — from files)"
 bash "$SCRIPTS/seed-app-security.sh" || { echo; echo "✗ APP/SECURITY seed FAILED — the boot is NOT demoable. See the errors above."; exit 1; }
 
+# ─── 7.1 · gateway restart — the gateway runs an OPA self-test at startup that
+# needs the mart_attrs catalog step 7 just seeded. It is deployed with the
+# manifests (step 4), so on a cold boot it starts against an EMPTY catalog,
+# fail-closes, and CrashLoopBackOffs. Force it to re-run the self-test now that
+# the catalog exists, and GATE the gateway-driven seeds below (7.55/7.57/7.6) on
+# it being Ready — otherwise they race a not-yet-recovered gateway and time out.
+step "7.1 · restart gateway (its OPA self-test needs the step-7 catalog)"
+kubectl -n "$NS" rollout restart deploy/nhdw-gateway >/dev/null 2>&1 || true
+kubectl -n "$NS" rollout status deploy/nhdw-gateway --timeout=180s \
+  || { echo; echo "✗ gateway not Ready after the security seed (OPA self-test likely still failing — see 'kubectl -n $NS logs deploy/nhdw-gateway')."; exit 1; }
+
 # ─── 7.05 · docs seed (docs/*.md → MinIO nhdw-docs, served via /gw/docs) ─────
 # Publishes the curated operator docs into MinIO so the admin Documentation page
 # can open/download them; idempotent + reboot-persistent. Non-fatal to the demo
