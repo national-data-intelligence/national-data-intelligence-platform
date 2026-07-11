@@ -1,0 +1,9 @@
+- id: pub-region
+  title: Coverage by region (equity bar)
+  kind: chart
+- id: pub-supply
+  title: Public service readiness (supply)
+  kind: kpi
+- id: pub-articles-list
+  title: Articles list (filterable)
+  kind: custom

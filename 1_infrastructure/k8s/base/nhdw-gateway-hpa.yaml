@@ -1,0 +1,39 @@
+# HorizontalPodAutoscaler for the gateway — the Scalability demo (§4.9).
+# When a traffic spike drives average CPU past 60% of the requested 100m, the
+# HPA scales nhdw-gateway from 1 up to 6 replicas; when load subsides it scales
+# back down (after the stabilization window). metrics-server (base/metrics-
+# server.yaml) provides the CPU metric. The admin topology widget + POST
+# /api/topology/scale show/drive replica counts live.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nhdw-gateway
+  namespace: nhdw
+  labels: { app: nhdw-gateway, tier: access }
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nhdw-gateway
+  minReplicas: 1
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+  behavior:
+    scaleUp:
+      # React fast to a spike (demo-friendly): no stabilization, +100%/15s.
+      stabilizationWindowSeconds: 0
+      policies:
+        - { type: Percent, value: 100, periodSeconds: 15 }
+        - { type: Pods, value: 2, periodSeconds: 15 }
+      selectPolicy: Max
+    scaleDown:
+      # Settle before scaling back so the demo doesn't flap.
+      stabilizationWindowSeconds: 120
+      policies:
+        - { type: Pods, value: 1, periodSeconds: 30 }

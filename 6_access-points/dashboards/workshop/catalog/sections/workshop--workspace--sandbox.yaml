@@ -1,0 +1,16 @@
+id: workshop/workspace/sandbox
+page_id: workshop/workspace
+title: Your sandbox
+eyebrow: Compute · JupyterLab
+ordering: 10
+columns: 12
+dense: true
+widgets:
+- id: ws-sandbox
+  col_span: 12
+  row_span: 1
+  ordering: 0
+- id: ws-orientation
+  col_span: 12
+  row_span: 1
+  ordering: 10

@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: mart_data_quality
+    description: |
+      Cross-source "source pulse" — data-quality signals at ONE grain:
+      source × period × region × woreda, unioned across ALL SIX ingested
+      sources (DHIS2, HCMIS, mBrana, EthioEMR, MFR, EWARS/Climate). Sources
+      report at their native geographic + temporal depth, so period_id and
+      region_id are NULL where a source carries no such dimension (e.g. MFR
+      is point-in-time reference data → period_id NULL; HCMIS/mBrana report
+      at national grain → region_id NULL). completeness_pct/validity_pct
+      are NULL where a source has no honest signal for that dimension yet;
+      timeliness_pct is NULL until a reporting-deadline contract lands.
+      Source labels are clean, human-facing names (the raw '!'-prefixed
+      record_source convention stays in the vault). Adapters must tolerate
+      NULL dimensions. Consumed by /api/dq (source pulse + scorecard).
+    columns:
+      - name: source
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['DHIS2', 'HCMIS', 'mBrana', 'EthioEMR', 'MFR', 'EWARS/Climate']
+      - name: period_id
+        description: "Period bucket as text (YYYY-MM month, or YYYY-Www ISO-week for EWARS/Climate). NULL for point-in-time reference sources (MFR)."
+      - name: region_id
+        description: "2-letter Ethiopian region code. NULL where the source reports at national grain (HCMIS, mBrana) or the geography is unresolved."
+      - name: completeness_pct
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 AND completeness_pct <= 100 OR completeness_pct IS NULL"
+      - name: validity_pct
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 AND validity_pct <= 100 OR validity_pct IS NULL"
+      - name: reports_received
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [source, period_id, region_id, woreda_uid]

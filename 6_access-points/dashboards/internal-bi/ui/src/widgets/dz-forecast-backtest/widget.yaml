@@ -1,0 +1,8 @@
+id: dz-forecast-backtest
+title: Disease · Forecast backtest — does the model earn trust?
+kind: table
+requires:
+  subject: PRG
+  verb: read
+  granularity: aggregate
+  sensitivity: default

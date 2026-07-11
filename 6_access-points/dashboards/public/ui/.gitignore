@@ -1,0 +1,10 @@
+# `tsc -b` (the first half of `npm run build`) emits a .js twin next to every
+# .ts/.tsx source. Vite resolves .tsx/.ts BEFORE .js (see vite.config
+# resolve.extensions), so these twins are inert build artifacts — but if they
+# get committed they resurface as stale duplicates of moved/renamed modules
+# (this repo has been bitten by exactly that). Never track them.
+src/**/*.js
+
+# Local tooling lockfile — the project standard is npm (package-lock.json).
+bun.lock
+bun.lockb

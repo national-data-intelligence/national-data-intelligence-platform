@@ -1,0 +1,12 @@
+id: workshop/models/results
+page_id: workshop/models
+title: Model results
+eyebrow: Latest scored metrics · recent inference
+ordering: 30
+columns: 12
+dense: true
+widgets:
+- id: ws-model-results
+  col_span: 12
+  row_span: 1
+  ordering: 0

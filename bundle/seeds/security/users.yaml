@@ -1,0 +1,192 @@
+# Demo users + their initial role assignments. Loaded into
+# ops_identity.user (upsert) and ops_perm.user_role (granted with
+# source='admin_grant' so subsequent JIT logins don't overwrite).
+#
+# kc_sub UUIDs match what's used in DEV_AUTH defaults across the
+# dashboards' main.py files so the existing pixel-diff harness keeps
+# working with these seed accounts.
+#
+# Realm reference:
+#   moh-staff       — FMoH staff (BI, admin, workshop)
+#   privileged-ops  — privileged actions (admin, sec)
+# (Fayda is a verification-only integration on the public access-request
+#  form — NOT a login realm; there is no citizen sign-in.)
+
+- kc_sub:     a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11
+  username:   solomon.m
+  email:      solomon.m@moh.gov.et
+  full_name:  Solomon Mengistu
+  realm:      privileged-ops
+  role_label: R-OPS-ADM
+  roles:      [R-OPS-ADM]
+
+- kc_sub:     11111111-2222-3333-4444-555555555555
+  username:   hana.d
+  email:      hana.d@moh.gov.et
+  full_name:  Hana Demissie
+  realm:      privileged-ops
+  role_label: R-OPS-ADM
+  roles:      [R-OPS-ADM]
+
+- kc_sub:     22222222-3333-4444-5555-666666666666
+  username:   bini
+  email:      biniyam@nhdw.gov.et
+  full_name:  Biniyam Belayneh
+  realm:      moh-staff
+  role_label: R-CONS-ANA
+  roles:      [R-CONS-ANA]
+
+- kc_sub:     33333333-4444-5555-6666-777777777777
+  username:   abebe.bekele
+  email:      abebe.bekele@moh.gov.et
+  full_name:  Dr Abebe Bekele
+  realm:      moh-staff
+  role_label: R-PD-HIV
+  roles:      [R-PD-HIV]
+  # HIV programme director — data + filters scoped to the HIV programme
+  # (OPA row_filter via ops_identity.user_scope; see common.rego R-PD-HIV route).
+  scope:
+    programme: [HIV]
+
+- kc_sub:     44444444-5555-6666-7777-888888888888
+  username:   tadesse.h
+  email:      tadesse.h@moh.gov.et
+  full_name:  Dr Tadesse Haile
+  realm:      moh-staff
+  role_label: R-DEC
+  roles:      [R-DEC]
+
+- kc_sub:     55555555-6666-7777-8888-999999999999
+  username:   kebede.asfaw
+  email:      k.asfaw@rhb-oromia.gov.et
+  full_name:  Kebede Asfaw
+  realm:      moh-staff
+  role_label: R-RHB-OROMIA
+  roles:      [R-RHB-OROMIA]
+  # Oromia Regional Health Bureau head — data + filters scoped to region OR.
+  scope:
+    geography: [OR]
+
+- kc_sub:     66666666-7777-8888-9999-aaaaaaaaaaaa
+  username:   yohannes.h
+  email:      yohannes@ephi.gov.et
+  full_name:  Dr Yohannes Hadgu
+  realm:      moh-staff
+  role_label: R-OPS-ENG
+  roles:      [R-OPS-ENG]
+
+- kc_sub:     77777777-8888-9999-aaaa-bbbbbbbbbbbb
+  username:   tigist.bekele
+  email:      tigist.b@moh.gov.et
+  full_name:  Dr Tigist Bekele
+  realm:      moh-staff
+  role_label: R-CONS-SCI
+  roles:      [R-CONS-SCI]
+
+- kc_sub:     88888888-9999-aaaa-bbbb-cccccccccccc
+  username:   genet.e
+  email:      genet.e@aau.edu.et
+  full_name:  Genet Endale
+  realm:      moh-staff
+  role_label: R-CONS-RES
+  roles:      [R-CONS-RES]
+
+- kc_sub:     99999999-aaaa-bbbb-cccc-dddddddddddd
+  username:   shewaye.a
+  email:      shewaye@partners.org
+  full_name:  Shewaye Ayele
+  realm:      moh-staff
+  role_label: R-CONS-PRT
+  roles:      [R-CONS-PRT]
+
+# ── PHEM / EPHI ────────────────────────────────────────────────────────
+- kc_sub:     aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+  username:   meron.m
+  email:      meron@epss.gov.et
+  full_name:  Meron Mengistu
+  realm:      moh-staff
+  role_label: R-DEC
+  roles:      [R-DEC]
+
+- kc_sub:     bbbbbbbb-cccc-dddd-eeee-ffffffffffff
+  username:   demo.steward
+  email:      stew@nhdw.gov.et
+  full_name:  Demo Data Steward
+  realm:      moh-staff
+  role_label: R-STEW
+  roles:      [R-STEW]
+
+# ── Sec officer ───────────────────────────────────────────────────────
+- kc_sub:     cccccccc-dddd-eeee-ffff-000000000000
+  username:   sec.officer
+  email:      sec@nhdw.gov.et
+  full_name:  Demo Security Officer
+  realm:      privileged-ops
+  role_label: R-OPS-SEC
+  roles:      [R-OPS-SEC]
+  mfa:        true   # FR7.3: TOTP enrolment demo — CONFIGURE_TOTP required action
+
+# ── Super-user (demo root) ────────────────────────────────────────────
+- kc_sub:     dddddddd-eeee-ffff-0000-111111111111
+  username:   root
+  email:      root@nhdw.local
+  full_name:  NHDW Root
+  realm:      privileged-ops
+  role_label: R-SUPER
+  roles:      [R-SUPER]
+
+# ── Cross-realm super-user (test account: R-SUPER in BOTH realms → access to
+#    EVERY access point — internal-bi, workshop, public AND admin). Password =
+#    SEED_PASSWORD like every seeded user. Two Keycloak identities (one per
+#    realm), same username/password.
+- kc_sub:     55555555-5555-5555-5555-555555555555
+  username:   superadmin
+  email:      superadmin@nhdw.local
+  full_name:  NHDW Super Admin
+  realm:      moh-staff
+  role_label: R-SUPER
+  roles:      [R-SUPER]
+- kc_sub:     66666666-6666-6666-6666-666666666666
+  username:   superadmin
+  email:      superadmin@nhdw.local
+  full_name:  NHDW Super Admin
+  realm:      privileged-ops
+  role_label: R-SUPER
+  roles:      [R-SUPER]
+
+# ── Demo personas referenced by bundle/seeds/demo/scenarios.json.
+# Each persona is a distinct Keycloak user with its own kc_sub.
+- kc_sub:     11111111-aaaa-bbbb-cccc-dddddddddddd
+  username:   dec.nat
+  email:      dec.nat@moh.gov.et
+  full_name:  National Decision-Maker
+  realm:      moh-staff
+  role_label: R-DEC
+  roles:      [R-DEC]
+
+- kc_sub:     22222222-aaaa-bbbb-cccc-dddddddddddd
+  username:   kebede.oromia
+  email:      kebede.oromia@moh.gov.et
+  full_name:  Kebede Asfaw (RHB Director · Oromia)
+  realm:      moh-staff
+  role_label: R-RHB-OROMIA
+  roles:      [R-RHB-OROMIA]
+  # Oromia Regional Health Bureau head — data + filters scoped to region OR.
+  scope:
+    geography: [OR]
+
+- kc_sub:     33333333-aaaa-bbbb-cccc-dddddddddddd
+  username:   analyst.ana
+  email:      analyst.ana@moh.gov.et
+  full_name:  Demo Analyst
+  realm:      moh-staff
+  role_label: R-CONS-ANA
+  roles:      [R-CONS-ANA]
+
+- kc_sub:     44444444-aaaa-bbbb-cccc-dddddddddddd
+  username:   sci.demo
+  email:      sci.demo@moh.gov.et
+  full_name:  Demo Data Scientist
+  realm:      moh-staff
+  role_label: R-CONS-SCI
+  roles:      [R-CONS-SCI]

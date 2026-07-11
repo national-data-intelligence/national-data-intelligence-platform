@@ -1,0 +1,99 @@
+# ServiceAccount + Role + RoleBinding for nhdw-gateway so it can read
+# pods/services + scale Deployments + trigger ML retraining Jobs in its
+# own namespace. Used by:
+#   - GET  /api/topology/orchestration (lists pods + services)
+#   - GET  /api/topology/cluster       (pods-by-phase + node usage + HPA status)
+#   - GET  /api/topology/node          (per-node storage via kubelet stats/summary)
+#   - GET  /api/topology/logs          (tails a pod's container log)
+#   - POST /api/topology/scale         (patches deployment replicas — K8S-5)
+#   - POST /api/ml/{model}/retrain     (creates a Job from cronjob/ml-{model} — ML-4)
+#   - GET  /api/ml/{model}/runs        (also walks Job + Pod status)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nhdw-gateway
+  namespace: nhdw
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nhdw-gateway
+  namespace: nhdw
+rules:
+  - apiGroups: [ "" ]
+    resources: [ pods, services, namespaces, configmaps, secrets ]
+    verbs:     [ get, list, watch ]
+  # Topology graph / node-detail enrichment: cluster events + pod logs so the
+  # side panel can surface recent events + tail logs (K8S topology rebuild #83).
+  - apiGroups: [ "" ]
+    resources: [ events ]
+    verbs:     [ get, list, watch ]
+  - apiGroups: [ "" ]
+    resources: [ pods/log ]
+    verbs:     [ get ]
+  # Live per-POD CPU + mem for the node-detail Resource card + the topology
+  # health overlay. `pods` under metrics.k8s.io IS namespace-scoped, so it stays
+  # in this Role; the cluster-scoped `nodes`/`nodes/proxy`/`metrics.k8s.io.nodes`
+  # (needed by /cluster's node-usage card) live in the ClusterRole below — a
+  # namespaced Role can NOT grant access to cluster-scoped resources, which is why
+  # the "Node usage" card read "No node metrics" (topology redesign 2026-07-06).
+  - apiGroups: [ "metrics.k8s.io" ]
+    resources: [ pods ]
+    verbs:     [ get, list ]
+  - apiGroups: [ "apps" ]
+    resources: [ deployments, deployments/scale, statefulsets, replicasets ]
+    verbs:     [ get, list, watch, patch, update ]
+  - apiGroups: [ "autoscaling" ]
+    resources: [ horizontalpodautoscalers ]
+    verbs:     [ get, list, watch, patch, update ]
+  - apiGroups: [ "batch" ]
+    resources: [ jobs, cronjobs ]
+    verbs:     [ get, list, watch, create, delete ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nhdw-gateway
+  namespace: nhdw
+subjects:
+  - { kind: ServiceAccount, name: nhdw-gateway, namespace: nhdw }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind:     Role
+  name:     nhdw-gateway
+---
+# CLUSTER-SCOPED reads for GET /api/topology/cluster (node-usage card) and the
+# node-detail Storage card. `nodes`, `nodes/proxy` and `metrics.k8s.io.nodes` are
+# cluster-scoped resources, so they MUST be granted via a ClusterRole — the
+# namespaced Role above cannot. Without this the gateway is denied
+# `GET /api/v1/nodes` + `GET /apis/metrics.k8s.io/v1beta1/nodes`, so the
+# "Node usage" card showed "No node metrics" even though metrics-server was up.
+#   - nodes            → allocatable CPU/mem for the cluster-capacity card,
+#   - metrics.k8s.io/nodes → live per-node CPU/mem usage (metrics-server),
+#   - nodes/proxy      → the kubelet Summary API (/stats/summary) for per-pod
+#                        ephemeral + PVC disk usage in the node-detail Storage card.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nhdw-gateway-node-metrics
+rules:
+  - apiGroups: [ "" ]
+    resources: [ nodes ]
+    verbs:     [ get, list ]
+  - apiGroups: [ "" ]
+    resources: [ nodes/proxy ]
+    verbs:     [ get ]
+  - apiGroups: [ "metrics.k8s.io" ]
+    resources: [ nodes ]
+    verbs:     [ get, list ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nhdw-gateway-node-metrics
+subjects:
+  - { kind: ServiceAccount, name: nhdw-gateway, namespace: nhdw }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind:     ClusterRole
+  name:     nhdw-gateway-node-metrics

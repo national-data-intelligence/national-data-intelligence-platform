@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>NHDW Internal BI · Federal Ministry of Health · Ethiopia</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="bi-build" content="golden-parity-r7-final" />
+<link rel="icon" type="image/png" href="/static/assets/logo-fmoh.png" />
+<!-- Fonts + echarts are BUNDLED (main.tsx imports @fontsource/*; widgets import
+     npm echarts). No runtime CDN: the cluster is offline and an unreachable
+     stylesheet stalls DOMContentLoaded + document.fonts.ready on every load. -->
+</head>
+<body>
+<div id="icon-sprite"></div>
+<div id="root"></div>
+<script>fetch('/static/assets/icons.html').then(r=>r.text()).then(h=>{document.getElementById('icon-sprite').innerHTML=h;});</script>
+<script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

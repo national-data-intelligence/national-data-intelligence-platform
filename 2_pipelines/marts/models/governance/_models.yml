@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: mart_consent_activity_kpi
+    description: |
+      Governance KPI strip — exactly three (label, value) rows: "active
+      consents" (gated patients the consent gate currently serves),
+      "revoked (24h)", "pending review". active consents reuses the
+      consent_gate() macro over the same population the PHI marts gate,
+      so the KPI and the gate cannot drift apart.
+    columns:
+      - name: label
+        tests:
+          - not_null
+          - unique
+          - accepted_values:
+              values: ['active consents', 'revoked (24h)', 'pending review']
+      - name: value
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"

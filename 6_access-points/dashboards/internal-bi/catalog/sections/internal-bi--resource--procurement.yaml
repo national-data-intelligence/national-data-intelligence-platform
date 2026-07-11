@@ -1,0 +1,15 @@
+id: internal-bi/resource/procurement
+page_id: internal-bi/resource
+title: Procurement
+ordering: 50
+columns: 12
+dense: true
+widgets:
+- id: rm-order-next
+  col_span: 7
+  row_span: 3
+  ordering: 0
+- id: rm-pipeline
+  col_span: 5
+  row_span: 3
+  ordering: 1

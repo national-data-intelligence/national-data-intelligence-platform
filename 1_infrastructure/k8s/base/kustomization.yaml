@@ -1,0 +1,129 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: nhdw
+
+resources:
+  - namespace.yaml
+  # storage
+  - postgres-vault.yaml
+  - minio.yaml
+  - clickhouse.yaml
+  - trino.yaml
+  # security
+  - opa.yaml
+  - keycloak.yaml
+  # api + ml
+  - gateway-rbac.yaml
+  - nhdw-gateway.yaml
+  - dbt-docs.yaml
+  - superset.yaml            # self-service SQL/BI over the marts (Trino), FAB OIDC (#81)
+  - tool-gates.yaml
+  # oauth2-proxy RETIRED 2026-07-11 (#80) — every tool it forward-auth'd now has
+  # its own role-aware front (tool-gates.yaml / native OIDC). See _archive/.
+  # workshop compute — the ONE in-cluster JupyterHub (per-user labs, #78)
+  - jupyterhub.yaml
+  # llm.yaml (in-cluster ollama) RETIRED 2026-07-06 → the LLM is an EXTERNAL
+  # component (0_external/llm/), reached at host.k3d.internal:11434. Manifest
+  # archived to _archive/2026-07-06/in-cluster-llm/. (WSL2 can't do in-cluster GPU;
+  # bare-metal Linux in-cluster GPU is the documented alternative in 0_external/llm/.)
+  - mlflow.yaml
+  # orchestrator (ML batch-inference DAG — ml-cronjobs retired 2026-07-03)
+  - airflow.yaml
+  # dashboards (5)
+  - internal-bi.yaml
+  - dashboards.yaml
+  - keycloak-seed-job.yaml
+  # ops console
+  - headlamp.yaml
+  # (Mailpit SMTP sink RETIRED 2026-07-06 → app email uses the external Google
+  #  SMTP relay only; creds live in the gitignored smtp-secrets Secret.)
+  # observability stack (#81): Prometheus + Loki + Alertmanager + Promtail.
+  # In-cluster DNS: prometheus:9090, loki:3100, alertmanager:9093 — the gateway's
+  # PROMETHEUS_URL / LOKI_URL / ALERTMANAGER_URL default here. See
+  # docs/observability-integration.md for the topology RED + per-node log wiring.
+  - observability
+  # Scalability demo (§4.9): gateway HPA (metrics-server applied separately)
+  - nhdw-gateway-hpa.yaml
+
+configMapGenerator:
+  - name: workspace-profiles
+    files:
+      - profiles.yaml=../../../6_access-points/jupyterhub/profiles.yaml
+  - name: opa-policies
+    files:
+      - ../../../7_security/opa/policies/common.rego
+      - ../../../7_security/opa/policies/role_r_cons_ana.rego
+      - ../../../7_security/opa/policies/role_r_cons_prt.rego
+      - ../../../7_security/opa/policies/role_r_cons_res.rego
+      - ../../../7_security/opa/policies/role_r_cons_sci.rego
+      - ../../../7_security/opa/policies/role_r_dec.rego
+      - ../../../7_security/opa/policies/role_r_ops_adm.rego
+      - ../../../7_security/opa/policies/role_r_ops_eng.rego
+      - ../../../7_security/opa/policies/role_r_ops_sec.rego
+      - ../../../7_security/opa/policies/role_r_prod_clin.rego
+      - ../../../7_security/opa/policies/role_r_prod_submit.rego
+      - ../../../7_security/opa/policies/role_r_pub_anon.rego
+      - ../../../7_security/opa/policies/role_r_stew.rego
+      - ../../../7_security/opa/policies/role_r_super.rego
+
+  - name: keycloak-realm-configs
+    files:
+      - ../../../7_security/keycloak/realm-configs/moh-staff.json
+      - ../../../7_security/keycloak/realm-configs/privileged-ops.json
+      - ../../../7_security/keycloak/realm-configs/ehia-saml-mock.json
+
+  - name: postgres-vault-init
+    files:
+      - ../../../3_storage/postgres/init/00_users.sh
+      - ../../../3_storage/postgres/init/00_users.sql.template
+      - ../../../3_storage/postgres/init/01_schemas.sql
+      # (02_component_views.sql retired 2026-07-03 → _archive/2026-07-03/
+      # component-views/ — its component-registry consumer no longer exists.)
+      - ../../../3_storage/postgres/init/03_program_demo.sql
+      - ../../../3_storage/postgres/init/04_ops_db.sh
+      - ../../../3_storage/postgres/init/05_ops_schemas.sql
+      - ../../../3_storage/postgres/init/06_ops_users.sql.template
+      - ../../../3_storage/postgres/init/07_marts_schemas_extras.sql
+      - ../../../3_storage/postgres/init/08_grafana_db.sh
+      - ../../../3_storage/postgres/init/09_mlflow_db.sh
+      - ../../../3_storage/postgres/init/10_mfr_landing.sql
+      - ../../../3_storage/postgres/init/11_ml_predictions.sh
+      - ../../../3_storage/postgres/init/12_resource_request.sh
+      - ../../../3_storage/postgres/init/13_graduation.sh
+      - ../../../3_storage/postgres/init/14_access_request.sh
+      # 15_workshop_groups_seed.sh deferred — seeds workshop members with FKs
+      # to identity rows that don't exist at DB-init; runs in the seeding step.
+      - ../../../3_storage/postgres/init/16_saved_query_schedule.sh
+      - ../../../3_storage/postgres/init/17_perm_schemas.sql
+      # 18_security_seed.sh deferred — runs load_security_seed.py (not mounted
+      # in the postgres pod) against identity data; runs in the seeding step.
+      - ../../../3_storage/postgres/init/19_api_tokens.sql
+      - ../../../3_storage/postgres/init/20_keycloak_db.sh
+      - ../../../3_storage/postgres/init/21_airflow_db.sh
+      - ../../../3_storage/postgres/init/22_project.sh
+      - ../../../3_storage/postgres/init/23_perm_admin_grants.sql
+      - ../../../3_storage/postgres/init/24_public_article.sql
+      - ../../../3_storage/postgres/init/25_perm_scope_migration.sql
+      - ../../../3_storage/postgres/init/26_artifact_project.sh
+      - ../../../3_storage/postgres/init/27_ml_monitoring.sh
+      - ../../../3_storage/postgres/init/28_dataset_project_link.sh
+      - ../../../3_storage/postgres/init/29_alert_routing.sql
+      - ../../../3_storage/postgres/init/30_demo_patient_phi.sql
+      - ../../../3_storage/postgres/init/31_superset_db.sh
+
+
+  - name: keycloak-seed-script
+    files:
+      - ../../../7_security/keycloak/scripts/setup-keycloak.py
+
+  - name: keycloak-users-seed
+    files:
+      - ../../../bundle/seeds/security/users.yaml
+
+
+  - name: clickhouse-users-d
+    files:
+      - ../../../3_storage/clickhouse/config/users.d/nhdw-named-collections.xml
+
+generatorOptions:
+  disableNameSuffixHash: true

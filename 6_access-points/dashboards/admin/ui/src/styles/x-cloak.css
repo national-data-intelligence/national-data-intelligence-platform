@@ -1,0 +1,4 @@
+/* Parity with the mockup's "<style>[x-cloak]{display:none!important;}</style>"
+   trailer. In React we use conditional rendering instead, but legacy
+   class names from the mockup may still reference [x-cloak]. */
+[x-cloak] { display: none !important; }

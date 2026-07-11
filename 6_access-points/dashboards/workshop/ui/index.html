@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>NHDW Workshop · Community portal · FMoH Ethiopia</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="/static/assets/logo-fmoh.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- UI sans (Nunito Sans) is self-hosted via @fontsource in src/main.tsx — no runtime CDN.
+     The CDN link below only carries the serif/mono faces (pre-existing; falls back offline). -->
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="icon-sprite"></div>
+<div id="root"></div>
+<script>fetch('/static/assets/icons.html').then(r=>r.text()).then(h=>{document.getElementById('icon-sprite').innerHTML=h;});</script>
+<script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

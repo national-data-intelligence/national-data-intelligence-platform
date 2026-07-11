@@ -1,0 +1,65 @@
+# HCMIS WDM + mBrana source replica — EXTERNAL to the NHDW k8s cluster (models the
+# third-party EPSS SQL Server the dlt ingestors pull from). ONE SQL Server 2025
+# instance hosts BOTH databases to save RAM on the shared 31 GB host:
+#
+#   • HCMISWDM     — vaccine / medical-supply warehouse data management
+#   • HCMISWCloud  — the mBrana cloud platform DB (mBrana, mFlowUSSD, RRF,
+#                    AdministrativeUnit, dbo, Commodity, USM schemas)
+#
+# ┌─ mBrana note ──────────────────────────────────────────────────────────────┐
+# │ mBrana does NOT get its own docker-compose. Its HCMISWCloud database lives  │
+# │ in THIS instance. Restore it with 0_external/sources/mBrana/scripts/restore.sh after │
+# │ this container is healthy (it docker-cp's HCMISWCloud.bak into the running  │
+# │ container and RESTOREs it side-by-side with HCMISWDM). The mBrana ingestor  │
+# │ connects to the same host.k3d.internal:1433, database=HCMISWCloud.          │
+# └────────────────────────────────────────────────────────────────────────────┘
+#
+# SQL Server 2025 is MANDATORY: HCMISWDM.bak / HCMISWCloud.bak carry internal
+# version 998, which exceeds the SQL Server 2019/2022 max (~957–958). Developer
+# edition is free for dev/demo use only.
+#
+# Offline seeding path:
+#   1. docker compose -f 0_external/sources/HCMISWDM/docker-compose.yml up -d
+#   2. wait for the container to report healthy (sqlcmd 'SELECT 1')
+#   3. bash 0_external/sources/HCMISWDM/scripts/restore.sh   (HCMISWDM schema + users)
+#      bash 0_external/sources/mBrana/scripts/restore.sh     (HCMISWCloud schema + users)
+#   4. python3 0_external/sources/HCMISWDM/scripts/synthesize.py   (+ mBrana synthesize.py)
+# The in-cluster dlt ingestors then pull TDS over host.k3d.internal:1433.
+#
+# Ports are published on 0.0.0.0 (NOT 127.0.0.1) so k3d pods can reach them via
+# host.k3d.internal. This stack has NO nhdw_net attachment — it is the outside
+# world; a private bridge is the only network it joins.
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: hcmiswdm-sqlserver   # restore.sh (both HCMISWDM + mBrana) exec into this name
+    restart: unless-stopped
+    environment:
+      SA_PASSWORD: ${HCMISWDM_SA_PASSWORD:-ChangeMe-MUST-be-strong-Aa1!}
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      # Cap the SQL Server buffer pool for the shared 31 GB no-swap host.
+      MSSQL_MEMORY_LIMIT_MB: "5120"
+    mem_limit: 6g          # hard container ceiling above the engine limit (two DBs + large synth inserts need headroom — Msg 701 OOM at 2.5 GB)
+    ports:
+      - "1433:1433"        # 0.0.0.0 — reachable from k3d pods via host.k3d.internal
+    volumes:
+      - hcmiswdm_data:/var/opt/mssql
+      # Backups dir is a named volume so restore.sh can docker cp the .bak in
+      # (named volume, not ./data bind — the bind broke on a symlinked data dir).
+      - hcmiswdm_backup:/var/opt/mssql/backup
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P $$SA_PASSWORD -C -Q 'SELECT 1' > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+    networks: [hcmiswdm_net]
+
+networks:
+  hcmiswdm_net:
+    driver: bridge
+
+volumes:
+  hcmiswdm_data:
+  hcmiswdm_backup:

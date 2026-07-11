@@ -1,0 +1,588 @@
+/**
+ * Data Quality & lineage — the operator's headline view of pipeline health.
+ *
+ * Everything here reads live from /gw/dq/* (which fronts the dbt manifest +
+ * run_results artifacts, the raw-lake _manifest.json sidecars, and the
+ * bi_quality / business-vault marts via Trino). No mock rows: a widget that
+ * can't reach its data degrades to a clear "not yet available" note rather
+ * than fabricating numbers. Auto-refreshes every 30s.
+ *
+ * Layout (top → bottom): headline KPIs → ONE merged per-source health widget
+ * (ingestion freshness + data quality, folded together per source) → quality
+ * dimensions & cross-source reconciliation → dbt tests (with acknowledge) →
+ * compact lineage summary + operator tool deep-links. The full interactive
+ * DAG lives in dbt Docs — this page is the summary, not the graph.
+ */
+import { useEffect, useMemo, useState } from 'react';
+import * as dq from '../../api/dq';
+import '../../styles/dq.css';
+
+// dbt-manifest lineage tiers. NB: the "source" tier counts dbt source()
+// TABLE declarations (one per raw table we read), NOT the six source
+// SYSTEMS — hence the "Source tables" label, so ~29 is never mistaken for
+// "29 source systems".
+const TIER_LABELS: Record<dq.LineageNode['tier'], string> = {
+  source:          'Source tables',
+  staging:         'Staging',
+  vault_raw:       'Vault · raw',
+  vault_business:  'Vault · business',
+  mart:            'Marts',
+  other:           'Other',
+};
+
+// Canonical six ingested sources + a one-line "what it is". Keys match the
+// gateway SOURCES registry and (after its alias normalisation) the source
+// label from mart_data_quality, so freshness + quality fold onto one row.
+const SOURCE_META: Record<string, string> = {
+  'DHIS2':    'HMIS aggregate',
+  'EthioEMR': 'FHIR encounters',
+  'HCMIS':    'Supply chain',
+  'mBrana':   'USSD stock logs',
+  'MFR':      'Facility registry',
+  'Climate':  'Weekly climate feed',
+};
+
+const TOOLS = [
+  { label: 'dbt Docs', sub: 'Full interactive lineage DAG',
+    href: 'https://dbt-docs.127.0.0.1.nip.io/', ico: 'i-database' },
+  // The browsable MinIO CONSOLE (:9001), not the S3 API host (minio.* → :9000,
+  // which isn't a web UI and fails to load). See ing-minio-console.
+  { label: 'MinIO Console', sub: 'Browse the raw data lake · nhdw-raw',
+    href: 'https://minio-console.127.0.0.1.nip.io/', ico: 'i-folder' },
+  { label: 'Airflow', sub: 'Ingestion + build run history',
+    href: 'https://airflow.127.0.0.1.nip.io/', ico: 'i-refresh' },
+];
+
+const DIM_ORDER: Array<{ key: keyof dq.Dimensions['dimensions']; label: string; hint: string }> = [
+  { key: 'completeness', label: 'Completeness', hint: 'expected records arrived' },
+  { key: 'validity',     label: 'Validity',     hint: 'values in valid range' },
+  { key: 'timeliness',   label: 'Timeliness',   hint: 'within reporting deadline' },
+  { key: 'consistency',  label: 'Consistency',  hint: 'relationship tests pass' },
+  { key: 'uniqueness',   label: 'Uniqueness',   hint: 'no duplicate keys' },
+];
+
+const STATUS_TONE: Record<string, 'good' | 'watch' | 'alert' | 'neutral'> = {
+  live: 'good', stale: 'watch', down: 'alert', unknown: 'neutral',
+};
+
+// ── formatting helpers ──────────────────────────────────────────────────
+function fmtAgo(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return '—';
+  if (ms < 60_000)     return `${Math.max(0, Math.round(ms / 1000))}s ago`;
+  if (ms < 3_600_000)  return `${Math.round(ms / 60_000)}m ago`;
+  if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)}h ago`;
+  return `${Math.round(ms / 86_400_000)}d ago`;
+}
+function fmtLag(h: number | null): string {
+  if (h == null) return '—';
+  if (h < 1)  return `${Math.round(h * 60)}m`;
+  if (h < 48) return `${h.toFixed(1)}h`;
+  return `${(h / 24).toFixed(1)}d`;
+}
+function fmtPct(n: number | null | undefined): string {
+  return n == null ? '—' : `${Number(n).toFixed(n % 1 === 0 ? 0 : 1)}%`;
+}
+function fmtNum(n: number | null | undefined): string {
+  return n == null ? '—' : Number(n).toLocaleString();
+}
+function pctTone(n: number | null | undefined, good = 90, watch = 75): 'good' | 'watch' | 'alert' | 'flat' {
+  if (n == null) return 'flat';
+  if (n >= good)  return 'good';
+  if (n >= watch) return 'watch';
+  return 'alert';
+}
+function shortTestId(uid: string): { model: string; test: string } {
+  const parts = uid.split('.');
+  if (parts.length < 3) return { model: '—', test: uid };
+  const body = parts[2];
+  const m = body.match(/^(.+?)__(.+)$/);
+  if (m) return { test: m[1], model: m[2] };
+  return { test: body, model: parts[1] };
+}
+
+// ── tiny inline sparkline ───────────────────────────────────────────────
+function Sparkline({ points }: { points: number[] }) {
+  const w = 92, h = 24;
+  if (!points || points.length < 2) return <span className="dq-spark-empty">no history</span>;
+  const max = Math.max(...points), min = Math.min(...points);
+  const range = (max - min) || 1;
+  const step = w / (points.length - 1);
+  const y = (p: number) => h - 2 - ((p - min) / range) * (h - 4);
+  const d = points.map((p, i) => `${i ? 'L' : 'M'}${(i * step).toFixed(1)},${y(p).toFixed(1)}`).join(' ');
+  const last = points[points.length - 1], prev = points[points.length - 2];
+  const tone = last < prev * 0.75 ? 'down' : last > prev * 1.25 ? 'up' : '';
+  return (
+    <svg className={`dq-spark ${tone}`} width={w} height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      <path d={d} />
+      <circle cx={(w).toFixed(1)} cy={y(last).toFixed(1)} r={2.2} />
+    </svg>
+  );
+}
+
+function Meter({ pct, tone }: { pct: number | null | undefined; tone?: string }) {
+  const v = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+  return (
+    <div className="dq-meter" aria-hidden>
+      <span className={`dq-meter-fill ${tone || ''}`} style={{ width: `${v}%` }} />
+    </div>
+  );
+}
+
+// One quality cell: labelled meter + tabular %. Muted when the source has no
+// honest signal for this dimension yet (never a fabricated number).
+function QCell({ pct }: { pct: number | null | undefined }) {
+  const tone = pctTone(pct);
+  return (
+    <div className="dq-q-cell">
+      <Meter pct={pct} tone={tone} />
+      <span className={`dq-q-pct ${pct == null ? 'is-na' : tone}`}>{fmtPct(pct)}</span>
+    </div>
+  );
+}
+
+function DQ() {
+  const [summary,    setSummary]    = useState<dq.DqSummary | null>(null);
+  const [fails,      setFails]      = useState<dq.DqTest[]>([]);
+  const [warns,      setWarns]      = useState<dq.DqTest[]>([]);
+  const [lineage,    setLineage]    = useState<dq.DqLineage | null>(null);
+  const [sources,    setSources]    = useState<dq.SourcesResp | null>(null);
+  const [ingestion,  setIngestion]  = useState<dq.IngestionResp | null>(null);
+  const [dims,       setDims]       = useState<dq.Dimensions | null>(null);
+  const [recon,      setRecon]      = useState<dq.ReconResp | null>(null);
+  const [compliance, setCompliance] = useState<dq.Compliance | null>(null);
+  const [errs,       setErrs]       = useState<string[]>([]);
+
+  const [ackBusy,  setAckBusy]  = useState<Record<string, boolean>>({});
+  const [ackLocal, setAckLocal] = useState<Record<string, { by: string; at: string | null }>>({});
+  const [ackErr,   setAckErr]   = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      const settled = await Promise.allSettled([
+        dq.getSummary(), dq.getTests('fail', 25), dq.getTests('warn', 25),
+        dq.getLineage(), dq.getSources(), dq.getIngestion(),
+        dq.getDimensions(), dq.getReconciliation(), dq.getCompliance(),
+      ]);
+      if (cancelled) return;
+      const nextErrs: string[] = [];
+      const [s, f, w, l, src, ing, dm, rc, cp] = settled;
+      if (s.status  === 'fulfilled') setSummary(s.value);       else nextErrs.push(`summary: ${s.reason}`);
+      if (f.status  === 'fulfilled') setFails(f.value);
+      if (w.status  === 'fulfilled') setWarns(w.value);
+      if (l.status  === 'fulfilled') setLineage(l.value);
+      if (src.status === 'fulfilled') setSources(src.value);    else nextErrs.push(`sources: ${src.reason}`);
+      if (ing.status === 'fulfilled') setIngestion(ing.value);
+      if (dm.status  === 'fulfilled') setDims(dm.value);
+      if (rc.status  === 'fulfilled') setRecon(rc.value);
+      if (cp.status  === 'fulfilled') setCompliance(cp.value);
+      setErrs(nextErrs);
+    };
+    refresh();
+    const t = setInterval(refresh, 30_000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+
+  async function doAck(t: dq.DqTest) {
+    setAckErr(null);
+    setAckBusy(b => ({ ...b, [t.unique_id]: true }));
+    try {
+      const { test, model } = shortTestId(t.unique_id);
+      const res = await dq.ackTest({
+        unique_id: t.unique_id, model, test,
+        message: t.message ?? undefined, severity: t.status,
+      });
+      setAckLocal(a => ({ ...a, [t.unique_id]: { by: res.acked_by, at: res.acked_at } }));
+    } catch (e: any) {
+      setAckErr(e?.message || String(e));
+    } finally {
+      setAckBusy(b => ({ ...b, [t.unique_id]: false }));
+    }
+  }
+
+  // ── derived ──
+  const failingTests = useMemo(() => [...fails, ...warns], [fails, warns]);
+
+  // ONE merged per-source row: ingestion freshness (raw-lake manifests) +
+  // data quality (mart_data_quality), joined on the canonical source key.
+  const mergedSources = useMemo(() => {
+    const qByName  = new Map((sources?.sources ?? []).map(s => [s.source, s]));
+    const ingRows  = ingestion?.sources ?? [];
+    const ingByName = new Map(ingRows.map(s => [s.source, s]));
+    const order = ingRows.length
+      ? ingRows.map(s => s.source)
+      : (sources?.expected ?? Object.keys(SOURCE_META));
+    return order.map(name => ({
+      name,
+      blurb: SOURCE_META[name] ?? '',
+      ing: ingByName.get(name) ?? null,
+      q:   qByName.get(name) ?? null,
+    }));
+  }, [sources, ingestion]);
+
+  const tierChips = useMemo(() => {
+    if (!lineage) return [];
+    const counts = new Map<string, number>();
+    for (const n of lineage.nodes) counts.set(n.tier, (counts.get(n.tier) ?? 0) + 1);
+    return (lineage.tier_order ?? []).map(t => ({ tier: t, n: counts.get(t) ?? 0 }))
+      .filter(c => c.n > 0);
+  }, [lineage]);
+
+  const modelTestRollup = useMemo(() => {
+    const r = { pass: 0, warn: 0, fail: 0, untested: 0 };
+    for (const n of lineage?.nodes ?? []) {
+      if (n.tier === 'source') continue;
+      if (n.test_status === 'fail') r.fail++;
+      else if (n.test_status === 'warn') r.warn++;
+      else if (n.test_status === 'pass') r.pass++;
+      else r.untested++;
+    }
+    return r;
+  }, [lineage]);
+
+  const dbtTone: 'good' | 'watch' | 'alert' =
+    !summary ? 'watch' : summary.fail > 0 ? 'alert' : summary.warn > 0 ? 'watch' : 'good';
+
+  const liveCount  = (ingestion?.sources ?? []).filter(s => s.status === 'live').length;
+  const ingestable = (ingestion?.sources ?? []).filter(s => s.ingested).length;
+
+  const kanon = compliance?.k_anon;
+  const kanonTone: 'good' | 'watch' | 'alert' =
+    !kanon ? 'watch' : kanon.passed ? 'good' : kanon.present ? 'alert' : 'watch';
+
+  return (
+    <section className="dq-page">
+      <p className="page-lede">
+        Live pipeline-health headline for every ingested source — dbt build health, per-source
+        freshness &amp; quality in one view, cross-source reconciliation, and lineage — read straight
+        from each run's artifacts and the marts. The full interactive DAG lives in dbt Docs.
+      </p>
+
+      {/* ═══ Headline KPIs ═══ */}
+      <div className="grid grid-4 dq-kpis">
+        <div className={`kpi kpi-${dbtTone}`}>
+          <div className="kpi-lbl">dbt build health</div>
+          <div className="kpi-val">{summary ? `${summary.pass}/${summary.total}` : '—'}</div>
+          <div className="kpi-delta">{summary
+            ? <>{summary.pass} pass · {summary.warn} warn · <strong>{summary.fail} fail</strong></>
+            : 'loading…'}</div>
+        </div>
+        {/* runtime_s is REAL but comes from the last UPLOADED run_results —
+            an artifact older than a day is flagged stale so a frozen number
+            can't masquerade as a fresh build. */}
+        <div className={`kpi kpi-${summary?.generated_at && (Date.now() - new Date(summary.generated_at).getTime()) > 24 * 3600e3 ? 'watch' : 'info'}`}>
+          <div className="kpi-lbl">Last build</div>
+          <div className="kpi-val">{summary ? `${summary.runtime_s.toFixed(1)}s` : '—'}</div>
+          <div className="kpi-delta">{summary?.generated_at
+            ? `ran ${fmtAgo(summary.generated_at)}${(Date.now() - new Date(summary.generated_at).getTime()) > 24 * 3600e3 ? ' · artifact stale' : ''}`
+            : ''}</div>
+        </div>
+        <div className={`kpi kpi-${ingestable && liveCount === ingestable ? 'good' : 'watch'}`}>
+          <div className="kpi-lbl">Sources reporting on time</div>
+          <div className="kpi-val">{ingestion ? `${liveCount} / ${ingestable || '—'}` : '—'}</div>
+          <div className="kpi-delta">{ingestion ? 'within SLA · last ingest cycle' : 'scanning raw lake…'}</div>
+        </div>
+        <div className={`kpi kpi-${kanonTone}`}>
+          <div className="kpi-lbl">k-anonymity · public marts</div>
+          <div className="kpi-val">{kanon ? (kanon.passed ? 'Pass' : kanon.present ? 'Fail' : 'n/a') : '—'}</div>
+          <div className="kpi-delta">{kanon
+            ? `${kanon.public_mart_count} bi_public marts · k ≥ 5`
+            : 'checking…'}</div>
+        </div>
+      </div>
+
+      {errs.length > 0 && (
+        <div className="dq-note dq-note-warn">
+          <svg className="ico ico-sm"><use href="#i-info" /></svg>
+          Some feeds are still warming up: {errs.join(' · ')}
+        </div>
+      )}
+
+      {/* ═══ Source health (merged freshness + quality) ═══ */}
+      <div className="page-section">
+        <div className="ps-hdr">
+          <div>
+            <h3 className="ps-title"><svg className="ico"><use href="#i-pulse" /></svg> Source health</h3>
+            <p className="ps-sub">
+              One row per ingested system — ingestion freshness and data quality together.
+            </p>
+          </div>
+          <div className="ps-meta">
+            freshness · <strong>raw-lake manifests</strong> &nbsp;·&nbsp; quality · <strong>mart_data_quality</strong>
+          </div>
+        </div>
+
+        <div className="card card-elev dq-src-panel">
+          <div className="dq-table-scroll">
+            <table className="dash dq-src-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Last ingest</th>
+                  <th className="num">Records</th>
+                  <th className="num">Lag / SLA</th>
+                  <th>Completeness</th>
+                  <th>Validity</th>
+                  <th>Volume trend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mergedSources.map(({ name, blurb, ing, q }) => {
+                  const status  = ing?.status ?? 'unknown';
+                  const tone    = STATUS_TONE[status] ?? 'neutral';
+                  const overSla = ing?.lag_hours != null && ing.lag_hours > ing.sla_hours;
+                  return (
+                    <tr key={name}>
+                      <td>
+                        <div className="dq-src-name">{name}</div>
+                        <div className="dq-src-blurb">{blurb}</div>
+                      </td>
+                      <td>
+                        <span className={`pill dq-status ${tone}`}>{status}</span>
+                      </td>
+                      <td>
+                        {ing?.ingested
+                          ? <>
+                              <div>{fmtAgo(ing.last_ingest)}</div>
+                              {ing.changed_last_run == null
+                                ? null
+                                : ing.changed_last_run
+                                  ? <span className="dq-chip dq-chip-changed">new data</span>
+                                  : <span className="dq-chip">unchanged</span>}
+                            </>
+                          : <span className="muted">{ing?.note ?? 'no ingest yet'}</span>}
+                      </td>
+                      <td className="num">{fmtNum(ing?.records_last_cycle)}</td>
+                      <td className={`num ${overSla ? 'dq-over' : ''}`}>
+                        {fmtLag(ing?.lag_hours ?? null)}
+                        <span className="muted"> / {fmtLag(ing?.sla_hours ?? null)}</span>
+                      </td>
+                      <td className="dq-q"><QCell pct={q?.completeness} /></td>
+                      <td className="dq-q"><QCell pct={q?.validity} /></td>
+                      <td>{ing ? <Sparkline points={ing.trend.map(p => p.rows)} /> : <span className="muted">—</span>}</td>
+                    </tr>
+                  );
+                })}
+                {mergedSources.length === 0 && (
+                  <tr><td colSpan={8} className="muted">Scanning nhdw-raw manifests &amp; mart_data_quality…</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="dq-src-foot-notes">
+            {sources?.note && <span className="muted"><svg className="ico ico-sm"><use href="#i-info" /></svg> Quality: {sources.note}</span>}
+            {ingestion?.note && <span className="muted"><svg className="ico ico-sm"><use href="#i-info" /></svg> Freshness: {ingestion.note}</span>}
+            {!sources?.note && !ingestion?.note && (
+              <span className="muted">Blank quality cells mean the source carries no honest signal for that dimension yet — never a fabricated score.</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ Quality dimensions & reconciliation ═══ */}
+      <div className="page-section">
+        <div className="ps-hdr">
+          <div>
+            <h3 className="ps-title"><svg className="ico"><use href="#i-shield-check" /></svg> Quality &amp; reconciliation</h3>
+            <p className="ps-sub">Warehouse-wide dimension rollup and real cross-source master-data agreement.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-2 gap-lg dq-qr">
+          {/* Dimension scorecard */}
+          <div className="card card-elev">
+            <div className="card-hdr">
+              <h4>DQ dimension scorecard</h4>
+              <span className="meta">rolled up across the warehouse</span>
+            </div>
+            <div className="dq-dim-list">
+              {DIM_ORDER.map(d => {
+                const v = dims?.dimensions?.[d.key] ?? null;
+                const tone = pctTone(v);
+                return (
+                  <div className={`dq-dim ${tone}`} key={d.key}>
+                    <div className="dq-dim-head">
+                      <span className="dq-dim-name">{d.label}</span>
+                      <span className="dq-dim-pct">{fmtPct(v)}</span>
+                    </div>
+                    <Meter pct={v} tone={tone} />
+                    <div className="dq-dim-hint">{dims?.basis?.[d.key] ?? d.hint}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Cross-source reconciliation */}
+          <div className="card card-elev">
+            <div className="card-hdr">
+              <h4>Cross-source reconciliation</h4>
+              <span className="meta">business-vault same-as links</span>
+            </div>
+            {recon && recon.checks.length > 0 ? (
+              <div className="dq-recon-list">
+                {recon.checks.map(c => {
+                  const tone = pctTone(c.agreement_pct, 85, 60);
+                  return (
+                    <div className="dq-recon" key={c.check}>
+                      <div className="dq-recon-head">
+                        <div>
+                          <div className="dq-recon-name">{c.check}</div>
+                          <div className="dq-recon-sys muted">{c.systems}</div>
+                        </div>
+                        <div className={`dq-recon-pct ${tone}`}>{fmtPct(c.agreement_pct)}</div>
+                      </div>
+                      <Meter pct={c.agreement_pct} tone={tone} />
+                      <div className="dq-recon-foot">
+                        <span>{fmtNum(c.matched)} of {fmtNum(c.conformed)} recognised by ≥2 sources</span>
+                        <span className="dq-recon-chips">
+                          {c.sources.map(s => (
+                            <span className="dq-chip" key={s.source}>{s.source} · {fmtNum(s.count)}</span>
+                          ))}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="muted dq-empty">
+                {recon?.note ?? 'Loading cross-source agreement…'}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ dbt tests ═══ */}
+      <div className="page-section">
+        <div className="ps-hdr">
+          <div>
+            <h3 className="ps-title"><svg className="ico"><use href="#i-list" /></svg> dbt tests · failing &amp; warning</h3>
+            <p className="ps-sub">Acknowledge a known issue to record who triaged it and when.</p>
+          </div>
+          <div className="ps-meta">{failingTests.length === 0
+            ? <span className="pill good">all green</span>
+            : <>{fails.length} fail · {warns.length} warn</>}</div>
+        </div>
+
+        <div className="card card-elev">
+          {ackErr && <div className="dq-note dq-note-alert"><svg className="ico ico-sm"><use href="#i-alert" /></svg>{ackErr}</div>}
+          {failingTests.length === 0 ? (
+            <p className="dq-allgreen">
+              <svg className="ico"><use href="#i-check-circle" /></svg>
+              No failing or warning tests in the latest <code>dbt build</code> — pipeline green.
+            </p>
+          ) : (
+            <div className="dq-table-scroll">
+              <table className="dash dq-tests">
+                <thead>
+                  <tr><th>Model</th><th>Test</th><th className="num">Failures</th><th>Severity</th><th>Acknowledge</th></tr>
+                </thead>
+                <tbody>
+                  {failingTests.slice(0, 14).map(t => {
+                    const { model, test } = shortTestId(t.unique_id);
+                    const sev = t.status === 'fail' || t.status === 'error' ? 'alert' : 'watch';
+                    const local = ackLocal[t.unique_id];
+                    const acked = t.acked || !!local;
+                    const ackedBy = local?.by ?? t.acked_by;
+                    const ackedAt = local?.at ?? t.acked_at;
+                    return (
+                      <tr key={t.unique_id} className={acked ? 'is-acked' : ''}>
+                        <td><code>{model}</code></td>
+                        <td title={t.message ?? ''}>{test}</td>
+                        <td className="num">{t.failures ?? '—'}</td>
+                        <td><span className={`pill ${sev}`}>{t.status}</span></td>
+                        <td>
+                          {acked ? (
+                            <span className="dq-acked" title={ackedAt ? fmtAgo(ackedAt) : ''}>
+                              <svg className="ico ico-sm"><use href="#i-check" /></svg>
+                              acked{ackedBy ? ` · ${ackedBy}` : ''}
+                            </span>
+                          ) : (
+                            <button className="btn btn-sm btn-ghost dq-ack-btn"
+                                    disabled={ackBusy[t.unique_id]}
+                                    onClick={() => doAck(t)}>
+                              {ackBusy[t.unique_id] ? 'saving…' : 'Acknowledge'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ Lineage summary + tools ═══ */}
+      <div className="page-section">
+        <div className="ps-hdr">
+          <div>
+            <h3 className="ps-title"><svg className="ico"><use href="#i-link" /></svg> Lineage &amp; operator tools</h3>
+            <p className="ps-sub">
+              {lineage
+                ? `${lineage.nodes.length} dbt nodes · ${lineage.edges.length} edges` +
+                  (lineage.as_of ? ` · as of ${fmtAgo(lineage.as_of)}` : '')
+                : 'Loading dbt manifest…'}
+            </p>
+          </div>
+        </div>
+
+        <div className="card card-elev dq-lineage-card">
+          <div className="dq-lineage-summary">
+            {tierChips.map(c => (
+              <div className="dq-tier" key={c.tier}>
+                <span className="dq-tier-n">{c.n}</span>
+                <span className="dq-tier-lbl">{TIER_LABELS[c.tier as dq.LineageNode['tier']] ?? c.tier}</span>
+                {c.tier !== 'source' && <svg className="ico ico-sm dq-tier-arrow"><use href="#i-arrow-right" /></svg>}
+              </div>
+            ))}
+            {tierChips.length === 0 && <span className="muted">{lineage?.note ?? 'Lineage graph loading…'}</span>}
+          </div>
+          <p className="dq-note-inline muted">
+            "Source tables" counts dbt <code>source()</code> table declarations across the DAG, not the six source systems above.
+          </p>
+
+          <div className="dq-lineage-rollup">
+            <span className="dq-lineage-lbl">Model test status</span>
+            <span className="pill good">{modelTestRollup.pass} pass</span>
+            {modelTestRollup.warn > 0 && <span className="pill watch">{modelTestRollup.warn} warn</span>}
+            {modelTestRollup.fail > 0 && <span className="pill alert">{modelTestRollup.fail} fail</span>}
+            {modelTestRollup.untested > 0 && <span className="pill neutral">{modelTestRollup.untested} untested</span>}
+            <a href="https://dbt-docs.127.0.0.1.nip.io/" target="_blank" rel="noreferrer" className="btn btn-primary btn-sm dq-dbt-link">
+              Open full lineage in dbt Docs <svg className="ico ico-sm"><use href="#i-external" /></svg>
+            </a>
+          </div>
+
+          <div className="dq-tools">
+            {TOOLS.map(t => (
+              <a className="dq-tool" href={t.href} target="_blank" rel="noreferrer" key={t.label}>
+                <span className="dq-tool-ico"><svg className="ico"><use href={`#${t.ico}`} /></svg></span>
+                <span className="dq-tool-txt">
+                  <span className="dq-tool-name">{t.label} <svg className="ico ico-sm"><use href="#i-external" /></svg></span>
+                  <span className="dq-tool-sub">{t.sub}</span>
+                </span>
+              </a>
+            ))}
+          </div>
+          <p className="dq-note-inline muted">Authentication carries across · same Keycloak session</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ── widget-module registration (admin catalog runtime) ─────────────────
+   Catalog-collapse (owner 2026-07-07): one organism = ONE grantable widget; this page's single catalog widget id is this module. */
+import type { AdminWidget } from '../../runtime/types';
+const widget: AdminWidget = {
+  id: 'adm-dq',
+  Component: DQ,
+};
+export default widget;

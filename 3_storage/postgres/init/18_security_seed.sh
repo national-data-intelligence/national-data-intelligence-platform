@@ -1,0 +1,49 @@
+#!/bin/bash
+# 18_security_seed.sh — calls the Python loader at
+# 7_security/scripts/load_security_seed.py to populate ops_perm.* and the
+# ops_identity additions from YAML in bundle/seeds/security/.
+#
+# Runs INSIDE the Postgres init container, after 17_perm_schemas.sql has
+# created the tables. Idempotent (the loader uses ON CONFLICT UPDATE).
+#
+# The container has limited Python; if PyYAML / psycopg are absent, we
+# bootstrap a venv with pip. This adds ~30s on first run only.
+#
+
+set -euo pipefail
+
+SEED_DIR="${NHDW_SEED_DIR:-/opt/seeds/security}"
+LOADER="${NHDW_LOADER:-/opt/scripts/load_security_seed.py}"
+OPS_DB="${OPS_DB_NAME:-nhdw_ops}"
+
+if [ ! -d "$SEED_DIR" ]; then
+    echo "[18_security_seed] WARN: seed dir not present at $SEED_DIR — skipping"
+    echo "[18_security_seed] (mount bundle/seeds/security/ to /opt/seeds/security in compose)"
+    exit 0
+fi
+
+if [ ! -f "$LOADER" ]; then
+    echo "[18_security_seed] WARN: loader not found at $LOADER — skipping"
+    exit 0
+fi
+
+# Ensure python3 + PyYAML + psycopg are present.
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "[18_security_seed] installing python3 + pip via apt-get …"
+    apt-get update -qq && apt-get install -y -qq --no-install-recommends \
+        python3 python3-pip python3-venv >/dev/null
+fi
+if ! python3 -c "import yaml, psycopg" 2>/dev/null; then
+    echo "[18_security_seed] installing PyYAML + psycopg via pip …"
+    python3 -m pip install --quiet --break-system-packages PyYAML 'psycopg[binary]'
+fi
+
+export POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
+export POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+export POSTGRES_USER="${POSTGRES_USER:-postgres}"
+export OPS_DB_NAME="$OPS_DB"
+export PGPASSWORD="${POSTGRES_PASSWORD:-}"
+
+echo "[18_security_seed] loading from $SEED_DIR → db=$OPS_DB"
+python3 "$LOADER" --seed-dir "$SEED_DIR" --pg-db "$OPS_DB"
+echo "[18_security_seed] ✓ seeded"

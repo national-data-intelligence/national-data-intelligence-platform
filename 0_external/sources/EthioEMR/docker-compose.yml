@@ -1,0 +1,72 @@
+# EthioEMR source replica — EXTERNAL to the NHDW k8s cluster (models the
+# third-party facility OpenMRS/Bahmni EMR the ingestor pulls from). MySQL-only:
+# the OpenMRS web app is intentionally NOT run here — the in-cluster dlt
+# ingestor reads the clinical tables directly over the MySQL wire (real EMRs
+# expose CDC/JDBC), reshaping OpenMRS rows into FHIR-shaped Parquet.
+#
+# Offline seeding path (NO app bootstrap needed):
+#   1. docker compose -f 0_external/sources/EthioEMR/docker-compose.yml up -d
+#   2. wait for health (mysqladmin ping)  — restore.sh health-gates on this
+#   3. bash 0_external/sources/EthioEMR/scripts/restore.sh
+#        (docker cp's sample-data/clean_openmrs.sql in, imports it, and
+#         provisions the read-only `ingestor` user the pipeline connects as)
+#   4. bash 0_external/sources/EthioEMR/scripts/verify.sh
+# The in-cluster dlt ingestor then reads person/patient/patient_identifier/
+# encounter/visit/obs over host.k3d.internal:33306.
+#
+# Ports are published on 0.0.0.0 (NOT 127.0.0.1) so k3d pods can reach MySQL via
+# host.k3d.internal. This stack has NO nhdw_net attachment — it is the outside
+# world; a private bridge only.
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ethioemr-mysql
+    restart: unless-stopped
+    # Capped for the shared 31 GB no-swap host: bound the InnoDB buffer pool and
+    # the container's total RSS. The 147 MB dump restore is the only real spike.
+    mem_limit: 2g
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--default-authentication-plugin=mysql_native_password"
+      - "--lower_case_table_names=1"
+      - "--max_allowed_packet=512M"
+      # The OpenMRS+Bahmni+KenyaEMR dump contains tables with row sizes that
+      # exceed the InnoDB 8126-byte hard limit (kenyaemr_ml_patient_risk_score
+      # among others). Strict mode treats this as a fatal error; disabling it
+      # downgrades to a warning and lets the table be created with the long
+      # columns stored off-page. Dropping either of the next two lines breaks
+      # restore of the KenyaEMR-derived tables.
+      - "--innodb-strict-mode=0"
+      - "--innodb-default-row-format=dynamic"
+      - "--innodb-buffer-pool-size=1G"
+      # Binlog + GTID enabled so Debezium / direct CDC can attach without a
+      # restart. ROW format is required for row-level CDC.
+      - "--server-id=1"
+      - "--log-bin=mysql-bin"
+      - "--binlog-format=ROW"
+      - "--gtid-mode=ON"
+      - "--enforce-gtid-consistency=ON"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ETHIOEMR_MYSQL_ROOT_PASSWORD:-changeme-ethioemr-root}
+      MYSQL_DATABASE: ${ETHIOEMR_DB_NAME:-openmrs}
+    ports:
+      - "0.0.0.0:33306:3306"   # reachable from k3d pods via host.k3d.internal
+    volumes:
+      # Named docker volume (NOT a ./data bind mount — that broke on a symlink
+      # under the project's POSIX ACL). The dump + SQL are copied in via
+      # `docker cp` from scripts/restore.sh after the container is healthy.
+      - ethioemr_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${ETHIOEMR_MYSQL_ROOT_PASSWORD:-changeme-ethioemr-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [ethioemr_net]
+
+networks:
+  ethioemr_net:
+    driver: bridge
+
+volumes:
+  ethioemr_mysql_data:

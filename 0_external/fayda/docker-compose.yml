@@ -1,0 +1,25 @@
+# Fayda Replica — external OIDC IdP replica (Ethiopia's national digital ID).
+# EXTERNAL to the NHDW k8s cluster, like every 0_external/ system: in production
+# Fayda is a third party; this replica exists to demo the integration.
+#
+# Published on 0.0.0.0:8096 so BOTH consumers reach it:
+#   · the public dashboard pod (in k8s)  → http://host.k3d.internal:8096
+#   · the citizen's browser (popup)      → http://localhost:8096
+# (The app listens on 8000 internally — the old in-cluster manifest mapped port
+# 80 to it, a live mismatch fixed by this move.)
+services:
+  fayda:
+    build: .
+    image: nhdw/fayda-replica:dev
+    container_name: fayda-replica
+    restart: unless-stopped
+    environment:
+      FAYDA_ISSUER: "http://localhost:8096"
+    ports:
+      - "8096:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/.well-known/openid-configuration')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s

@@ -1,0 +1,72 @@
+# Shared sources file for every mart that reads the vault (hmis_coverage,
+# idsr, service_performance, data_quality, supply_chain, facility_distribution).
+# staging/ marts read nhdw_landing via their own staging/_sources.yml.
+#
+# Declarations mirror what the marts ACTUALLY consume (config truthfulness —
+# don't re-add speculative tables). Satellite attribute reads stay OFF this
+# file's raw section by design: they go through the business-vault
+# v_*_current views below.
+version: 2
+
+sources:
+  - name: nhdw_vault_raw
+    description: "Raw Data Vault — populated by 2_pipelines/vault/. Marts read hubs (business keys) and links (fact edges) here; satellite attributes come from the current-record views in nhdw_vault_business."
+    schema: nhdw_vault_raw
+    tables:
+      # DHIS2
+      - name: hub_dhis2_org_unit          # BK holder (DHIS2 uid `id`)
+      - name: lnk_dhis2_data_value        # the dataValue fact edge (measure sat read via v_sat_dhis2_data_value_current)
+      # HCMIS
+      - name: hub_hcmis_environment
+      - name: hub_hcmis_item
+      - name: hub_hcmis_purchase_order     # procurement pipeline (open POs)
+      - name: lnk_hcmis_stock_event
+      # EthioEMR
+      - name: hub_ethioemr_encounter      # BK holder (FHIR Encounter id) — DQ encounter pulse
+      # mBrana
+      - name: hub_mbrana_ussd_facility    # registered USSD facility base (completeness denominator)
+      - name: lnk_mbrana_stock_event      # USSD SOH-log fact edge
+      # MFR
+      - name: hub_mfr_organization        # BK holder (FHIR Organization id) — DQ registry pulse
+      # Climate (weekly meteorological drivers)
+      - name: hub_climate_week            # BK holder (region_id × iso_week)
+
+  - name: nhdw_vault_business
+    description: "Business Data Vault — the mart-facing surface: spine + dims, resolution views, current-record views."
+    schema: nhdw_vault_business
+    tables:
+      # The spine: one edge per conformed facility × indicator × monthly
+      # period. Marts take coverage/reporting counts from this grain and
+      # decode the legs via the thin dims below instead of re-deriving
+      # them from raw.
+      - name: lnk_facility_indicator_period
+      - name: hub_indicator_conformed
+      - name: dim_facility
+      - name: dim_period
+      # Period decoder (6 DHIS2 formats → type/start/end) — replaces inline
+      # period regex parsing in marts.
+      - name: sat_dhis2_period_resolved
+      # Resolution views — the single source of truth for cross-source
+      # identity decode (facility-id slug extraction, indicator → programme).
+      # Marts join these instead of re-deriving the regex/CASE locally.
+      - name: v_facility_resolution
+      - name: v_programme_resolution
+      # Current-record views (business_vault/current/) — sats are insert-only,
+      # so marts MUST read these (latest row per hash key), never the raw sats,
+      # or every SUM/COUNT double-counts once history accumulates.
+      - name: v_sat_dhis2_org_unit_current
+      - name: v_sat_dhis2_data_element_current
+      - name: v_sat_dhis2_data_value_current
+      - name: v_sat_climate_week_current
+      - name: v_sat_hcmis_facility_current
+      - name: v_sat_hcmis_date_current
+      - name: v_sat_hcmis_item_current
+      - name: v_sat_hcmis_stock_event_current
+      - name: v_sat_hcmis_environment_current   # EPSS hub → region_id (region-grained supply)
+      - name: v_sat_mfr_facility_current
+      - name: v_sat_mfr_organization_current    # MFR registry pulse (share mapped to FAC-id)
+      - name: v_sat_mfr_device_current          # facility equipment inventory (FHIR Device)
+      - name: v_sat_hcmis_purchase_order_current # procurement pipeline (open POs)
+      - name: v_sat_ethioemr_encounter_current  # EthioEMR encounter pulse (provider ref + FHIR status)
+      - name: v_sat_mbrana_stock_event_current  # mBrana USSD SOH-log pulse (quantity ≥ 0 validity)
+      - name: v_sat_mbrana_ussd_facility_current # USSD facility identity (canonical FAC-<region>- codes)

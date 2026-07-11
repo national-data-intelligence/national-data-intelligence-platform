@@ -1,0 +1,110 @@
+# Remaining 4 dashboards (internal-bi already split into its own file).
+# All bundle the same Keycloak PKCE + gateway-proxy pattern; only the
+# realm/client/port envs differ.
+
+# ─── admin · privileged-ops realm · port 8086 ───────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: admin, namespace: nhdw, labels: { app: admin, tier: dashboard } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: admin } }
+  template:
+    metadata: { labels: { app: admin, tier: dashboard } }
+    spec:
+      containers:
+        - name: dashboard
+          image: nhdw-registry:5500/nhdw/admin:v1782690463
+          imagePullPolicy: IfNotPresent
+          ports: [ { containerPort: 80, name: http } ]
+          env:
+            - { name: DEV_AUTH,             value: "false" }
+            - { name: KEYCLOAK_BASE,        value: "http://keycloak.nhdw.svc.cluster.local:8080" }
+            - { name: KEYCLOAK_PUBLIC_BASE, value: "http://127.0.0.1:8090" }
+            - { name: OIDC_REALM,           value: "privileged-ops" }
+            - { name: OIDC_CLIENT_ID,       value: "admin" }
+            - { name: OIDC_REDIRECT_URI,    value: "http://127.0.0.1:8086/" }
+            - { name: APP_BASE,             value: "http://127.0.0.1:8086" }
+            - { name: GATEWAY_URL,          value: "http://nhdw-gateway.nhdw.svc.cluster.local:8000" }
+          readinessProbe: { httpGet: { path: /health, port: 80 }, initialDelaySeconds: 3, periodSeconds: 5 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: admin, namespace: nhdw, labels: { app: admin } }
+spec:
+  selector: { app: admin }
+  ports: [ { port: 80, targetPort: http, name: http } ]
+
+# ─── workshop · moh-staff realm · port 8085 ─────────────────────────────
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: workshop, namespace: nhdw, labels: { app: workshop, tier: dashboard } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: workshop } }
+  template:
+    metadata: { labels: { app: workshop, tier: dashboard } }
+    spec:
+      containers:
+        - name: dashboard
+          image: nhdw-registry:5500/nhdw/workshop:dev
+          imagePullPolicy: IfNotPresent
+          ports: [ { containerPort: 80, name: http } ]
+          env:
+            - { name: DEV_AUTH,             value: "false" }
+            - { name: KEYCLOAK_BASE,        value: "http://keycloak.nhdw.svc.cluster.local:8080" }
+            - { name: KEYCLOAK_PUBLIC_BASE, value: "http://127.0.0.1:8090" }
+            - { name: OIDC_REALM,           value: "moh-staff" }
+            - { name: OIDC_CLIENT_ID,       value: "workshop" }
+            - { name: OIDC_REDIRECT_URI,    value: "http://127.0.0.1:8085/" }
+            - { name: APP_BASE,             value: "http://127.0.0.1:8085" }
+            - { name: GATEWAY_URL,          value: "http://nhdw-gateway.nhdw.svc.cluster.local:8000" }
+          readinessProbe: { httpGet: { path: /health, port: 80 }, initialDelaySeconds: 3, periodSeconds: 5 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: workshop, namespace: nhdw, labels: { app: workshop } }
+spec:
+  selector: { app: workshop }
+  ports: [ { port: 80, targetPort: http, name: http } ]
+
+# ─── public · anonymous · port 8088 ─────────────────────────────────────
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: public-dashboard, namespace: nhdw, labels: { app: public-dashboard, tier: dashboard } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: public-dashboard } }
+  template:
+    metadata: { labels: { app: public-dashboard, tier: dashboard } }
+    spec:
+      containers:
+        - name: dashboard
+          image: nhdw-registry:5500/nhdw/public-dashboard:dev
+          imagePullPolicy: IfNotPresent
+          ports: [ { containerPort: 80, name: http } ]
+          env:
+            # Fayda Replica is EXTERNAL (0_external/fayda, compose on host port 8096
+            # — like the source replicas). The pod reaches it via the k3d host route;
+            # the citizen's browser opens the popup on localhost.
+            - { name: FAYDA_INTERNAL_BASE, value: "http://host.k3d.internal:8096" }
+            - { name: FAYDA_PUBLIC_BASE,   value: "http://localhost:8096" }
+            # OAuth-state signer key — secret-driven (optional → absent falls back
+            # to the app's in-code default, so this is non-breaking).
+            - name: FAYDA_STATE_SECRET
+              valueFrom: { secretKeyRef: { name: app-signing-secrets, key: FAYDA_STATE_SECRET, optional: true } }
+          readinessProbe: { httpGet: { path: /health, port: 80 }, initialDelaySeconds: 3, periodSeconds: 5 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: public-dashboard, namespace: nhdw, labels: { app: public-dashboard } }
+spec:
+  selector: { app: public-dashboard }
+  ports: [ { port: 80, targetPort: http, name: http } ]
+
+# ─── demo dashboard: MOVED OUT of k8s (2026-07-02) ─────────────────────
+# The Demo Control Room now runs from the bundle console on the host
+# (bundle/demo-console/) — see _archive/2026-07-02/demo-dashboard-k8s/.
+

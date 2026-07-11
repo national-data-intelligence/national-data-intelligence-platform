@@ -1,0 +1,51 @@
+# Loki — append-only sink for FHIR AuditEvent logs.
+#
+# Each access point's PEP emits a JSON log line conforming to the FHIR
+# AuditEvent resource shape every time it serves a data read. Loki indexes
+# the structured labels (user, role, purpose-of-use, resource_type,
+# realm) and stores the JSON payload.
+#
+# Retention is enforced per-stream and append-only: deletion via the API
+# requires `auth_enabled: true` AND a token holding the delete permission,
+# which only R-OPS-SEC could ever obtain — and not even they can modify
+# existing records, only flag for deletion of an entire stream.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9095
+  log_level: info
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+# Disable structured-metadata to keep dev simple. Re-enable in prod for
+# richer FHIR AuditEvent index.
+limits_config:
+  allow_structured_metadata: false
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  retention_period: 8760h        # one year — adjust for production compliance
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+ruler:
+  alertmanager_url: http://localhost:9093

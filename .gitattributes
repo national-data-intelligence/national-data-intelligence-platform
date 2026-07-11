@@ -1,0 +1,3 @@
+# NOTE: *.sql is intentionally NOT LFS-tracked — SQL files here are dbt/source
+# code (small text, kept diffable). Large SQL dumps are path-tracked below.
+

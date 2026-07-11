@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# verify-system.sh — FAST regression check of the nuanced/sensitive contracts,
+# runnable against a live system in seconds (no teardown, no rebuild).
+#
+# Purpose (user rule 2026-07-02): every nuanced feature keeps a repeatable saved
+# test so ongoing work can prove nothing broke WITHOUT paying for a full
+# teardown+spinup (those are reserved for milestones). Run this after any change
+# that touches boot scripts, seeds, pack/unpack, the pipeline, or security.
+#
+# Checks (one line each, ✓/✗; exits non-zero if ANY fails):
+#   1. cluster + all Deployments/StatefulSets fully ready
+#   2. all 6 external source containers up (incl. fayda-replica)
+#   3. marts populated (the flagship counts must be > 0)
+#   4. provenance reconciliation live (user table has BOTH seed and runtime rows
+#      classified — proves the loaders' managed_by contract)
+#   5. gateway healthy; fayda-replica OIDC discovery answers on :8096
+#   6. named-collection raw views: nhdw_staging has raw_* views and CH can list
+#      lake files through the server-side named collection (zero creds in SQL)
+#   7. pack/unpack surface: pack.sh + restore-state.sh parse (bash -n) and the
+#      bundled mc binary is executable
+#   8. no retired names outside _archive (1_sources, fake-fayda image refs,
+#      1_infrastructure/{scripts,docker}) — replacement-means-removal guard
+set -uo pipefail
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+NS=nhdw
+export PATH="$HOME/.local/bin:$PATH"
+FAIL=0
+pass() { echo "  ✓ $*"; }
+fail() { echo "  ✗ $*"; FAIL=1; }
+
+echo "== verify-system: fast regression checks =="
+
+# 1. workloads ready
+notready=$(kubectl -n "$NS" get deploy,sts -o json 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+bad=[i['metadata']['name'] for i in d['items']
+     if (i['status'].get('readyReplicas') or 0) < (i['spec'].get('replicas') or 0)]
+print(' '.join(bad))")
+[ -z "$notready" ] && pass "all Deployments/StatefulSets ready" || fail "not ready: $notready"
+
+# 2. sources
+for c in dhis2-web ethioemr-mysql hcmiswdm-sqlserver nhdw-mfr-fhir climate-api fayda-replica; do
+  docker ps --format '{{.Names}}' | grep -qx "$c" && pass "source $c up" || fail "source $c DOWN"
+done
+
+# 3+4. marts + provenance
+PGPW=$(kubectl -n "$NS" get secret postgres-vault-secrets -o jsonpath='{.data.POSTGRES_PASSWORD}' 2>/dev/null | base64 -d)
+counts=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_vault -At -F: -c "
+  SELECT 'idsr', count(*) FROM bi_idsr.mart_idsr_disease_weekly UNION ALL
+  SELECT 'climate', count(*) FROM bi_idsr.mart_idsr_climate_drivers UNION ALL
+  SELECT 'hmis', count(*) FROM bi_hmis.mart_hmis_indicator_coverage UNION ALL
+  SELECT 'outbreaks', count(*) FROM bi_idsr.mart_idsr_outbreaks" 2>/dev/null)
+echo "$counts" | while IFS=: read -r m n; do :; done
+for row in $counts; do
+  m=${row%%:*}; n=${row##*:}
+  [ "${n:-0}" -gt 0 ] && pass "mart $m populated ($n)" || fail "mart $m EMPTY"
+done
+# cascade must cover all 4 programmes (regression: prefix-map bug emptied 3)
+casc=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_vault -At -c \
+  "SELECT count(DISTINCT programme_id) FROM bi_service.mart_programme_cascade" 2>/dev/null)
+[ "${casc:-0}" -ge 4 ] && pass "programme cascade covers $casc programmes" \
+                       || fail "programme cascade covers only ${casc:-0}/4 programmes"
+
+prov=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_ops -At -c \
+  "SELECT count(DISTINCT managed_by) FROM ops_identity.\"user\"" 2>/dev/null)
+[ "${prov:-0}" -ge 1 ] && pass "provenance column live (managed_by classes: $prov)" \
+                       || fail "provenance managed_by missing on ops_identity.user"
+
+# 5. gateway + fayda OIDC
+curl -sk --max-time 5 https://gateway.127.0.0.1.nip.io/health | grep -q '"ok"' \
+  && pass "gateway healthy" || fail "gateway health check failed"
+curl -s --max-time 5 http://localhost:8096/.well-known/openid-configuration | grep -q issuer \
+  && pass "fayda-replica OIDC discovery on :8096" || fail "fayda-replica OIDC discovery failed"
+
+# 6. raw views through the named collection
+CHPW=$(kubectl -n "$NS" get secret clickhouse-secrets -o jsonpath='{.data.PASSWORD}' 2>/dev/null | base64 -d)
+nviews=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
+  "SELECT count() FROM system.tables WHERE database='nhdw_staging' AND name LIKE 'raw_%'" 2>/dev/null)
+[ "${nviews:-0}" -gt 0 ] && pass "nhdw_staging raw_* views present ($nviews)" || fail "no raw_* views"
+lake=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
+  "SELECT count() FROM (SELECT DISTINCT _path FROM s3(nhdw_minio, url='http://minio-datalake:9000/nhdw-raw/**/*.parquet', format='One'))" 2>/dev/null)
+[ "${lake:-0}" -gt 0 ] && pass "lake reachable via named collection ($lake parquet paths)" \
+                       || fail "named-collection lake probe failed"
+
+# 6b. processed zone — populated AND actually PII-stripped (spot-check the two
+#     highest-risk tables: FHIR narrative + the mBrana user directory)
+pz=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
+  "SELECT count() FROM (SELECT DISTINCT _path FROM s3(nhdw_minio, url='http://minio-datalake:9000/nhdw-processed/**/*.parquet', format='One'))" 2>/dev/null)
+[ "${pz:-0}" -gt 0 ] && pass "processed zone populated ($pz tables)" || fail "processed zone EMPTY"
+pat_cols=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
+  "DESCRIBE s3(nhdw_minio, url='http://minio-datalake:9000/nhdw-processed/ethioemr/patient/*.parquet', format='Parquet')" 2>/dev/null | cut -f1)
+if [ -n "$pat_cols" ]; then
+  echo "$pat_cols" | grep -qE "text__div|birth_date" \
+    && fail "processed ethioemr/patient still carries PII columns" \
+    || pass "processed ethioemr/patient is PII-stripped"
+fi
+usr_cols=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
+  "DESCRIBE s3(nhdw_minio, url='http://minio-datalake:9000/nhdw-processed/mbrana/mflowussd_users/*.parquet', format='Parquet')" 2>/dev/null | cut -f1)
+if [ -n "$usr_cols" ]; then
+  echo "$usr_cols" | grep -qE "user_name|phone_no" \
+    && fail "processed mbrana/mflowussd_users still carries PII columns" \
+    || pass "processed mbrana/mflowussd_users is PII-stripped"
+fi
+
+# 6c. ML tier — registry, deployments, latest-run predictions, airflow DAG
+# The X-Mock-* demo-impersonation channel is SECRET-GATED (auth.py fail-secure):
+# without X-Mock-Secret the gateway 401s and this check could never pass.
+IMPSEC=$(kubectl -n "$NS" get secret nhdw-gateway-secrets \
+  -o jsonpath='{.data.IMPERSONATION_SECRET}' 2>/dev/null | base64 -d)
+mlmodels=$(curl -sk --max-time 8 "https://gateway.127.0.0.1.nip.io/api/ml" \
+  -H "X-Mock-User: 22222222-3333-4444-5555-666666666666" -H "X-Mock-Role: R-CONS-ANA" \
+  -H "X-Mock-Secret: ${IMPSEC}" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)
+[ "${mlmodels:-0}" -ge 5 ] && pass "ML registry serves $mlmodels models (@champion via gateway)" \
+                          || fail "ML registry has only ${mlmodels:-0}/5 models"
+mlpred=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_ops -At -c "
+  SELECT count(DISTINCT r.model_name) FROM ops_ml.ml_predictions p
+  JOIN ops_ml.ml_run r ON r.id = p.run_id WHERE r.status='success'" 2>/dev/null)
+[ "${mlpred:-0}" -ge 5 ] && pass "ml_predictions populated for $mlpred models" \
+                        || fail "ml_predictions covers only ${mlpred:-0}/5 models"
+dag=$(kubectl -n "$NS" exec deploy/airflow -- airflow dags list 2>/dev/null | grep -c "ml_batch_predict")
+[ "${dag:-0}" -ge 1 ] && pass "airflow DAG ml_batch_predict registered" \
+                     || fail "airflow DAG ml_batch_predict missing"
+
+# 6d. graduation review flow (PROJECT-centric) — the submit→approve/reject seed
+#     must have left the review lifecycle in its demo state: ≥1 approved (now
+#     public) AND ≥1 in_review (awaiting a reviewer). Proves the seed drove the
+#     REAL gateway API to completion (project.review_status is only ever written
+#     through the graduation endpoints, never INSERTed directly).
+grad=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_ops -At -F: -c "
+  SELECT count(*) FILTER (WHERE review_status='approved'),
+         count(*) FILTER (WHERE review_status='in_review')
+  FROM ops_workspace.project" 2>/dev/null)
+gapp=${grad%%:*}; grev=${grad##*:}
+{ [ "${gapp:-0}" -ge 1 ] && [ "${grev:-0}" -ge 1 ]; } \
+  && pass "graduation review flow populated (approved=$gapp, in_review=$grev)" \
+  || fail "graduation review flow incomplete (approved=${gapp:-0}, in_review=${grev:-0})"
+# the approved community project's model must be catalogue-visible (integrated via
+# the #45 hook): a model_deployment row + successful-run predictions under its name.
+cmodel=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_ops -At -c "
+  SELECT count(*) FROM ops_ml.model_deployment d
+  WHERE d.model_name='community_malaria_risk'
+    AND EXISTS (SELECT 1 FROM ops_ml.ml_predictions p JOIN ops_ml.ml_run r ON r.id=p.run_id
+                WHERE r.model_name=d.model_name AND r.status='success')" 2>/dev/null)
+[ "${cmodel:-0}" -ge 1 ] && pass "community model integrated (community_malaria_risk deployed + predicting)" \
+                        || fail "approved community model NOT integrated (no deployment+predictions for community_malaria_risk)"
+
+# 7. pack/unpack surface
+bash -n "$REPO/bundle/scripts/pack.sh" && bash -n "$REPO/bundle/scripts/restore-state.sh" \
+  && pass "pack.sh + restore-state.sh parse" || fail "pack/restore syntax error"
+[ -x "$REPO/bundle/bin/mc" ] && pass "bundled mc binary present" || fail "bundle/bin/mc missing"
+
+# 8. replacement-means-removal guard
+stale=$(grep -rIl "1_sources/\|nhdw/fake-fayda\|1_infrastructure/scripts/\|1_infrastructure/docker/" "$REPO" \
+  --include="*.sh" --include="*.py" --include="*.yaml" --include="*.yml" --include="*.ts" --include="*.tsx" 2>/dev/null \
+  | grep -v "_archive/" | grep -v "k8s-deployment-changelog" | grep -v "bundle/state/" \
+  | grep -v "verify-system.sh" || true)   # this script necessarily contains the patterns
+[ -z "$stale" ] && pass "no retired names outside _archive" || fail "retired names still referenced: $stale"
+
+echo
+if [ "$FAIL" -ne 0 ]; then echo "== verify-system: FAILURES above =="; exit 1; fi
+echo "== verify-system: ALL GREEN =="

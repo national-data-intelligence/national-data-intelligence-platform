@@ -1,0 +1,198 @@
+# Source ingestor Jobs — real dlt ingestors that pull each EXTERNAL compose source
+# replica into the MinIO data lake (nhdw-raw), replacing the retired seed-minio.
+# Run in dependency order by seed-realistic.sh (AFTER minio-init, BEFORE ch-raw-views).
+# They reach the host-published source ports via host.k3d.internal (k3d injects it into
+# CoreDNS; bootstrap.sh verifies/patches it — see the host.k3d.internal preflight).
+#
+# Registry image names are remapped to nhdw/*:dev by seed-realistic.sh's sed. Source DB/API
+# credentials come from the `source-creds` Secret (overlays/dev/secrets.yaml); MinIO creds
+# from `minio-secrets`. These Jobs are NOT applied by kustomize — they are one-shot pipeline
+# steps invoked via run_job(). Each Job is fully self-contained (no YAML anchors: anchors do
+# not cross `---` document boundaries, and a list anchor cannot be spliced into an env list —
+# repo rule 4 favours this repetition over shared coupling anyway).
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: dhis2-ingest-metadata, namespace: nhdw, labels: { app: dhis2-ingestor, tier: pipeline } }
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata: { labels: { app: dhis2-ingestor, tier: pipeline } }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: ingestor
+          image: nhdw-registry:5500/nhdw/dhis2-ingestor:v1
+          imagePullPolicy: Always
+          args: ["metadata"]
+          env:
+            - { name: DHIS2_BASE_URL, value: "http://host.k3d.internal:8080" }
+            - { name: DHIS2_USER,     valueFrom: { secretKeyRef: { name: source-creds, key: DHIS2_USER } } }
+            - { name: DHIS2_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: DHIS2_PASSWORD } } }
+            - { name: DHIS2_PAGE_SIZE, value: "200" }
+            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
+            - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
+            - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
+            - { name: MINIO_REGION,     value: "et-addis-1" }
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: dhis2-ingest-dvs, namespace: nhdw, labels: { app: dhis2-ingestor, tier: pipeline } }
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata: { labels: { app: dhis2-ingestor, tier: pipeline } }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: ingestor
+          image: nhdw-registry:5500/nhdw/dhis2-ingestor:v1
+          imagePullPolicy: Always
+          args: ["data-value-sets"]
+          env:
+            - { name: DHIS2_BASE_URL, value: "http://host.k3d.internal:8080" }
+            - { name: DHIS2_USER,     valueFrom: { secretKeyRef: { name: source-creds, key: DHIS2_USER } } }
+            - { name: DHIS2_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: DHIS2_PASSWORD } } }
+            - { name: DHIS2_PAGE_SIZE, value: "200" }
+            # Seeded values carry import-time lastUpdated; a low floor grabs all on run 1.
+            # append + dlt incremental(last_updated): later runs pull only the delta
+            # (dlt restores the watermark from lake state), so re-runs do NOT double-count.
+            - { name: DHIS2_INITIAL_LAST_UPDATED, value: "2020-01-01" }
+            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
+            - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
+            - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
+            - { name: MINIO_REGION,     value: "et-addis-1" }
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: climate-ingest, namespace: nhdw, labels: { app: climate-ingestor, tier: pipeline } }
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata: { labels: { app: climate-ingestor, tier: pipeline } }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: ingestor
+          image: nhdw-registry:5500/nhdw/climate-ingestor:v1
+          imagePullPolicy: Always
+          args: ["weekly"]
+          env:
+            - { name: CLIMATE_API_BASE_URL, value: "http://host.k3d.internal:8095" }
+            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
+            - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
+            - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
+            - { name: MINIO_REGION,     value: "et-addis-1" }
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: ethioemr-ingest, namespace: nhdw, labels: { app: ethioemr-ingestor, tier: pipeline } }
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata: { labels: { app: ethioemr-ingestor, tier: pipeline } }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: ingestor
+          image: nhdw-registry:5500/nhdw/ethioemr-ingestor:v1
+          imagePullPolicy: Always
+          args: ["extract"]
+          env:
+            - { name: ETHIOEMR_MYSQL_HOST, value: "host.k3d.internal" }
+            - { name: ETHIOEMR_MYSQL_PORT, value: "33306" }
+            - { name: ETHIOEMR_MYSQL_DB,   value: "openmrs" }
+            - { name: ETHIOEMR_MYSQL_USER, value: "ingestor" }
+            - { name: ETHIOEMR_MYSQL_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: ETHIOEMR_READER_PASSWORD } } }
+            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
+            - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
+            - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
+            - { name: MINIO_REGION,     value: "et-addis-1" }
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: hcmiswdm-ingest, namespace: nhdw, labels: { app: hcmiswdm-ingestor, tier: pipeline } }
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata: { labels: { app: hcmiswdm-ingestor, tier: pipeline } }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: ingestor
+          image: nhdw-registry:5500/nhdw/hcmiswdm-ingestor:v1
+          imagePullPolicy: Always
+          args: ["extract"]
+          env:
+            - { name: HCMISWDM_HOST, value: "host.k3d.internal" }
+            - { name: HCMISWDM_PORT, value: "1433" }
+            - { name: HCMISWDM_DATABASE, value: "HCMISWDM" }
+            - { name: HCMISWDM_USER, value: "nscd_reader" }
+            - { name: HCMISWDM_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: HCMISWDM_READER_PASSWORD } } }
+            - { name: HCMISWDM_TRUST_SERVER_CERTIFICATE, value: "yes" }
+            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
+            - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
+            - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
+            - { name: MINIO_REGION,     value: "et-addis-1" }
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: mbrana-ingest, namespace: nhdw, labels: { app: mbrana-ingestor, tier: pipeline } }
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata: { labels: { app: mbrana-ingestor, tier: pipeline } }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: ingestor
+          image: nhdw-registry:5500/nhdw/mbrana-ingestor:v1
+          imagePullPolicy: Always
+          args: ["extract"]
+          env:
+            - { name: MBRANA_HOST, value: "host.k3d.internal" }
+            - { name: MBRANA_PORT, value: "1433" }
+            - { name: MBRANA_DATABASE, value: "HCMISWCloud" }
+            # mBrana shares the HCMISWDM SQL Server; restore.sh creates login [ingestor].
+            - { name: MBRANA_USER, value: "ingestor" }
+            - { name: MBRANA_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: MBRANA_READER_PASSWORD } } }
+            - { name: MBRANA_TRUST_SERVER_CERTIFICATE, value: "yes" }
+            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
+            - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
+            - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
+            - { name: MINIO_REGION,     value: "et-addis-1" }
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: mfr-ingest, namespace: nhdw, labels: { app: mfr-ingestor, tier: pipeline } }
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 1800
+  template:
+    metadata: { labels: { app: mfr-ingestor, tier: pipeline } }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: ingestor
+          image: nhdw-registry:5500/nhdw/mfr-ingestor:v1
+          imagePullPolicy: Always
+          args: ["all"]
+          env:
+            - { name: MFR_FHIR_BASE_URL, value: "http://host.k3d.internal:8093/fhir" }
+            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
+            - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
+            - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
+            - { name: MINIO_REGION,     value: "et-addis-1" }

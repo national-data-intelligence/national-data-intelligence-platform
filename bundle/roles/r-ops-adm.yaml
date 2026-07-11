@@ -1,0 +1,40 @@
+# R-OPS-ADM — System Administrator
+#
+# Authoritative spec: docs/user-roles.md §3 Group F → R-OPS-ADM.
+role:
+  id: R-OPS-ADM
+  name: "System Administrator"
+  group: Operator
+  identity_provider: Privileged-Keycloak
+  mfa_required: true
+  mfa_factor: WebAuthn
+  phase_activated: 1
+  audit_class: privileged
+  notes: |
+    Infrastructure team: OpenBao, Keycloak, K8s, Docker hosts, networking,
+    monitoring. Manages Vault mounts/policies/auth methods, Keycloak
+    realms/clients/users, infra deploys.
+
+    Two-person rule for OpenBao policy changes affecting PHI paths
+    (co-approval from R-OPS-SEC). Cannot read data content; break-glass
+    available with R-OPS-SEC approval and full session recording.
+
+    Intentional deny-all on the HEALTH-DATA plane. Only operates on
+    infrastructure surfaces — admin dashboard sections that don't go
+    through OPA.
+
+    ONE deliberate carve-out (2026-07-03): DC.QLT — data-QUALITY metrics
+    (completeness/timeliness/validity percentages per source × period,
+    bi_quality marts). These are operational pipeline metadata about the
+    system the admin runs, not patient or programme health data; the
+    admin dashboard's Quality & Lineage section reads them. The deny-all
+    on every health data class stands.
+  intentional_deny: true
+  permissions:
+    - subject: PRG
+      data_class: [DC.QLT]
+      members: all
+      granularity: aggregate
+      sensitivity: []
+      verbs: [read]
+      purpose_of_use: [public-health]

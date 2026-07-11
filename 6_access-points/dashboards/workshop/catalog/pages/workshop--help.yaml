@@ -1,0 +1,6 @@
+id: workshop/help
+title: Help
+ordering: 50
+sections:
+- workshop/help/tools
+- workshop/help/reference

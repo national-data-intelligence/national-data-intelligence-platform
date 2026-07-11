@@ -1,0 +1,8 @@
+id: dz-zscore-grid
+title: Cross-Disease Anomalies
+kind: heatmap
+requires:
+  subject: PRG
+  verb: read
+  granularity: aggregate
+  sensitivity: default

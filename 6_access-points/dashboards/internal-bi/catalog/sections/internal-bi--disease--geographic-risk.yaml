@@ -1,0 +1,15 @@
+id: internal-bi/disease/geographic-risk
+page_id: internal-bi/disease
+title: Geographic Risk
+ordering: 20
+columns: 12
+dense: true
+widgets:
+- id: dz-region-map
+  col_span: 7
+  row_span: 3
+  ordering: 0
+- id: dz-risk-bands
+  col_span: 5
+  row_span: 3
+  ordering: 1

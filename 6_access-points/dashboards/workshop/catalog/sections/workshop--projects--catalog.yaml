@@ -1,0 +1,24 @@
+id: workshop/projects/catalog
+page_id: workshop/projects
+title: Projects
+eyebrow: The unit of work — everything belongs to one
+ordering: 10
+columns: 12
+dense: true
+widgets:
+- id: ws-projects-table
+  col_span: 12
+  row_span: 1
+  ordering: 0
+- id: ws-project-detail
+  col_span: 12
+  row_span: 1
+  ordering: 10
+- id: ws-project-files
+  col_span: 6
+  row_span: 1
+  ordering: 20
+- id: ws-project-artifacts
+  col_span: 6
+  row_span: 1
+  ordering: 30

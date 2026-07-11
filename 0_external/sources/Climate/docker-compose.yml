@@ -1,0 +1,31 @@
+# Climate source replica — EXTERNAL to the NHDW k8s cluster. A small API that
+# serves weekly meteorological data as CSV, mimicking a real public climate source
+# (NASA POWER / CHIRPS). The in-cluster Climate dlt ingestor pulls from it.
+#
+# Data comes from 0_external/sources/Climate/generate_climate.py →
+# ../../../bundle/seeds/sources/climate/weekly.csv (mounted read-only). Regenerate
+# that CSV to change the source data; the API reloads on restart.
+#
+# Published on 0.0.0.0 so k3d pods reach it via host.k3d.internal.
+services:
+  climate-api:
+    build: ./api
+    image: nhdw/climate-api:dev
+    container_name: climate-api
+    restart: unless-stopped
+    environment:
+      CLIMATE_CSV: /data/weekly.csv
+    volumes:
+      - ../../../bundle/seeds/sources/climate:/data:ro
+    ports:
+      - "8095:8000"        # 0.0.0.0 — reachable from k3d pods via host.k3d.internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [climate_net]
+
+networks:
+  climate_net:
+    driver: bridge

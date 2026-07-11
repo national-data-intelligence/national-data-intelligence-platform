@@ -1,0 +1,8 @@
+id: dz-risk-bands
+title: Risk Escalations
+kind: chart
+requires:
+  subject: PRG
+  verb: read
+  granularity: aggregate
+  sensitivity: default

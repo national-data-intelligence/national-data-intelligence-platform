@@ -1,0 +1,38 @@
+/** Zero-dose children × vaccine last mile — HLR Table 8's named indicator
+ *  from THREE feeds (DHIS2 immunization + population, mBrana cold-chain).
+ *  expected_infants is a LABELED estimate (population × 3.2% CBR). Hotspot =
+ *  many unreached children AND a struggling supply chain to reach them. */
+import type { WidgetDef } from '../../runtime/types';
+import { paginatedTable } from '../_shared/charts';
+import { regionName } from '../_shared/reference';
+
+const def: WidgetDef = {
+  id: 'sv-zero-dose',
+  reactsTo: ['geography'],
+  async render(ctx) {
+    const rows = await ctx.fetchData();
+    if (!rows || !rows.length) { ctx.empty('No population-year data in the current scope.'); return; }
+    const shaped = rows.map(r => ({
+      region: regionName(r.region_id),
+      infants: Number(r.expected_infants ?? 0).toLocaleString(),
+      penta1: Number(r.penta1_annualized ?? 0).toLocaleString(),
+      reach: r.reach_index == null ? '—' : Number(r.reach_index).toFixed(1),
+      cold_chain: r.mbrana_zero_stock_pct == null ? '—' : `${Number(r.mbrana_zero_stock_pct).toFixed(1)}% logs at zero`,
+      status: r.hotspot ? 'hotspot' : 'watch',
+    }));
+    const table = paginatedTable(ctx.el, shaped, [
+      { id: 'region', label: 'Region' },
+      { id: 'infants', label: 'Expected infants (est.)' },
+      { id: 'penta1', label: 'Penta-1 (annualized)' },
+      { id: 'reach', label: 'Reach / 1,000 infants' },
+      { id: 'cold_chain', label: 'mBrana stock stress' },
+      { id: 'status', label: 'Status', format: 'pill' },
+    ], ctx.theme, { search: false, sort: true, pageSize: 14 });
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:11px;color:var(--ink-4,#9ca3af);padding:6px 2px 0;';
+    note.textContent = 'Comparative reach index — expected infants = population × 3.2% CBR (labeled estimate); lowest-reach regions locate the unreached (zero-dose) children.';
+    ctx.el.appendChild(note);
+    return table;
+  },
+};
+export default def;

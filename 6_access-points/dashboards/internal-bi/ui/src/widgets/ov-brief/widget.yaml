@@ -1,0 +1,8 @@
+id: ov-brief
+title: Overview · Decision brief
+kind: custom
+requires:
+  subject: PRG
+  verb: read
+  granularity: aggregate
+  sensitivity: default

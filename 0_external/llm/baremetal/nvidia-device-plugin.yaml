@@ -1,0 +1,46 @@
+# NVIDIA k8s device-plugin DaemonSet — advertises `nvidia.com/gpu` so pods can
+# request the GPU. Applied SEPARATELY by bootstrap.sh (like metrics-server.yaml),
+# only on a GPU host, never via the always-on overlay (so CPU-only boots skip it).
+#
+# Requires the custom CUDA node image (0_external/llm/baremetal/Dockerfile.k3s-cuda):
+# it runs with runtimeClassName `nvidia` (auto-created by k3s once the NVIDIA Container
+# Toolkit is present in the node), which the plugin needs to enumerate GPUs.
+#
+# ⚠ WORKS ON BARE-METAL LINUX GPU HOSTS ONLY. On a WSL2 Docker-Desktop host the
+# plugin logs "Failed to initialize NVML: Not Supported" and never advertises a
+# GPU — NVML is unsupported under WSL2's GPU paravirtualisation. FAIL_ON_INIT_ERROR
+# is false so it degrades quietly there. For GPU on a WSL2 host, serve the LLM from
+# the EXTERNAL ollama container instead (0_external/llm/docker-compose.yml) — CUDA
+# cannot init inside a nested k3d node→pod on WSL2.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-device-plugin-daemonset
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels: { name: nvidia-device-plugin-ds }
+  updateStrategy: { type: RollingUpdate }
+  template:
+    metadata:
+      labels: { name: nvidia-device-plugin-ds }
+    spec:
+      runtimeClassName: nvidia
+      tolerations:
+        - { key: nvidia.com/gpu, operator: Exists, effect: NoSchedule }
+        - { key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule }
+        - { key: node-role.kubernetes.io/master, operator: Exists, effect: NoSchedule }
+      priorityClassName: system-node-critical
+      containers:
+        - name: nvidia-device-plugin-ctr
+          image: nvcr.io/nvidia/k8s-device-plugin:v0.16.2
+          env:
+            - { name: FAIL_ON_INIT_ERROR, value: "false" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: device-plugin, mountPath: /var/lib/kubelet/device-plugins }
+      volumes:
+        - name: device-plugin
+          hostPath: { path: /var/lib/kubelet/device-plugins }

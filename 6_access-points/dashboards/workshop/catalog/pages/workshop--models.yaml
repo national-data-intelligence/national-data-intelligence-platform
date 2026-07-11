@@ -1,0 +1,7 @@
+id: workshop/models
+title: Models
+ordering: 30
+sections:
+- workshop/models/catalog
+- workshop/models/health
+- workshop/models/results

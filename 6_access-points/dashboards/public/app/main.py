@@ -1,0 +1,680 @@
+"""NHDW Public Dashboard — anonymous read-only.
+
+NO auth. NO PHI. The only DB role this app uses has SELECT on a hand-
+curated set of public marts views; the marts layer enforces k-anonymity
+(k ≥ 5) at the SQL level. See app/marts.py for the OpenBao-issued
+credentials handling.
+
+`facility-counts` reads from bi_public.bi_facility_distribution_public.
+Slugs without a backing mart return placeholders.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import secrets
+import time
+from pathlib import Path
+from typing import Any
+
+import httpx
+from urllib.parse import urlencode
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from itsdangerous import BadSignature, TimestampSigner
+from starlette.staticfiles import StaticFiles
+
+from app import marts as marts_db
+from app.opa_client import opa_check
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s | %(message)s")
+log = logging.getLogger("public-dashboard")
+
+# Production layout (paths inside the container):
+#   /app/dist/index.html       — Vite/React SPA build output
+#   /app/dist/assets/          — JS/CSS bundles emitted by Vite
+#   /app/static/{css,js,assets}/  — static assets shared by the SPA
+#                                  (logo-fmoh, icons, mockup background
+#                                  images, geojson). These survive the
+#                                  React rewrite because the SPA
+#                                  references them via /static/ paths.
+DIST_DIR   = Path("/app/dist")
+STATIC_DIR = Path("/app/static")
+LOKI_URL   = os.environ.get("LOKI_URL", "http://loki:3100")
+
+# ─── Fayda verification ───────────────────────────────────────────────
+# Fayda is used for ONE thing: verifying a non-registered visitor's national ID
+# on the access-request form (the "Verify with Fayda" popup below). It is NOT a
+# login — there is no Keycloak "sign in with Fayda". We talk to the Fayda Replica
+# directly to show the verified-Fayda badge; the production path just points
+# these FAYDA_* URLs at the real Fayda endpoints.
+FAYDA_PUBLIC_BASE = os.environ.get("FAYDA_PUBLIC_BASE", "http://localhost:8096")
+FAYDA_INTERNAL_BASE = os.environ.get("FAYDA_INTERNAL_BASE", "http://host.k3d.internal:8096")
+FAYDA_CLIENT_ID = os.environ.get("FAYDA_CLIENT_ID", "nhdw-citizen-portal")
+FAYDA_CLIENT_SECRET = os.environ.get("FAYDA_CLIENT_SECRET", "fake-fayda-secret")
+FAYDA_REDIRECT_URI = os.environ.get(
+    "FAYDA_REDIRECT_URI", "https://public.127.0.0.1.nip.io/auth/fayda-callback")
+PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://public.127.0.0.1.nip.io")
+
+# Cheap state-token signer for the popup roundtrip — no user session here.
+_STATE_SECRET = os.environ.get("FAYDA_STATE_SECRET", "fayda-state-dev-only")
+_state_signer = TimestampSigner(_STATE_SECRET)
+
+app = FastAPI(title="NHDW — Public Dashboard", docs_url=None, redoc_url=None)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=False), name="static")
+# Vite-built JS/CSS bundles live under /app/dist/assets/<hash>.js etc.
+app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request) -> HTMLResponse:
+    """Vite/React SPA — design is fixed by _mockups/01-public.html and
+    verified pixel-identical via _tools/pixel-diff. Section switching
+    is React useState (home | data | articles | article)."""
+    # no-cache: index.html references hash-named bundles that change every build;
+    # a cached copy points at 404'd bundles after a redeploy → the SPA stalls.
+    return HTMLResponse((DIST_DIR / "index.html").read_text(),
+                        headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {"status": "ok"}
+
+
+# ─── Fayda federation popup flow ─────────────────────────────────────────
+#
+# UX (citizen verifies their Ethiopian National ID before submitting an
+# access request):
+#   1. SPA opens window.open('/auth/fayda-start', 'fayda', 'popup')
+#   2. /auth/fayda-start signs a state token, builds the Fayda Replica
+#      authorize URL, 302s to it.
+#   3. Citizen picks themselves on the Fayda Replica picker page, Fake
+#      Fayda 302s back to /auth/fayda-callback?code=…&state=…
+#   4. /auth/fayda-callback verifies state, exchanges the code with Fake
+#      Fayda's /token, decodes claims, and returns a tiny HTML page that
+#      window.opener.postMessage()'s {fayda_id, name, given_name,
+#      family_name, phone, verified_via:'fayda'} back, then closes.
+#   5. AccessRequestModal listens for that message and pre-fills the form.
+#
+# This is a VERIFICATION step, not a login: no session is created, no Keycloak
+# realm is involved, and non-Fayda requests still flow through. The production
+# path is the same SPA flow with FAYDA_PUBLIC_BASE pointing at the real Fayda
+# authorize endpoint instead of the Replica.
+
+@app.get("/auth/fayda-config")
+async def fayda_config() -> dict:
+    """Public configuration the SPA needs to open the Fayda popup.
+    Returned as 200 always — the popup is opened against /auth/fayda-start
+    rather than the IdP directly, so the SPA never sees Fayda URLs."""
+    return {
+        "verify_url": f"{PUBLIC_BASE}/auth/fayda-start",
+        "issuer":     FAYDA_PUBLIC_BASE,
+        "client_id":  FAYDA_CLIENT_ID,
+        "enabled":    True,
+    }
+
+
+@app.get("/auth/fayda-start")
+async def fayda_start() -> RedirectResponse:
+    """Build a signed state token + 302 to Fayda Replica's /authorize."""
+    nonce = secrets.token_urlsafe(16)
+    state = _state_signer.sign(
+        json.dumps({"n": nonce, "ts": int(time.time())}).encode()).decode()
+    params = {
+        "response_type": "code",
+        "client_id":     FAYDA_CLIENT_ID,
+        "redirect_uri":  FAYDA_REDIRECT_URI,
+        "scope":         "openid profile",
+        "state":         state,
+    }
+    url = f"{FAYDA_PUBLIC_BASE}/authorize?" + urlencode(params)
+    return RedirectResponse(url)
+
+
+@app.get("/auth/fayda-callback", response_class=HTMLResponse)
+async def fayda_callback(code: str = "", state: str = "") -> HTMLResponse:
+    """Exchange the code with Fayda Replica + postMessage claims to the opener."""
+    err: str | None = None
+    claims: dict[str, Any] = {}
+    if not code or not state:
+        err = "missing code or state"
+    else:
+        try:
+            _state_signer.unsign(state, max_age=600)
+        except BadSignature:
+            err = "invalid or expired state"
+    if not err:
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                token_resp = await c.post(
+                    # Server-to-server: use the internal address.
+                    f"{FAYDA_INTERNAL_BASE}/token",
+                    data={
+                        "grant_type":    "authorization_code",
+                        "code":          code,
+                        "redirect_uri":  FAYDA_REDIRECT_URI,
+                        "client_id":     FAYDA_CLIENT_ID,
+                        "client_secret": FAYDA_CLIENT_SECRET,
+                    },
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+            if token_resp.status_code != 200:
+                err = f"token exchange failed: HTTP {token_resp.status_code}"
+                log.warning("fayda token exchange failed: %s", token_resp.text[:200])
+            else:
+                tokens = token_resp.json()
+                id_token = tokens.get("id_token", "")
+                # Lazy claim decode — the mock signs RS256 but we trust it
+                # implicitly in dev. Just base64-split.
+                try:
+                    payload = id_token.split(".")[1]
+                    payload += "=" * (-len(payload) % 4)
+                    import base64 as _b64
+                    claims = json.loads(_b64.urlsafe_b64decode(payload))
+                except Exception as e:                            # noqa: BLE001
+                    err = f"id_token decode failed: {e}"
+        except httpx.RequestError as e:
+            err = f"network error: {e}"
+
+    if err:
+        log.warning("fayda callback error: %s", err)
+        payload_js = json.dumps({"ok": False, "error": err})
+    else:
+        # Normalise the claims the SPA cares about. Drop signing-related
+        # fields; we don't want them leaked into the browser.
+        payload_js = json.dumps({
+            "ok":           True,
+            "verified_via": "fayda",
+            "fayda_id":     claims.get("fayda_id") or claims.get("sub"),
+            "name":         claims.get("name") or "",
+            "given_name":   claims.get("given_name") or "",
+            "family_name":  claims.get("family_name") or "",
+            "phone":        claims.get("phone_number") or "",
+            "gender":       claims.get("gender") or "",
+            "birthdate":    claims.get("birthdate") or "",
+        })
+
+    # Tiny bridge page — postMessage to the opener then close.
+    return HTMLResponse(f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Verifying with Fayda…</title>
+<style>body{{font-family:system-ui,sans-serif;text-align:center;padding:2rem;color:#1f2f54}}</style>
+</head><body>
+  <h3>Returning to NHDW…</h3>
+  <p style="color:#64748b">This window should close automatically.</p>
+  <script>
+    (function() {{
+      var msg = {payload_js};
+      try {{
+        if (window.opener) {{
+          window.opener.postMessage({{type:'nhdw:fayda-verify', payload:msg}}, '*');
+        }}
+      }} catch(e) {{ console.error('postMessage failed', e); }}
+      setTimeout(function(){{ window.close(); }}, 300);
+    }})();
+  </script>
+</body></html>""")
+
+
+@app.get("/api/dashboards")
+async def dashboards() -> JSONResponse:
+    """Static catalog of public dashboards. All entries map to k-anon views."""
+    return JSONResponse([
+        {"id": "national-coverage", "title": "National Programme Coverage", "description": "EPI, MNCH, TB, HIV — quarterly aggregates by region."},
+        {"id": "facility-counts",   "title": "Health Facility Distribution", "description": "Number of facilities by region and woreda."},
+        {"id": "stock-availability","title": "Commodity Stock Availability", "description": "% of facilities with key drugs in stock by region."},
+    ])
+
+
+# ─── Access-point registry ────────────────────────────────────────────────
+#
+# Single source of truth for which NHDW surfaces exist. Each entry pins:
+#   - the dev URL  (127.0.0.1:<port> for the local compose stack)
+#   - the prod subdomain (becomes <sub>.<NHDW_BASE_DOMAIN> in K8s)
+#
+# At request time we pick which to serve based on `NHDW_BASE_DOMAIN`:
+#   - unset    → dev URLs (compose stack on localhost)
+#   - set      → https://<sub>.<base>/<path>  (matches the Ingress hosts
+#                 generated under 1_infrastructure/k8s/*/base/ingress.yaml)
+#
+# This is the bridge between the K8s Ingress hosts and what the portal
+# UI links to — flip one env var and every access-point card retargets.
+
+NHDW_BASE_DOMAIN = os.environ.get("NHDW_BASE_DOMAIN", "").rstrip(".")
+
+
+def _url(dev_url: str, sub: str, path: str = "/") -> str:
+    if NHDW_BASE_DOMAIN:
+        return f"https://{sub}.{NHDW_BASE_DOMAIN}{path}"
+    return dev_url
+
+
+ACCESS_POINTS_TEMPLATE = [
+    {
+        "id": "public-stats", "title": "Public Health Data", "tier": "access", "icon": "chart-pie",
+        "dev_url": "/data", "sub": "portal", "path": "/data",
+        "tagline": "Aggregate national indicators, open to the public.",
+        "description": "Anonymous read-only view of k-anonymous health indicators "
+                       "(facility distribution, programme coverage, stock availability). "
+                       "The marts layer enforces k ≥ 5 at the SQL level — no row-level "
+                       "data leaves this surface.",
+        "use_when": "You need a citation-quality figure for a public report.",
+        "roles": ["R-PUB-ANON"], "realm": None,
+    },
+    {
+        "id": "fhir-api", "title": "FHIR R4 API", "tier": "api", "icon": "globe",
+        "dev_url": "http://127.0.0.1:8093/fhir/metadata", "sub": "fhir", "path": "/fhir/metadata",
+        "tagline": "HL7 FHIR R4 endpoint backed by HAPI + Postgres.",
+        "description": "Read-write FHIR API with a SMART-on-FHIR discovery document. "
+                       "Read paths are anonymous in development; production requires a "
+                       "Bearer token obtained through the moh-staff realm. Write paths "
+                       "go through the OpenHIM mediator.",
+        "use_when": "You're building an external system that consumes Patient, "
+                    "Observation, or Immunization resources.",
+        "roles": ["R-PUB-ANON (dev)", "Bearer (prod)"], "realm": None,
+    },
+    {
+        "id": "internal-bi", "title": "Internal BI", "tier": "access", "icon": "chart-bar",
+        "dev_url": "http://127.0.0.1:8087", "sub": "internal-bi", "path": "/",
+        "tagline": "Curated facility marts with column-level lineage.",
+        "description": "Role-scoped dashboards built on the postgres-vault marts. "
+                       "Decision-makers see governed indicators; analysts get the full "
+                       "build plus ad-hoc query; stewards see metadata, lineage, and "
+                       "the consent gate's effect on PHI marts.",
+        "use_when": "You need a national or regional indicator backed by a versioned mart.",
+        "roles": ["R-DEC", "R-CONS-ANA", "R-STEW"], "realm": "moh-staff",
+    },
+    {
+        "id": "submission", "title": "Submission Portal", "tier": "access", "icon": "upload",
+        "dev_url": "http://127.0.0.1:8089", "sub": "submit", "path": "/",
+        "tagline": "Upload HMIS, Stock, or EPI submissions.",
+        "description": "Drop a CSV (HMIS or Stock) or a FHIR Bundle (EPI) and the "
+                       "OpenHIM mediator validates it, transforms CSV → FHIR Observations, "
+                       "and forwards to HAPI. Every submission gets an OpenHIM transaction "
+                       "ID you can reference in audit reports.",
+        "use_when": "You're a facility focal point or regional officer pushing your "
+                    "monthly returns into NHDW.",
+        "roles": ["R-PROD-SUBMIT"], "realm": "moh-staff",
+    },
+    {
+        "id": "dbt-docs", "title": "dbt Documentation", "tier": "access", "icon": "book",
+        "dev_url": "http://127.0.0.1:8097", "sub": "dbt-docs", "path": "/",
+        "tagline": "Generated lineage and column documentation for every mart.",
+        "description": "The dbt project's static documentation site published behind OIDC. "
+                       "Click through any mart to see its sources, dependencies, column "
+                       "descriptions, and the latest CI run status. The same docs power "
+                       "Internal BI's Lineage tab.",
+        "use_when": "You're an analyst asking 'where does this column come from?'",
+        "roles": ["R-CONS-ANA", "R-STEW"], "realm": "moh-staff",
+    },
+    {
+        "id": "jupyterhub", "title": "Jupyter Workspace", "tier": "access", "icon": "terminal",
+        "dev_url": "http://127.0.0.1:8096/hub/login", "sub": "jupyter", "path": "/hub/login",
+        "tagline": "Notebooks with OpenBao tokens auto-injected.",
+        "description": "Multi-user JupyterHub spawning per-user notebook servers. Each "
+                       "notebook receives an OpenBao token in its environment so the user "
+                       "can mint short-TTL Postgres credentials directly from the kernel "
+                       "and read marts without long-lived secrets.",
+        "use_when": "You're a research scientist doing exploratory analysis.",
+        "roles": ["R-CONS-SCI"], "realm": "moh-staff",
+    },
+    {
+        "id": "ops-hub", "title": "Operator Hub", "tier": "admin", "icon": "gauge",
+        "dev_url": "http://127.0.0.1:8085", "sub": "ops-hub", "path": "/",
+        "tagline": "Cross-stack operator landing page.",
+        "description": "Internal landing page for the three operator roles. Links to "
+                       "every administrative console with a status indicator next to each. "
+                       "Sign-in is via the privileged-ops realm — separate from the staff "
+                       "realm so audit trails don't cross.",
+        "use_when": "You're the on-call operator and want one tab open to everything.",
+        "roles": ["R-OPS-ADM", "R-OPS-ENG", "R-OPS-SEC"], "realm": "privileged-ops",
+    },
+    {
+        "id": "cloudbeaver", "title": "Database Workbench", "tier": "admin", "icon": "database",
+        "dev_url": "http://127.0.0.1:8086", "sub": "cloudbeaver", "path": "/",
+        "tagline": "Web SQL workbench against vault and staging.",
+        "description": "CloudBeaver behind an oauth2-proxy. Each user gets a session-scoped "
+                       "OpenBao-minted database role with a TTL of one hour. The session "
+                       "ID is recorded as the SQL user, so every query traces back to "
+                       "a named human in the audit log.",
+        "use_when": "You need to write ad-hoc SQL against the warehouse safely.",
+        "roles": ["R-OPS-ENG", "R-CONS-ANA"], "realm": "privileged-ops",
+    },
+    {
+        "id": "grafana", "title": "Grafana", "tier": "monitoring", "icon": "monitor",
+        "dev_url": "http://127.0.0.1:3000", "sub": "grafana", "path": "/",
+        "tagline": "Audit, performance, and ML-serving observability.",
+        "description": "Dashboards over Prometheus and Loki. The Audit Events board shows "
+                       "every read, write, and policy decision streamed as FHIR AuditEvent "
+                       "records. The ML Serving board tracks predictions/second, p95 "
+                       "latency, and feature-drift per model version.",
+        "use_when": "You need to investigate an incident or watch a model in production.",
+        "roles": ["R-OPS-SEC", "R-OPS-ADM"], "realm": "privileged-ops",
+    },
+    {
+        "id": "prometheus", "title": "Prometheus", "tier": "monitoring", "icon": "activity",
+        "dev_url": "http://127.0.0.1:9090", "sub": "prometheus", "path": "/",
+        "tagline": "Raw time-series metrics and scrape target status.",
+        "description": "The Prometheus query UI. Useful for ad-hoc PromQL when a Grafana "
+                       "panel doesn't quite answer the question, or for checking whether "
+                       "a target is actually being scraped. Read-only — config is managed "
+                       "in 4_monitoring/prometheus.yml.",
+        "use_when": "You want raw metrics rather than a curated dashboard.",
+        "roles": ["R-OPS-SEC", "R-OPS-ENG"], "realm": None,
+    },
+    {
+        "id": "openhim", "title": "OpenHIM Console", "tier": "admin", "icon": "shuffle",
+        "dev_url": "http://127.0.0.1:8095", "sub": "openhim", "path": "/",
+        "tagline": "Health interoperability mediator console.",
+        "description": "Channel management, transaction inspection, and per-route latency "
+                       "for HMIS, Stock, and EPI submission flows. Inspect any failed "
+                       "submission to see the raw payload and the mediator's validation "
+                       "verdict before the data reached HAPI.",
+        "use_when": "A submission failed and you need to know why.",
+        "roles": ["R-OPS-ADM"], "realm": None,
+    },
+    {
+        "id": "airflow", "title": "Apache Airflow", "tier": "admin", "icon": "workflow",
+        "dev_url": "https://airflow.127.0.0.1.nip.io", "sub": "airflow", "path": "/",
+        "tagline": "Orchestration of scheduled ML batch inference.",
+        "description": "One model-agnostic DAG (ml_batch_predict): every enabled "
+                       "batch row in ops_ml.model_deployment becomes a weekly "
+                       "ml-runner predict-batch pod. Ingestion and dbt builds run "
+                       "as Kubernetes Jobs, not Airflow DAGs.",
+        "use_when": "An ML batch run failed, or you need to re-trigger predictions.",
+        "roles": ["R-OPS-ENG", "R-OPS-ADM"], "realm": None,
+    },
+    {
+        "id": "minio", "title": "MinIO Console", "tier": "admin", "icon": "archive",
+        "dev_url": "http://127.0.0.1:9101", "sub": "minio", "path": "/",
+        "tagline": "S3-compatible object store — data lake and ML artifacts.",
+        "description": "Hosts the raw landing buckets for source extracts and the MLflow "
+                       "artifact store. IAM policies are scoped per service account "
+                       "(ingestor, transformer, reader, ML); credentials rotate every "
+                       "24 hours via the rotation scripts.",
+        "use_when": "You need to inspect a raw extract or an MLflow artifact.",
+        "roles": ["R-OPS-ENG", "R-OPS-ADM"], "realm": None,
+    },
+    {
+        "id": "keycloak", "title": "Keycloak", "tier": "admin", "icon": "key",
+        "dev_url": "http://127.0.0.1:8090/admin/", "sub": "keycloak", "path": "/admin/",
+        "tagline": "Identity provider — realms, users, clients, scopes.",
+        "description": "Two staff realms: moh-staff (analysts, decision-makers, stewards) "
+                       "and privileged-ops (operators). The nhdw-flat-roles client scope "
+                       "emits a top-level roles claim so OpenBao bound_claims works. Fayda "
+                       "is a verification-only integration on the public access-request "
+                       "form, not a login realm.",
+        "use_when": "You need to add a user, rotate a client secret, or inspect a token.",
+        "roles": ["KC master admin"], "realm": None,
+    },
+]
+
+
+# Sibling surfaces the public SPA links to directly — the three staff sign-in
+# destinations (Internal BI / Admin / Workshop) and Keycloak. The SPA can't read
+# env at runtime, so it fetches these resolved bases from /api/access-points and
+# retargets its sign-in / admin-queue links. Same sub→host mapping as the Ingress
+# hosts and the keycloak-seed Job's DASH_BASE_* values; derived from
+# NHDW_BASE_DOMAIN exactly like the registry (unset → localhost dev ports).
+def _sibling_bases() -> dict[str, str]:
+    return {
+        "internal-bi": _url("http://127.0.0.1:8087", "internal-bi", ""),
+        "admin":       _url("http://127.0.0.1:8086", "admin",       ""),
+        "workshop":    _url("http://127.0.0.1:8085", "workshop",    ""),
+        "keycloak":    _url("http://127.0.0.1:8090", "keycloak",    ""),
+    }
+
+
+def _build_registry() -> list[dict]:
+    out = []
+    for ap in ACCESS_POINTS_TEMPLATE:
+        out.append({
+            "id":          ap["id"],
+            "title":       ap["title"],
+            "tier":        ap["tier"],
+            "icon":        ap["icon"],
+            "tagline":     ap["tagline"],
+            "description": ap["description"],
+            "use_when":    ap["use_when"],
+            "roles":       ap["roles"],
+            "realm":       ap["realm"],
+            "url":         _url(ap["dev_url"], ap["sub"], ap["path"]),
+        })
+    return out
+
+
+# ─── proxy: access-request submissions ───────────────────────────────────
+# Browser-side POST → public dashboard → nhdw-gateway. Server-side hop
+# keeps the gateway behind a single trust boundary (no CORS needed) and
+# lets us forward the real client IP/UA into the audit row.
+@app.post("/api/proxy/access-requests")
+async def proxy_access_request(request: Request) -> JSONResponse:
+    from app import marts as _m                              # for GATEWAY_URL
+    payload = await request.body()
+    headers = {
+        "Content-Type": "application/json",
+        # Forward original client IP + UA so the gateway can record them.
+        "X-Forwarded-For": request.headers.get(
+            "x-forwarded-for", request.client.host if request.client else ""),
+        "User-Agent":      request.headers.get("user-agent", ""),
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            r = await c.post(f"{_m.GATEWAY_URL}/api/public/access-requests",
+                              content=payload, headers=headers)
+    except httpx.RequestError as e:
+        return JSONResponse({"detail": f"gateway unreachable: {e}"},
+                             status_code=502)
+    return JSONResponse(r.json() if r.headers.get("content-type", "")
+                        .startswith("application/json") else {"raw": r.text},
+                        status_code=r.status_code)
+
+
+@app.get("/api/proxy/access-requests/{tracking_id}")
+async def proxy_access_request_status(tracking_id: str) -> JSONResponse:
+    """Anonymous status lookup — proxied so the browser stays same-origin."""
+    from app import marts as _m
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get(
+                f"{_m.GATEWAY_URL}/api/public/access-requests/{tracking_id}")
+    except httpx.RequestError as e:
+        return JSONResponse({"detail": f"gateway unreachable: {e}"},
+                             status_code=502)
+    return JSONResponse(r.json() if r.headers.get("content-type", "")
+                        .startswith("application/json") else {"raw": r.text},
+                        status_code=r.status_code)
+
+
+@app.get("/api/proxy/widget-data/{widget_id}")
+async def proxy_widget_data(widget_id: str) -> JSONResponse:
+    """Anonymous widget-data fetch — proxied so the browser stays same-origin.
+
+    Forwards to the gateway's /api/permissions/widget/{id}/data with NO auth
+    header; the gateway maps that to R-PUB-ANON and enforces the widget grant
+    (dashboard `public`) plus the OPA mart gate before any mart is queried.
+    The SPA falls back to its static mockup data on any non-200."""
+    from app import marts as _m
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get(
+                f"{_m.GATEWAY_URL}/api/permissions/widget/{widget_id}/data",
+                params={"dashboard_id": "public"})
+    except httpx.RequestError as e:
+        return JSONResponse({"detail": f"gateway unreachable: {e}"},
+                             status_code=502)
+    return JSONResponse(r.json() if r.headers.get("content-type", "")
+                        .startswith("application/json") else {"raw": r.text},
+                        status_code=r.status_code)
+
+
+@app.get("/api/proxy/articles")
+async def proxy_articles(category: str | None = None, limit: int = 50) -> JSONResponse:
+    """Anonymous newsroom/articles feed — proxied same-origin to the gateway's
+    /api/public/articles (R-PUB-ANON). The SPA falls back to its bundled
+    articles on any non-200."""
+    from app import marts as _m
+    params: dict[str, str] = {"limit": str(limit)}
+    if category:
+        params["category"] = category
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get(f"{_m.GATEWAY_URL}/api/public/articles", params=params)
+    except httpx.RequestError as e:
+        return JSONResponse({"detail": f"gateway unreachable: {e}"}, status_code=502)
+    return JSONResponse(r.json() if r.headers.get("content-type", "")
+                        .startswith("application/json") else {"raw": r.text},
+                        status_code=r.status_code)
+
+
+@app.get("/api/proxy/articles/{article_id}")
+async def proxy_article(article_id: str) -> JSONResponse:
+    from app import marts as _m
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get(f"{_m.GATEWAY_URL}/api/public/articles/{article_id}")
+    except httpx.RequestError as e:
+        return JSONResponse({"detail": f"gateway unreachable: {e}"}, status_code=502)
+    return JSONResponse(r.json() if r.headers.get("content-type", "")
+                        .startswith("application/json") else {"raw": r.text},
+                        status_code=r.status_code)
+
+
+# ── Open-Data catalogue + dataset preview (served from the anonymous
+# nhdw-static bucket; downloads go direct to the public MinIO URL in the
+# manifest). Same-origin proxy so the browser needs no MinIO/CORS access. ──
+MINIO_INTERNAL = os.environ.get(
+    "NHDW_MINIO_INTERNAL", "http://minio-datalake.nhdw.svc.cluster.local:9000").rstrip("/")
+
+
+@app.get("/api/proxy/catalogue")
+async def proxy_catalogue() -> JSONResponse:
+    """The public dataset catalogue manifest (nhdw-static/catalogue.json)."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.get(f"{MINIO_INTERNAL}/nhdw-static/catalogue.json")
+    except httpx.RequestError as e:
+        return JSONResponse({"detail": f"catalogue unavailable: {e}"}, status_code=502)
+    if r.status_code != 200:
+        return JSONResponse({"datasets": [], "count": 0}, status_code=r.status_code)
+    return JSONResponse(r.json(), status_code=200)
+
+
+@app.get("/api/proxy/datasets/{dataset_id}/preview")
+async def proxy_dataset_preview(dataset_id: str, rows: int = 20) -> JSONResponse:
+    """First N rows of a published dataset CSV (for the in-page preview)."""
+    import csv as _csv
+    import io as _io
+    key = f"datasets/{os.path.basename(dataset_id)}.csv"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            r = await c.get(f"{MINIO_INTERNAL}/nhdw-static/{key}")
+    except httpx.RequestError as e:
+        return JSONResponse({"detail": f"dataset unavailable: {e}"}, status_code=502)
+    if r.status_code != 200:
+        return JSONResponse({"detail": "dataset not found"}, status_code=404)
+    reader = _csv.reader(_io.StringIO(r.text))
+    all_rows = list(reader)
+    header = all_rows[0] if all_rows else []
+    body = all_rows[1:1 + max(1, min(rows, 200))]
+    return JSONResponse({"columns": header, "rows": body,
+                         "total_rows": max(0, len(all_rows) - 1)})
+
+
+@app.get("/api/access-points")
+async def access_points() -> JSONResponse:
+    """Public registry of every NHDW surface — used by the portal home page.
+
+    `bases` gives the SPA the three staff dashboards + Keycloak its sign-in and
+    admin-queue links point at. Pass NHDW_BASE_DOMAIN at deploy time to swap
+    localhost URLs for Ingress hostnames (https://<sub>.<base>/).
+    """
+    return JSONResponse({
+        "base_domain": NHDW_BASE_DOMAIN or None,
+        "bases": _sibling_bases(),
+        "items": _build_registry(),
+    })
+
+
+PLACEHOLDER_SERIES = {
+    "national-coverage":  {"x": ["Q1","Q2","Q3","Q4"],
+                           "series": [{"name": "DPT3",    "data": [86, 88, 89, 90]},
+                                      {"name": "Measles", "data": [78, 80, 81, 83]}]},
+    "stock-availability": {"x": ["Addis","Oromia","Amhara","Tigray","SNNP"],
+                           "series": [{"name": "% with stock", "data": [92, 78, 81, 74, 79]}]},
+}
+
+
+@app.get("/api/series/{slug}")
+async def series(slug: str, request: Request) -> JSONResponse:
+    """Returns ECharts-shaped series data for one dashboard.
+
+    Every call routes through OPA (closes F-017 for the public-dashboard
+    surface). R-PUB-ANON's rego policy only allows PRG/FAC subjects at
+    aggregate granularity for purpose=public-health; an unmapped slug
+    returns 403 in enforce mode.
+
+    `facility-counts` reads bi_public.bi_facility_distribution_public live.
+    The other slugs still return Phase-1 placeholders until their marts ship.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+
+    # 1. OPA decision — every public series call is a PEP→PDP→data flow.
+    decision = await opa_check(slug=slug, client_ip=client_ip)
+    if not decision.allow:
+        await _audit(action="R", resource=f"public-dashboard/{slug} [denied: {decision.reason}]",
+                     client_ip=client_ip, outcome="4")
+        return JSONResponse({"error": "forbidden", "reason": decision.reason},
+                            status_code=403)
+
+    # 2. Audit successful read.
+    await _audit(action="R", resource=f"public-dashboard/{slug}", client_ip=client_ip)
+
+    # 3. Serve.
+    # Dispatch to the gateway-backed builders. Each one falls back to a
+    # placeholder if the mart isn't populated yet — the dashboard always
+    # renders SOMETHING.
+    handlers = {
+        "facility-counts":    marts_db.facility_counts,
+        "national-coverage":  marts_db.national_coverage,
+        "stock-availability": marts_db.stock_availability,
+    }
+    if slug in handlers:
+        try:
+            payload = await handlers[slug]()
+            if payload.get("series"):  # only return if the gateway returned non-empty
+                return JSONResponse(payload)
+            log.info("slug=%s returned empty from gateway — falling back to placeholder", slug)
+        except Exception as e:
+            log.warning("slug=%s gateway call failed: %s — falling back to placeholder", slug, e)
+    return JSONResponse(PLACEHOLDER_SERIES.get(slug, {"x": [], "series": []}))
+
+
+async def _audit(*, action: str, resource: str, client_ip: str, outcome: str = "0") -> None:
+    """Public access still leaves an audit trail — anonymous but indexable.
+
+    outcome "0" = success, "4" = minor failure / denied (FHIR AuditEvent code).
+    """
+    payload = {
+        "streams": [{
+            "stream": {"app": "public-dashboard", "realm": "public",
+                       "user": "anonymous", "role": "R-PUB-ANON", "purpose": "public-health",
+                       "client_ip": client_ip, "outcome": outcome},
+            "values": [[
+                str(int(time.time() * 1_000_000_000)),
+                json.dumps({
+                    "resourceType": "AuditEvent", "action": action, "outcome": outcome,
+                    "recorded": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "agent": [{"who": {"display": "anonymous"}, "altId": client_ip}],
+                    "source": {"observer": {"display": "public-dashboard"}},
+                    "entity": [{"what": {"display": resource}}],
+                }),
+            ]],
+        }]
+    }
+    try:
+        async with httpx.AsyncClient(timeout=3) as c:
+            await c.post(f"{LOKI_URL}/loki/api/v1/push", json=payload)
+    except Exception as e:
+        log.warning("audit push failed: %s", e)
