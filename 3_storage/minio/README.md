@@ -145,15 +145,19 @@ The MinIO root user (`MINIO_ROOT_USER`) is **only** used by the init container a
 
 ## How to start
 
+MinIO runs as a Kubernetes Deployment — there is no separate start step. The
+canonical bootstrap creates the cluster, deploys MinIO, and provisions it:
+
 ```bash
-cd ./3_storage/minio
-cp .env.example .env                # then edit changeme- values
-docker compose up -d minio          # boots in ~5 seconds
-docker compose up minio-init        # one-shot: buckets + policies + users
-bash scripts/verify.sh              # all checks pass
+./bootstrap.sh                      # cluster + MinIO Deployment + the minio-init Job
 ```
 
-Top-level alternative: from `.`, `docker compose up -d` brings up everything (sources + data lake + …) via the aggregator. The init container still needs to be run once per fresh data volume.
+Provisioning (buckets, versioning, policies, service accounts) is done by
+`init/create-buckets.sh`, mounted into a one-shot `minio-init` Kubernetes Job
+that `bundle/scripts/seed-realistic.sh` runs (`run_job minio-init`). It is
+idempotent, so re-running that Job re-provisions a running cluster. Credentials
+come from the `minio-secrets` Kubernetes Secret (rendered from
+`overlays/dev/secrets.yaml`), not a local `.env`.
 
 ---
 
