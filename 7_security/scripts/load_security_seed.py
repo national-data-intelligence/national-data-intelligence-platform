@@ -304,18 +304,20 @@ def upsert_roles(cur, rows: list[dict]) -> dict[str, int]:
 # sources these from the DB to emit the SAME rego (equivalence-gated before cutover).
 
 def _perm_norm(p: dict) -> dict:
-    """Role-YAML permission entry → ops_perm.permission columns (lists SORTED so a
-    tuple shared across roles canonicalizes to a single row)."""
+    """Role-YAML permission entry → ops_perm.permission columns. Lists KEEP their
+    YAML order (not sorted) so compile.py can re-emit the current policies/*.rego
+    byte-for-byte — proven lossless: the role YAMLs are order-consistent, so the
+    46 tuples still dedup to 39 unique permissions."""
     subj, gran = p["subject"], p["granularity"]
-    verbs = sorted(p.get("verbs") or [])
+    verbs = list(p.get("verbs") or [])
     return {
         "subject":      subj,
         "members":      p.get("members", "scoped"),
         "granularity":  gran,
         "verbs":        verbs,
-        "purposes":     sorted(p.get("purpose_of_use") or []),
-        "data_classes": sorted(p.get("data_class") or []),
-        "sensitivity":  sorted(p.get("sensitivity") or []),
+        "purposes":     list(p.get("purpose_of_use") or []),
+        "data_classes": list(p.get("data_class") or []),
+        "sensitivity":  list(p.get("sensitivity") or []),
         "description":  f"{subj}/{gran} — {', '.join(verbs)}",
     }
 
@@ -332,16 +334,16 @@ def upsert_permissions_from_roles(cur, roles_dir, code_to_id: dict) -> tuple:
     if not roles_dir.is_dir():
         log.warning("roles dir not found: %s — permission store not seeded", roles_dir)
         return (0, 0)
-    role_perms = []                                    # [(role_code, normalized perm)]
+    role_perms = []                                    # [(role_code, order_idx, normalized perm)]
     for f in sorted(roles_dir.glob("r-*.yaml")):
         doc = yaml.safe_load(f.open())["role"]
-        for p in (doc.get("permissions") or []):
-            role_perms.append((doc["id"], _perm_norm(p)))
+        for i, p in enumerate(doc.get("permissions") or []):
+            role_perms.append((doc["id"], i, _perm_norm(p)))
     if not role_perms:
         return (0, 0)
 
     key_to_id = {}                                     # dedup: one row per unique tuple
-    for _code, d in role_perms:
+    for _code, _idx, d in role_perms:
         k = _perm_key(d)
         if k in key_to_id:
             continue
@@ -356,23 +358,24 @@ def upsert_permissions_from_roles(cur, roles_dir, code_to_id: dict) -> tuple:
         """, d)
         key_to_id[k] = cur.fetchone()[0]
 
-    seed_links = set()
-    for code, d in role_perms:
+    seed_links = {}                                     # (role_id, permission_id) -> ordering (YAML index)
+    for code, idx, d in role_perms:
         rid = code_to_id.get(code)
         if rid is None:
             log.warning("role %s (bundle/roles) has no ops_perm.role row — skipped", code)
             continue
-        seed_links.add((rid, key_to_id[_perm_key(d)]))
+        seed_links[(rid, key_to_id[_perm_key(d)])] = idx
     if seed_links:
         cur.executemany("""
-            INSERT INTO ops_perm.role_permission (role_id, permission_id, managed_by)
-            VALUES (%s, %s, 'seed')
-            ON CONFLICT (role_id, permission_id) DO UPDATE SET managed_by='seed'
-        """, list(seed_links))
+            INSERT INTO ops_perm.role_permission (role_id, permission_id, ordering, managed_by)
+            VALUES (%s, %s, %s, 'seed')
+            ON CONFLICT (role_id, permission_id) DO UPDATE
+              SET ordering = EXCLUDED.ordering, managed_by = 'seed'
+        """, [(r, p, o) for (r, p), o in seed_links.items()])
 
     # Delete-sync seed links the YAMLs no longer declare (runtime links preserved).
     cur.execute("SELECT role_id, permission_id FROM ops_perm.role_permission WHERE managed_by='seed'")
-    stale = {tuple(r) for r in cur.fetchall()} - seed_links
+    stale = {tuple(r) for r in cur.fetchall()} - set(seed_links)
     for rid, pid in stale:
         cur.execute("DELETE FROM ops_perm.role_permission "
                     "WHERE role_id=%s AND permission_id=%s AND managed_by='seed'", (rid, pid))

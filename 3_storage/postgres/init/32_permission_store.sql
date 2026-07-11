@@ -41,6 +41,11 @@ COMMENT ON TABLE ops_perm.permission IS
 CREATE TABLE IF NOT EXISTS ops_perm.role_permission (
     role_id       int  NOT NULL REFERENCES ops_perm.role (id)       ON DELETE CASCADE,
     permission_id int  NOT NULL REFERENCES ops_perm.permission (id) ON DELETE CASCADE,
+    -- Preserves the role's YAML declaration order so compile.py re-emits the
+    -- CURRENT policies/*.rego byte-for-byte (the equivalence gate) — the emitted
+    -- allow rules are order-independent semantically, but keeping order makes the
+    -- DB→rego cutover a zero-diff, offline-provable change.
+    ordering      int  NOT NULL DEFAULT 0,
     -- 'seed' rows are re-derived from the role YAMLs each boot; 'runtime' rows are
     -- created by an admin via perm_admin and MUST survive re-seed (same convention
     -- as ops_perm.role_scope / the retired plugin role_widget rows).
