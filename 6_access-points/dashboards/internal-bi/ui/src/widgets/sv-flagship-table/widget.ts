@@ -11,13 +11,16 @@
  *   mapping_status · confidence_status ('High'|'Medium'|'Low'). reactsTo: geography · programme · period.
  *
  * 2026-07-12 (X5): migrated onto the shared paginatedTable (sticky header, fixed-height scroll,
- * search + click-to-sort). Timeliness renders as a plain % (the inline progress bar is dropped);
- * Confidence renders as a pill (the coloured dot's High/Medium/Low → good/watch/alert mapping is
- * not applied by paginatedTable — see report).
+ * search + click-to-sort). Timeliness renders as a plain % (the inline progress bar is dropped).
+ * Status + Confidence pills are coloured via TableColumn.tone (Good→good, Watch→watch, Alert→alert;
+ * High→good, Medium→watch, Low→alert) — restoring the pre-X5 status pill + confidence-dot colours.
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import type { TableColumn } from '../_shared/charts';
 import { paginatedTable } from '../_shared/charts';
+
+const STATUS_TONE: Record<string, string> = { Good: 'good', Watch: 'watch', Alert: 'alert' };
+const CONF_TONE: Record<string, string> = { High: 'good', Medium: 'watch', Low: 'alert' };
 
 const def: WidgetDef = {
   id: 'sv-flagship-table',
@@ -42,10 +45,10 @@ const def: WidgetDef = {
       { id: 'programme', label: 'Programme' },
       { id: 'current', label: 'Current', format: 'pct' },
       { id: 'target', label: 'Target' },
-      { id: 'status', label: 'Status', format: 'pill' },
+      { id: 'status', label: 'Status', format: 'pill', tone: STATUS_TONE },
       { id: 'completeness', label: 'Completeness', format: 'pct' },
       { id: 'timeliness', label: 'Timeliness', format: 'pct' },
-      { id: 'confidence', label: 'Confidence', format: 'pill' },
+      { id: 'confidence', label: 'Confidence', format: 'pill', tone: CONF_TONE },
     ];
 
     ctx.el.innerHTML = `

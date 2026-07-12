@@ -8,12 +8,15 @@
  *   expected_dhis2:int · actual_emr:int · difference:int · severity. reactsTo: geography · programme · period.
  *
  * 2026-07-12 (X5): migrated onto the shared paginatedTable (sticky header, fixed-height scroll,
- * search + click-to-sort). Difference keeps its +/− sign as text (the conditional red-on-negative
- * colour is dropped); Severity renders as a pill (Review/Agree fall back to neutral — see report).
+ * search + click-to-sort). Difference keeps its +/− sign and is coloured red-on-negative via
+ * TableColumn.cellClass; Severity is a tone-coloured pill (Alert→alert, Watch→watch, Review→info,
+ * Agree→good) — restoring the pre-X5 conditional colours.
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import type { TableColumn } from '../_shared/charts';
 import { paginatedTable } from '../_shared/charts';
+
+const SEV_TONE: Record<string, string> = { Alert: 'alert', Watch: 'watch', Review: 'info', Agree: 'good' };
 
 const def: WidgetDef = {
   id: 'sv-data-trust-table',
@@ -41,8 +44,8 @@ const def: WidgetDef = {
       { id: 'agreement', label: 'Agreement ratio', format: 'pct' },
       { id: 'expected', label: 'Expected (DHIS2)' },
       { id: 'actual', label: 'Actual (EMR)' },
-      { id: 'difference', label: 'Difference' },
-      { id: 'severity', label: 'Severity', format: 'pill' },
+      { id: 'difference', label: 'Difference', cellClass: v => (String(v).trim().startsWith('-') ? `color:${t.status.alert};font-weight:600` : '') },
+      { id: 'severity', label: 'Severity', format: 'pill', tone: SEV_TONE },
     ];
 
     ctx.el.innerHTML = `

@@ -13,12 +13,27 @@
  *
  * 2026-07-12 (X5): migrated onto the shared paginatedTable (sticky header, fixed-height
  * scroll, search + click-to-sort). The right-aligned "Subscribe to alerts" control + episode
- * count live OUTSIDE the table mount so they survive the table's internal redraws.
+ * count live OUTSIDE the table mount so they survive the table's internal redraws. Status +
+ * Readiness pills are coloured via TableColumn.tone — restoring the domain-label colours
+ * (active/Alert→alert, contained→good, closed→neutral, Ready→good, Partial→watch, Limited→alert),
+ * both mock (capitalised) and live-mart (lowercase) vocabularies mapped.
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import type { TableColumn } from '../_shared/charts';
 import { paginatedTable } from '../_shared/charts';
 import { regionName } from '../_shared/reference';
+
+// Value → pill token. Both cases covered (mock ships Alert/Watch + Ready/Partial/Limited;
+// the live mart ships lowercase active/contained/closed) so tone is case-robust like the pre-X5 lookup.
+const STATUS_TONE: Record<string, string> = {
+  Alert: 'alert', Watch: 'watch',
+  active: 'alert', Active: 'alert',
+  contained: 'good', Contained: 'good',
+  closed: 'neutral', Closed: 'neutral',
+};
+const READY_TONE: Record<string, string> = {
+  Ready: 'good', ready: 'good', Partial: 'watch', partial: 'watch', Limited: 'alert', limited: 'alert',
+};
 
 const def: WidgetDef = {
   id: 'dz-outbreaks-table',
@@ -52,9 +67,9 @@ const def: WidgetDef = {
       { id: 'total', label: 'Total' },
       { id: 'new_7d', label: 'New 7D' },
       { id: 'cfr', label: 'CFR' },
-      { id: 'status', label: 'Status', format: 'pill' },
+      { id: 'status', label: 'Status', format: 'pill', tone: STATUS_TONE },
       { id: 'rrt', label: 'RRT' },
-      { id: 'readiness', label: 'Readiness', format: 'pill' },
+      { id: 'readiness', label: 'Readiness', format: 'pill', tone: READY_TONE },
     ];
 
     ctx.el.innerHTML = `

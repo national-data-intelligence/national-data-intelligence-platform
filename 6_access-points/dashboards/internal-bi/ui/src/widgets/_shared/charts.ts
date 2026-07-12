@@ -196,7 +196,26 @@ export function funnelCascade(el: HTMLElement, data: { name: string; pct: number
   return () => { /* pure DOM */ };
 }
 
-export interface TableColumn { id: string; label: string; format?: 'pct' | 'pill' | 'text'; }
+export interface TableColumn {
+  id: string;
+  label: string;
+  format?: 'pct' | 'pill' | 'text' | 'link';
+  /** For 'pill' cells: map a raw cell VALUE → a status token (good/watch/alert/
+   *  info/neutral), restoring domain-label colours (e.g. active→alert,
+   *  contained→good, High→alert). Falls back to the literal-token match when a
+   *  value has no tone entry — so existing pill callers are unaffected. */
+  tone?: Record<string, string>;
+  /** Conditional per-cell styling — returns an inline-style fragment (e.g.
+   *  `color:#EF4444;font-weight:700`) merged into the <td>'s style attribute.
+   *  Receives the cell value, its full row, and the row's absolute index in the
+   *  current (sorted, pre-pagination) view — for red-on-negative, top-N
+   *  highlight, band colour. Return '' for no extra styling. */
+  cellClass?: (value: any, row: Record<string, any>, index: number) => string;
+  /** For 'link' cells: id of a companion row field holding the href. When
+   *  omitted the cell value itself is the href. Only http(s) URLs render as an
+   *  <a> — anything else falls back to a muted dash (scheme validation). */
+  href?: string;
+}
 
 /** Client-paginated / searchable / sortable table. Owns its own view state in a
  *  closure (search, sort, page). Returns a no-op cleanup. */
@@ -213,11 +232,27 @@ export function paginatedTable(
     const s = String(v ?? '').toLowerCase();
     return known.includes(s) ? s : 'neutral';
   };
-  const cell = (r: Record<string, any>, col: TableColumn) => {
+  const escAttr = (s: any) =>
+    String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+  const cell = (r: Record<string, any>, col: TableColumn, index: number) => {
     const v = r[col.id];
-    if (col.format === 'pct') return `<td class="num">${v != null ? v + '%' : '-'}</td>`;
-    if (col.format === 'pill') return `<td><span class="pill ${pillClass(v)}">${v != null ? v : '-'}</span></td>`;
-    return `<td>${v != null ? v : '-'}</td>`;
+    // Optional conditional styling → merged into the <td>'s style attribute.
+    const extra = col.cellClass ? col.cellClass(v, r, index) : '';
+    const sa = extra ? ` style="${extra}"` : '';
+    if (col.format === 'pct') return `<td class="num"${sa}>${v != null ? v + '%' : '-'}</td>`;
+    if (col.format === 'pill') {
+      const tok = col.tone?.[String(v)] ?? pillClass(v);
+      return `<td${sa}><span class="pill ${tok}">${v != null ? v : '-'}</span></td>`;
+    }
+    if (col.format === 'link') {
+      const raw = col.href ? r[col.href] : v;
+      const ok = typeof raw === 'string' && /^https?:\/\//i.test(raw);
+      const label = v != null && v !== '' ? String(v) : 'Open';
+      return ok
+        ? `<td${sa}><a href="${escAttr(raw)}" target="_blank" rel="noopener" style="color:${theme.navy['700'] || '#1d3557'};font-weight:600;text-decoration:none">${label}</a></td>`
+        : `<td${sa}><span style="color:${theme.ink[3]}">—</span></td>`;
+    }
+    return `<td${sa}>${v != null ? v : '-'}</td>`;
   };
   const draw = () => {
     let view = rows.slice();
@@ -232,7 +267,8 @@ export function paginatedTable(
     });
     const totalPages = Math.max(1, Math.ceil(view.length / state.pageSize));
     if (state.page >= totalPages) state.page = totalPages - 1;
-    const pageRows = view.slice(state.page * state.pageSize, state.page * state.pageSize + state.pageSize);
+    const startIdx = state.page * state.pageSize;
+    const pageRows = view.slice(startIdx, startIdx + state.pageSize);
 
     el.innerHTML = '';
     if (opts.search || opts.sort) {
@@ -256,7 +292,7 @@ export function paginatedTable(
     const arrow = (c: TableColumn) => state.sort === c.id ? (state.sortDir < 0 ? ' ↓' : ' ↑') : '';
     wrap.innerHTML = `<table class="dash">
       <thead><tr>${columns.map(c => `<th data-col="${c.id}" style="${stickyTh}">${c.label}${opts.sort ? arrow(c) : ''}</th>`).join('')}</tr></thead>
-      <tbody>${pageRows.map(r => `<tr>${columns.map(c => cell(r, c)).join('')}</tr>`).join('')}</tbody>
+      <tbody>${pageRows.map((r, i) => `<tr>${columns.map(c => cell(r, c, startIdx + i)).join('')}</tr>`).join('')}</tbody>
     </table>`;
     el.appendChild(wrap);
     if (opts.sort) wrap.querySelectorAll<HTMLElement>('th[data-col]').forEach(th => {
@@ -281,7 +317,6 @@ export function paginatedTable(
     }
   };
   draw();
-  void theme;   // theme reserved for future token-driven cell styling
   return () => { /* pure DOM, nothing to dispose */ };
 }
 

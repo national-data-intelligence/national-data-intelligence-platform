@@ -3,8 +3,15 @@
  * GET /gw/exports/me → the caller's own export jobs (user-scoped by kc_sub in
  * the gateway). Every ad-hoc or template export is written to ops_export and
  * shown here with its status, dataset, format and size. Honest empty state
- * when the user hasn't exported anything yet. NO fabricated audit rows. */
+ * when the user hasn't exported anything yet. NO fabricated audit rows.
+ *
+ * 2026-07-12 (X5): migrated onto the shared paginatedTable. The per-row Download
+ * uses TableColumn.format:'link' (http(s)-only scheme validation, muted dash when
+ * absent); Status is a tone-coloured pill (ready→good, pending→watch, failed→alert).
+ * The fetch/scoping is unchanged (still authFetch /gw/exports/me). */
 import type { WidgetDef } from '../../runtime/types';
+import type { TableColumn } from '../_shared/charts';
+import { paginatedTable } from '../_shared/charts';
 import { authFetch } from '../../api/useAuth';
 
 const esc = (s: unknown) =>
@@ -27,11 +34,13 @@ function fmtBytes(n: number | null): string {
   return `${(n / 1048576).toFixed(1)} MB`;
 }
 
+// ready→good · pending→watch · failed→alert (statuses arrive lowercase from ops_export).
+const STATUS_TONE: Record<string, string> = { ready: 'good', pending: 'watch', failed: 'alert' };
+
 const def: WidgetDef = {
   id: 'ex-audit-trail',
   reactsTo: [],
   async render(ctx) {
-    const { theme } = ctx;
     let rows: any[];
     try {
       const r = await authFetch('/gw/exports/me?limit=25');
@@ -43,39 +52,27 @@ const def: WidgetDef = {
       return;
     }
 
-    const statusColor: Record<string, string> = {
-      ready: theme.status.good, pending: theme.status.watch, failed: theme.status.alert,
-    };
-    const body = rows.map(x => {
-      const report = Array.isArray(x.mart_scope) && x.mart_scope.length ? x.mart_scope.join(', ') : '-';
-      const sc = statusColor[x.status] || theme.ink[2];
-      // Only render a link for an http(s) URL — never let a non-http scheme
-      // (e.g. javascript:) reach an href, even though the gateway issues these.
-      const safeUrl = typeof x.download_url === 'string' && /^https?:\/\//i.test(x.download_url);
-      const dl = safeUrl
-        ? `<a href="${esc(x.download_url)}" target="_blank" rel="noopener" style="color:${theme.navy['700'] || '#1d3557'};font-weight:600;text-decoration:none">Download</a>`
-        : '<span style="color:#9a9384">—</span>';
-      return `<tr>
-        <td title="${esc(x.requested_at)}">${relTime(x.requested_at)}</td>
-        <td><code style="font-size:.82rem">${esc(report)}</code></td>
-        <td><span class="ck-fmt">${esc((x.format || '').toUpperCase())}</span></td>
-        <td class="num">${x.row_count == null ? '-' : Number(x.row_count).toLocaleString()}</td>
-        <td class="num">${fmtBytes(x.byte_count)}</td>
-        <td><span style="color:${sc};font-weight:600;text-transform:capitalize">${esc(x.status)}</span></td>
-        <td>${dl}</td>
-      </tr>`;
-    }).join('');
-
-    ctx.el.innerHTML = `
-      <div class="scrollable" style="overflow-x:auto">
-        <table class="dash" style="margin:0;width:100%">
-          <thead><tr>
-            <th>Requested</th><th>Dataset</th><th>Format</th>
-            <th class="num">Rows</th><th class="num">Size</th><th>Status</th><th></th>
-          </tr></thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>`;
+    const shaped = rows.map(x => ({
+      requested: relTime(x.requested_at),
+      dataset: esc(Array.isArray(x.mart_scope) && x.mart_scope.length ? x.mart_scope.join(', ') : '-'),
+      format: esc((x.format || '').toUpperCase()),
+      rows: x.row_count == null ? '-' : Number(x.row_count).toLocaleString(),
+      size: fmtBytes(x.byte_count),
+      status: String(x.status ?? '-'),
+      download: 'Download',
+      download_url: x.download_url,
+    }));
+    const columns: TableColumn[] = [
+      { id: 'requested', label: 'Requested' },
+      { id: 'dataset', label: 'Dataset' },
+      { id: 'format', label: 'Format' },
+      { id: 'rows', label: 'Rows' },
+      { id: 'size', label: 'Size' },
+      { id: 'status', label: 'Status', format: 'pill', tone: STATUS_TONE },
+      { id: 'download', label: '', format: 'link', href: 'download_url' },
+    ];
+    // pageSize 25 = the fetch limit, so all recent exports stay on one scroll (as before).
+    return paginatedTable(ctx.el, shaped, columns, ctx.theme, { pageSize: 25 });
   },
 };
 export default def;

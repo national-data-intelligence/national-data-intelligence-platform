@@ -12,12 +12,21 @@
  *
  * 2026-07-12 (X5): migrated onto the shared paginatedTable (sticky header, fixed-height
  * scroll, search + click-to-sort). Region codes render as full names; the "#" column carries the
- * pre-computed burden rank (rows arrive ranked worst-first).
+ * pre-computed burden rank (rows arrive ranked worst-first). Readiness + Reliability pills are
+ * coloured via TableColumn.tone (Ready/High→good, Partial/Medium→watch, Limited/Low→alert).
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import type { TableColumn } from '../_shared/charts';
 import { paginatedTable } from '../_shared/charts';
 import { regionName } from '../_shared/reference';
+
+// Value → pill token. Both cases covered so tone stays case-robust like the pre-X5 lookup.
+const READY_TONE: Record<string, string> = {
+  Ready: 'good', ready: 'good', Partial: 'watch', partial: 'watch', Limited: 'alert', limited: 'alert',
+};
+const RELIA_TONE: Record<string, string> = {
+  High: 'good', high: 'good', Medium: 'watch', medium: 'watch', Low: 'alert', low: 'alert',
+};
 
 const def: WidgetDef = {
   id: 'dz-woreda-table',
@@ -46,8 +55,8 @@ const def: WidgetDef = {
       { id: 'incidence', label: 'Incidence /100k' },
       { id: 'cfr', label: 'CFR %' },
       { id: 'p_alarm', label: 'P(alarm)', format: 'pct' },
-      { id: 'readiness', label: 'Readiness', format: 'pill' },
-      { id: 'reliability', label: 'Reliability', format: 'pill' },
+      { id: 'readiness', label: 'Readiness', format: 'pill', tone: READY_TONE },
+      { id: 'reliability', label: 'Reliability', format: 'pill', tone: RELIA_TONE },
     ];
 
     ctx.el.innerHTML = `
