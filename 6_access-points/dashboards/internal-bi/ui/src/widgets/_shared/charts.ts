@@ -400,54 +400,214 @@ export function donut(el: HTMLElement, segments: { name: string; value: number; 
   return bindResize(chart);
 }
 
-// ── Heatmap (category × category). Default = 0..1 alarm ramp; opts override
-//    the scale/ramp/format (e.g. months-of-stock 0..max with the stock ramp). ─
+// ── Heatmap (category × category) — X6 standard ────────────────────────
+//   A DOM/CSS-grid matrix (NOT echarts): the reference redesign wants crisp
+//   HORIZONTAL row/column TITLES, sticky headers, BOTH-axis scroll + row
+//   pagination (space is no longer a constraint — every cell reachable), a
+//   gradient legend PINNED RIGHT, and a "locate a pair" layer:
+//     • hovering any cell cross-highlights its whole row + column and turns
+//       their header labels into navy guide-labels, and
+//     • the search box filters rows by name and DIMS non-matching columns, so a
+//       single commodity×region pair is trivial to find ("insulin, tigray").
+//   Colours come ONLY from `ramp` (reused STOCK_RAMP/ALARM_RAMP) interpolated
+//   per value, and all chrome from the resolved `theme` (light/dark aware).
+//   Signature preserved (old callers keep working); `cellH`→row height,
+//   `gridLeft`→row-header width; new opts (rowTitle/colTitle/rowNoun/cellW/
+//   pageSize) are optional. Default scale = 0..1 alarm ramp; opts override it.
 export function heatmap(
   el: HTMLElement, rows: { name: string; probs: (number | null)[] }[], cols: string[], theme: Theme,
-  opts: { min?: number; max?: number; ramp?: string[]; fmt?: (v: number) => string; label?: string; cellH?: number; gridLeft?: number } = {},
+  opts: {
+    min?: number; max?: number; ramp?: string[]; fmt?: (v: number) => string; label?: string;
+    cellH?: number; gridLeft?: number;
+    rowTitle?: string; colTitle?: string; rowNoun?: string; cellW?: number; pageSize?: number;
+  } = {},
 ): () => void {
   const min = opts.min ?? 0;
   const max = opts.max ?? 1;
   const ramp = opts.ramp ?? ALARM_RAMP;
   const fmt = opts.fmt ?? ((v: number) => `${Math.round(v * 100)}%`);
   const label = opts.label ?? 'P(alarm)';
-  const cellH = opts.cellH ?? 26;
-  const gridLeft = opts.gridLeft ?? 200;
-  const host = document.createElement('div'); host.style.width = '100%'; host.style.height = `${Math.max(180, rows.length * cellH + 80)}px`; el.appendChild(host);
-  const chart = echarts.init(host);
-  const data: [number, number, number][] = [];
-  rows.forEach((d, di) => d.probs.forEach((p, wi) => { if (p != null) data.push([wi, di, +(+p).toFixed(2)]); }));
-  // Dynamic in-cell label ink: interpolate the cell's ramp colour for a value, then pick black or
-  // white by its relative luminance (WCAG crossover ≈0.21) so every label stays legible.
+  const ROW_H = opts.cellH ?? 34;          // per-row (and header-row) height
+  const HEAD_W = opts.gridLeft ?? 200;     // sticky row-header column width
+  const CELL_W = opts.cellW ?? 78;         // min cell width → columns scroll when many, stretch (1fr) when few
+  const rowTitle = opts.rowTitle ?? 'Resource';
+  const colTitle = opts.colTitle ?? 'Region';
+  const rowNoun = opts.rowNoun ?? 'rows';
+  const VIS_ROWS = 12;                      // rows shown before the body scrolls vertically
+
+  // Cell fill = ramp interpolated at the value's position in [min,max] (reuses the
+  // shared rampInterp — no hardcoded colours). Per-cell ink flips black/white by
+  // the fill's relative luminance (WCAG crossover ≈0.21) so every value stays legible.
+  const interp = rampInterp(ramp);
+  const tOf = (v: number) => (max > min ? Math.max(0, Math.min(1, (v - min) / (max - min))) : 0);
+  const colorFor = (v: number) => interp(tOf(v));
   const rampRgb = ramp.map(h => { const m = /^#?([0-9a-f]{6})$/i.exec(h); const n = m ? parseInt(m[1], 16) : 0; return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; });
   const relLum = (rgb: number[]) => { const s = rgb.map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }); return 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2]; };
-  const labelInk = (v: number) => {
-    const tt = max > min ? Math.max(0, Math.min(1, (v - min) / (max - min))) : 0;
-    const x = tt * (rampRgb.length - 1), i = Math.floor(x), f = x - i;
+  const inkFor = (v: number) => {
+    const x = tOf(v) * (rampRgb.length - 1), i = Math.floor(x), f = x - i;
     const a = rampRgb[i], b = rampRgb[Math.min(rampRgb.length - 1, i + 1)];
     return relLum([0, 1, 2].map(k => a[k] + (b[k] - a[k]) * f)) > 0.21 ? theme.ink[0] : '#ffffff';
   };
-  chart.setOption({
-    textStyle: { fontFamily: theme.fontSans },
-    tooltip: { position: 'top', formatter: (p: any) => `<b>${rows[p.value[1]].name}</b><br/>${cols[p.value[0]]}<br/>${label} ${fmt(p.value[2])}` },
-    grid: { left: gridLeft, right: 24, top: 12, bottom: 34 },
-    xAxis: { type: 'category', data: cols, axisLabel: { fontSize: 10, color: theme.ink[2], interval: Math.max(0, Math.floor(cols.length / 14)), rotate: -25 }, axisTick: { show: false } },
-    yAxis: { type: 'category', data: rows.map(d => d.name), axisLabel: { fontSize: 10.5, color: theme.ink[1] }, axisLine: { show: false }, axisTick: { show: false } },
-    visualMap: { min, max, calculable: true, orient: 'vertical', left: 12, top: 'middle', itemWidth: 10, itemHeight: 160, textStyle: { fontSize: 10, color: theme.ink[2] }, inRange: { color: ramp }, precision: max <= 1 ? 1 : 0, text: [fmt(max), fmt(min)] },
-    series: [{
-      type: 'heatmap', data, itemStyle: { borderColor: theme.paper, borderWidth: 2, borderRadius: 3 },
-      // In-cell values, page font. Dynamic black/white ink per cell (see labelInk) + an adaptive
-      // halo so mid-tone slate cells (where neither pure ink is high-contrast) stay legible.
-      label: {
-        show: true, fontFamily: theme.fontSans, fontSize: 10.5, fontWeight: 700,
-        formatter: (p: any) => fmt(p.value[2]),
-        color: (p: any) => labelInk(p.value[2]),
-        textBorderColor: (p: any) => (labelInk(p.value[2]) === '#ffffff' ? 'rgba(15,23,42,0.55)' : 'rgba(255,255,255,0.8)'),
-        textBorderWidth: 2.5,
-      },
-    }],
+  const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+
+  // ── static shell (built once so the search input keeps focus across repaints) ──
+  el.innerHTML = '';
+  const root = document.createElement('div');
+  root.className = 'rmhm';
+  root.innerHTML = `<style>
+    .rmhm{display:flex;flex-direction:column;gap:.55rem;font-family:${theme.fontSans};color:${theme.ink[1]}}
+    .rmhm-top{display:flex;align-items:center;gap:1rem}
+    .rmhm-search{max-width:260px}
+    .rmhm-axisttl{margin-left:auto;margin-right:.2rem;font-size:.78rem;font-weight:700;letter-spacing:.02em;color:${theme.navy['700']};display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap}
+    .rmhm-body{display:flex;gap:.7rem;align-items:stretch;min-height:0}
+    .rmhm-scroll{flex:1 1 auto;overflow:auto;border:1px solid ${theme.line};border-radius:10px;background:${theme.paper}}
+    .rmhm-grid{display:grid;grid-auto-rows:${ROW_H}px}
+    .rmhm-corner,.rmhm-col,.rmhm-row,.rmhm-cell{background:${theme.paper}}
+    .rmhm-corner{position:sticky;top:0;left:0;z-index:4;display:flex;align-items:center;gap:.35rem;padding:0 .75rem;font-size:.76rem;font-weight:700;color:${theme.navy['700']};border-bottom:1px solid ${theme.line};border-right:1px solid ${theme.line}}
+    .rmhm-col{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:center;padding:0 .4rem;border-bottom:1px solid ${theme.line};transition:opacity .12s ease,background .12s ease}
+    .rmhm-col .t{font-size:.73rem;font-weight:600;color:${theme.ink[1]};text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .rmhm-row{position:sticky;left:0;z-index:2;display:flex;align-items:center;padding:0 .75rem;border-right:1px solid ${theme.line};transition:background .12s ease}
+    .rmhm-row .t{font-size:.79rem;color:${theme.ink[0]};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .rmhm-cell{padding:2.5px;transition:opacity .12s ease}
+    .rmhm-fill{width:100%;height:100%;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;font-variant-numeric:tabular-nums}
+    .rmhm-na .rmhm-fill{color:${theme.ink[3]};background:transparent}
+    .rmhm-cell.cr .rmhm-fill{box-shadow:inset 0 0 0 2px ${theme.navy['700']}}
+    .rmhm-col.cr,.rmhm-row.cr{background:${theme.navy['700']}}
+    .rmhm-col.cr .t,.rmhm-row.cr .t{color:#fff}
+    .rmhm-dim{opacity:.2}
+    .rmhm-legend{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:.4rem;padding:.1rem 0}
+    .rmhm-legcap{font-size:.64rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:${theme.ink[2]}}
+    .rmhm-legscale{flex:1;display:flex;gap:.35rem;min-height:130px}
+    .rmhm-leglabels{display:flex;flex-direction:column;justify-content:space-between;text-align:right;font-size:.65rem;color:${theme.ink[2]};font-variant-numeric:tabular-nums}
+    .rmhm-legbar{width:12px;height:100%;border-radius:6px;border:1px solid ${theme.line}}
+    .rmhm-foot{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:${theme.ink[3]};flex-wrap:wrap}
+    .rmhm-foot .sp{flex:1}
+    .rmhm-foot .rpp{display:inline-flex;align-items:center;gap:.4rem;margin-right:.3rem}
+    .rmhm-foot select{padding:.22rem .4rem;border:1px solid ${theme.line};border-radius:6px;font-size:.76rem;background:${theme.paper};color:${theme.ink[1]};font-family:${theme.fontSans}}
+    .rmhm-pg{min-width:26px;height:26px;padding:0 .3rem;display:inline-grid;place-items:center;border:1px solid ${theme.line};border-radius:6px;background:${theme.paper};color:${theme.ink[2]};cursor:pointer;font-size:.76rem;font-family:${theme.fontSans}}
+    .rmhm-pg:hover:not(:disabled){border-color:${theme.navy['500']};color:${theme.navy['700']}}
+    .rmhm-pg:disabled{opacity:.4;cursor:not-allowed}
+    .rmhm-pg.on{background:${theme.navy['700']};color:#fff;border-color:${theme.navy['700']}}
+    .rmhm-none{padding:2rem;text-align:center;color:${theme.ink[3]};font-size:.85rem}
+  </style>
+  <div class="rmhm-top">
+    <span class="search-row rmhm-search"><span class="search-ico"><svg class="ico ico-sm"><use href="#i-search"/></svg></span><input type="text" class="search-input" placeholder="Find ${esc(rowTitle.toLowerCase())} or ${esc(colTitle.toLowerCase())}…"></span>
+    <span class="rmhm-axisttl">${esc(colTitle)}<svg class="ico ico-sm"><use href="#i-arrow-right"/></svg></span>
+  </div>
+  <div class="rmhm-body">
+    <div class="rmhm-scroll scrollable"></div>
+    <div class="rmhm-legend">
+      <div class="rmhm-legcap">${esc(label)}</div>
+      <div class="rmhm-legscale">
+        <div class="rmhm-leglabels"><span>${esc(fmt(max))}</span><span>${esc(fmt((min + max) / 2))}</span><span>${esc(fmt(min))}</span></div>
+        <div class="rmhm-legbar" style="background:linear-gradient(to top, ${ramp.join(',')})"></div>
+      </div>
+    </div>
+  </div>
+  <div class="rmhm-foot"></div>`;
+  el.appendChild(root);
+
+  const scroll = root.querySelector('.rmhm-scroll') as HTMLDivElement;
+  const foot = root.querySelector('.rmhm-foot') as HTMLDivElement;
+  const input = root.querySelector('.search-input') as HTMLInputElement;
+
+  const state = { q: '', page: 0, pageSize: opts.pageSize ?? 10 };
+
+  // locate-a-pair search: comma-separated tokens. A token naming a ROW filters
+  // the row list (brings the match into view); a token naming ONLY a COLUMN dims
+  // the non-matching columns (columns aren't paginated — just scrolled). A token
+  // matching neither is kept as a (failing) row filter → clean "no matches".
+  const parse = () => {
+    const toks = state.q.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
+    const rowHit = (t: string) => rows.some(r => r.name.toLowerCase().includes(t));
+    const colHit = (t: string) => cols.some(c => c.toLowerCase().includes(t));
+    return {
+      rowToks: toks.filter(t => rowHit(t) || !colHit(t)),
+      colToks: toks.filter(t => colHit(t) && !rowHit(t)),
+    };
+  };
+
+  // numbered pager with ellipsis (first · last · current±1).
+  function pageNums(page: number, total: number): string {
+    if (total <= 1) return '';
+    const want = [...new Set([0, total - 1, page - 1, page, page + 1])].filter(p => p >= 0 && p < total).sort((a, b) => a - b);
+    let html = '', prev = -1;
+    for (const p of want) {
+      if (prev >= 0 && p - prev > 1) html += `<span style="padding:0 .1rem">…</span>`;
+      html += `<button class="rmhm-pg${p === page ? ' on' : ''}" data-p="${p}">${p + 1}</button>`;
+      prev = p;
+    }
+    return html;
+  }
+
+  const paint = () => {
+    const { rowToks, colToks } = parse();
+    const viewRows = rowToks.length ? rows.filter(r => rowToks.some(t => r.name.toLowerCase().includes(t))) : rows;
+    const colDim = (i: number) => (colToks.length ? !colToks.some(t => cols[i].toLowerCase().includes(t)) : false);
+
+    const total = viewRows.length;
+    const totalPages = Math.max(1, Math.ceil(total / state.pageSize));
+    if (state.page >= totalPages) state.page = totalPages - 1;
+    const startIdx = state.page * state.pageSize;
+    const pageRows = viewRows.slice(startIdx, startIdx + state.pageSize);
+
+    // fixed body footprint: header + up to VIS_ROWS rows, then it scrolls.
+    scroll.style.height = `${ROW_H + Math.min(pageRows.length || 1, VIS_ROWS) * ROW_H + 2}px`;
+
+    if (!pageRows.length) { scroll.innerHTML = `<div class="rmhm-none">No ${esc(rowNoun)} match “${esc(state.q)}”.</div>`; foot.innerHTML = ''; return; }
+
+    const tmpl = `${HEAD_W}px repeat(${cols.length}, minmax(${CELL_W}px, 1fr))`;
+    const head = `<div class="rmhm-corner">${esc(rowTitle)}<svg class="ico ico-sm"><use href="#i-arrow-down"/></svg></div>` +
+      cols.map((c, ci) => `<div class="rmhm-col${colDim(ci) ? ' rmhm-dim' : ''}" data-c="${ci}"><span class="t" title="${esc(c)}">${esc(c)}</span></div>`).join('');
+    const body = pageRows.map((r, ri) => {
+      const rh = `<div class="rmhm-row" data-r="${ri}"><span class="t" title="${esc(r.name)}">${esc(r.name)}</span></div>`;
+      const cells = cols.map((c, ci) => {
+        const dim = colDim(ci) ? ' rmhm-dim' : '';
+        const v = r.probs[ci];
+        if (v == null) return `<div class="rmhm-cell rmhm-na${dim}" data-r="${ri}" data-c="${ci}"><span class="rmhm-fill">—</span></div>`;
+        const val = +v;
+        return `<div class="rmhm-cell${dim}" data-r="${ri}" data-c="${ci}"><span class="rmhm-fill" style="background:${colorFor(val)};color:${inkFor(val)}" title="${esc(r.name)} · ${esc(c)}: ${esc(fmt(val))}">${esc(fmt(val))}</span></div>`;
+      }).join('');
+      return rh + cells;
+    }).join('');
+    scroll.innerHTML = `<div class="rmhm-grid" style="grid-template-columns:${tmpl}">${head}${body}</div>`;
+
+    // footer: showing a–b of N · rows-per-page · numbered pager
+    const a = startIdx + 1, b = startIdx + pageRows.length;
+    const sizes = [10, 20, 50];
+    const sizeOpts = sizes.map(s => `<option value="${s}"${state.pageSize === s ? ' selected' : ''}>${s}</option>`).join('') + `<option value="9999"${state.pageSize >= 9999 ? ' selected' : ''}>All</option>`;
+    foot.innerHTML =
+      `<span>Showing ${a}–${b} of ${total} ${esc(rowNoun)}</span><span class="sp"></span>` +
+      `<span class="rpp">Rows per page <select class="rmhm-rpp">${sizeOpts}</select></span>` +
+      `<button class="rmhm-pg prev"${state.page === 0 ? ' disabled' : ''}><svg class="ico ico-sm" style="transform:rotate(180deg)"><use href="#i-chevron-right"/></svg></button>` +
+      pageNums(state.page, totalPages) +
+      `<button class="rmhm-pg next"${state.page >= totalPages - 1 ? ' disabled' : ''}><svg class="ico ico-sm"><use href="#i-chevron-right"/></svg></button>`;
+    (foot.querySelector('.rmhm-rpp') as HTMLSelectElement).onchange = e => { state.pageSize = +(e.target as HTMLSelectElement).value; state.page = 0; paint(); };
+    (foot.querySelector('.prev') as HTMLButtonElement).onclick = () => { if (state.page > 0) { state.page--; paint(); } };
+    (foot.querySelector('.next') as HTMLButtonElement).onclick = () => { if (state.page < totalPages - 1) { state.page++; paint(); } };
+    foot.querySelectorAll<HTMLButtonElement>('.rmhm-pg[data-p]').forEach(btn => { btn.onclick = () => { state.page = +btn.dataset.p!; paint(); }; });
+  };
+
+  // locate-a-pair (hover): cross-highlight the hovered cell's full row + column
+  // and their header labels. Delegated on the (persistent) scroll box so it
+  // survives grid repaints; data-r / data-c tie every cell + header together.
+  let hi: Element[] = [];
+  const clearHi = () => { hi.forEach(n => n.classList.remove('cr')); hi = []; };
+  scroll.addEventListener('mouseover', e => {
+    const t = (e.target as HTMLElement).closest('[data-r],[data-c]') as HTMLElement | null;
+    clearHi();
+    if (!t) return;
+    const grid = scroll.querySelector('.rmhm-grid'); if (!grid) return;
+    const ri = t.getAttribute('data-r'), ci = t.getAttribute('data-c');
+    const add = (sel: string) => grid.querySelectorAll(sel).forEach(n => { if (!n.classList.contains('cr')) { n.classList.add('cr'); hi.push(n); } });
+    if (ri != null) add(`[data-r="${ri}"]`);
+    if (ci != null) add(`[data-c="${ci}"]`);
   });
-  return bindResize(chart);
+  scroll.addEventListener('mouseleave', clearHi);
+
+  input.oninput = () => { state.q = input.value; state.page = 0; paint(); };
+  paint();
+  return () => { el.innerHTML = ''; };
 }
 
 // ── Horizontal stacked bar (e.g. facility tiers per region) ────────────

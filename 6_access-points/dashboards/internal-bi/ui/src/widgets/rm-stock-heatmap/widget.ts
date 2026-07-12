@@ -13,10 +13,12 @@ const def: WidgetDef = {
     const regions = [...new Set(rows.map(r => String(r.region_id)))].sort();
     const byCommodity: Record<string, Record<string, number>> = {};
     for (const r of rows) (byCommodity[String(r.commodity_name)] ||= {})[String(r.region_id)] = Number(r.mos ?? 0);
-    const commodities = Object.keys(byCommodity).sort().slice(0, 18);
+    // No display cap: the X6 heatmap scrolls + paginates, so every commodity is reachable.
+    const commodities = Object.keys(byCommodity).sort();
     const heatRows = commodities.map(c => ({ name: c, probs: regions.map(reg => (byCommodity[c][reg] ?? null)) }));
     return heatmap(ctx.el, heatRows, regions.map(regionName), ctx.theme, {
       max: 6, ramp: STOCK_RAMP, fmt: (v: number) => `${v.toFixed(1)}mo`, label: 'Stock',
+      rowTitle: 'Commodity', colTitle: 'Region', rowNoun: 'commodities',
     });
   },
 };
