@@ -207,7 +207,7 @@ export function paginatedTable(
   theme: Theme,
   opts: { pageSize?: number; search?: boolean; sort?: boolean } = {},
 ): () => void {
-  const state = { search: '', sort: null as string | null, page: 0, pageSize: opts.pageSize ?? 12 };
+  const state = { search: '', sort: null as string | null, sortDir: -1 as 1 | -1, page: 0, pageSize: opts.pageSize ?? 15 };
   const pillClass = (v: any) => {
     const known = ['good', 'watch', 'alert', 'info', 'neutral'];
     const s = String(v ?? '').toLowerCase();
@@ -227,7 +227,8 @@ export function paginatedTable(
     }
     if (state.sort) view.sort((a, b) => {
       const va = a[state.sort!], vb = b[state.sort!];
-      return typeof va === 'number' ? (vb as number) - (va as number) : String(vb).localeCompare(String(va));
+      const cmp = typeof va === 'number' ? (va as number) - (vb as number) : String(va).localeCompare(String(vb));
+      return cmp * state.sortDir;
     });
     const totalPages = Math.max(1, Math.ceil(view.length / state.pageSize));
     if (state.page >= totalPages) state.page = totalPages - 1;
@@ -249,11 +250,23 @@ export function paginatedTable(
     }
     const wrap = document.createElement('div');
     wrap.className = 'scrollable';
+    wrap.style.maxHeight = '380px';   // X5: fixed height — rows scroll under a sticky header
+    wrap.style.overflow = 'auto';
+    const stickyTh = `position:sticky;top:0;z-index:1;background:var(--surface,#fff)${opts.sort ? ';cursor:pointer;user-select:none' : ''}`;
+    const arrow = (c: TableColumn) => state.sort === c.id ? (state.sortDir < 0 ? ' ↓' : ' ↑') : '';
     wrap.innerHTML = `<table class="dash">
-      <thead><tr>${columns.map(c => `<th>${c.label}</th>`).join('')}</tr></thead>
+      <thead><tr>${columns.map(c => `<th data-col="${c.id}" style="${stickyTh}">${c.label}${opts.sort ? arrow(c) : ''}</th>`).join('')}</tr></thead>
       <tbody>${pageRows.map(r => `<tr>${columns.map(c => cell(r, c)).join('')}</tr>`).join('')}</tbody>
     </table>`;
     el.appendChild(wrap);
+    if (opts.sort) wrap.querySelectorAll<HTMLElement>('th[data-col]').forEach(th => {
+      th.onclick = () => {
+        const col = th.dataset.col!;
+        if (state.sort === col) state.sortDir = (state.sortDir === -1 ? 1 : -1);
+        else { state.sort = col; state.sortDir = -1; }
+        draw();
+      };
+    });
 
     if (view.length > state.pageSize) {
       const pager = document.createElement('div');
