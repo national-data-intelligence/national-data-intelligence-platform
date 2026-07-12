@@ -48,7 +48,8 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   let hubReason: string | null = null;   // non-null ⇒ hub unusable, reason verbatim
   let hubRunningUrl: string | null = null;
   try {
-    const r = await authFetch('/gw/workspace/status');
+    // Per-project status: is THIS project's named lab running?
+    const r = await authFetch(`/gw/workspace/status?project_id=${encodeURIComponent(projectId)}`);
     if (r.ok) {
       const st = await r.json();
       if (st.running) hubRunningUrl = st.url || st.server || null;
@@ -58,6 +59,11 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
 
   const isOwner = (!!myKcSub && project.owner_kc_sub === myKcSub) || project.visibility === 'private';
   const p = project;
+  // Who may open a lab: the owner, or a member of a GROUP project (group projects
+  // intentionally share files — seeing one implies membership). A PUBLIC project
+  // you don't own is NOT openable (a lab writes to the project's shared files); you
+  // CLONE it into a private copy instead. The gateway enforces this too (403).
+  const canOpenLab = isOwner || p.visibility === 'group';
 
   // ── public-review state (tasks #42/#43) ──
   // "Submit for review" is an OWNER action, gated on review_status:
@@ -93,7 +99,14 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
       </div>
 
       <div class="prj-actions" style="margin:0">
-        ${hubReason
+        ${!canOpenLab
+          ? `<button class="btn btn-sm btn-ghost" disabled aria-disabled="true"
+               title="Public project you don't own — clone it to open a lab on your own copy.">
+               <svg class="ico ico-sm"><use href="#i-external"/></svg> Open in JupyterLab</button>
+             <button class="btn btn-sm btn-primary" data-act="clone" style="margin-left:.5rem">
+               <svg class="ico ico-sm"><use href="#i-plus"/></svg> Clone to my workspace</button>
+             <span class="prj-actions-hint muted">A lab writes to the project’s shared files, so a public project can only be opened by its owner. Clone it to work on your own private copy.</span>`
+          : hubReason
           ? `<button class="btn btn-sm btn-ghost" disabled aria-disabled="true" title="${esc(hubReason)}">
                <svg class="ico ico-sm"><use href="#i-external"/></svg> Open in JupyterLab</button>
              <span class="prj-actions-hint muted">${esc(hubReason)}</span>`
@@ -102,6 +115,8 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
              <span class="prj-actions-hint muted">${hubRunningUrl
                ? 'Your lab is running — opens it on this project.'
                : 'Spawns your lab pod on this project’s file space.'}</span>`}
+        <button class="btn btn-sm btn-ghost" data-act="link-datasets" style="margin-left:.5rem">
+          <svg class="ico ico-sm"><use href="#i-database"/></svg> Link datasets</button>
         <button class="btn btn-sm btn-ghost" data-act="download-zip" style="margin-left:.5rem">
           <svg class="ico ico-sm"><use href="#i-download"/></svg> Download ZIP</button>
         ${canSubmitReview
@@ -117,6 +132,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
               : ''}
       </div>
       <div class="ws-prj-msg"></div>
+      <div class="ws-link-slot" style="margin:0"></div>
 
       <div class="prj-panel" style="margin:0">
         <div class="prj-panel-hdr">
@@ -153,6 +169,73 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
       } catch (err: any) {
         showErr(`Could not download: ${err?.message || String(err)}`);
       } finally { btn.disabled = false; }
+    });
+
+  // ── Link datasets (inline panel; POST /gw/datasets/{id}/projects) ──
+  const linkSlot = ctx.el.querySelector<HTMLElement>('.ws-link-slot')!;
+  const drawLinkPanel = async () => {
+    linkSlot.innerHTML = `<div class="prj-panel" style="margin:0"><p class="muted" style="margin:0">Loading datasets…</p></div>`;
+    let mine: any[] = [], linkedIds = new Set<string>();
+    try {
+      const [rMine, rLinked] = await Promise.all([
+        authFetch('/gw/datasets?owner=me'),
+        authFetch(`/gw/datasets?project_id=${encodeURIComponent(p.id)}`),
+      ]);
+      if (rMine.ok) { const j = await rMine.json(); mine = (Array.isArray(j) ? j : (j.datasets || j.items || [])); }
+      if (rLinked.ok) { const j = await rLinked.json(); (Array.isArray(j) ? j : (j.datasets || j.items || [])).forEach((d: any) => linkedIds.add(d.id)); }
+    } catch { /* empty */ }
+    const rows = mine.length ? mine.map((d: any) => {
+      const linked = linkedIds.has(d.id);
+      return `<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem .2rem;border-bottom:1px solid var(--line)">
+        <svg class="ico ico-sm" style="opacity:.6"><use href="#i-database"/></svg>
+        <span style="flex:1;font-size:.85rem;color:${theme.ink[0]}">${esc(d.title || d.name || d.id)}</span>
+        ${linked
+          ? `<span class="pill good">linked</span>`
+          : `<button class="btn btn-sm btn-primary" data-act="do-link" data-did="${esc(d.id)}">Link</button>`}
+      </div>`;
+    }).join('') : `<p class="muted" style="margin:.4rem 0">You have no datasets yet — generate one on the Datasets page.</p>`;
+    linkSlot.innerHTML = `
+      <div class="prj-panel" style="margin:0">
+        <div class="prj-panel-hdr"><svg class="ico"><use href="#i-database"/></svg><h3>Link datasets to this project</h3>
+          <span style="flex:1"></span>
+          <button class="btn btn-sm btn-ghost" data-act="link-close">Close</button></div>
+        <p class="prj-panel-lede muted">Linked datasets are copied into the project's files and appear in JupyterLab.</p>
+        ${rows}
+      </div>`;
+    linkSlot.querySelector<HTMLButtonElement>('button[data-act="link-close"]')?.addEventListener('click', () => { linkSlot.innerHTML = ''; });
+    linkSlot.querySelectorAll<HTMLButtonElement>('button[data-act="do-link"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          const r = await authFetch(`/gw/datasets/${encodeURIComponent(btn.dataset.did!)}/projects`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ project_id: p.id }),
+          });
+          if (!r.ok) { showErr(`Could not link: ${await errText(r)}`); btn.disabled = false; return; }
+          toast('Dataset linked'); await drawLinkPanel();
+        } catch (e: any) { showErr(`Could not link: ${e?.message || e}`); btn.disabled = false; }
+      });
+    });
+  };
+  ctx.el.querySelector<HTMLButtonElement>('button[data-act="link-datasets"]')
+    ?.addEventListener('click', () => { if (linkSlot.innerHTML.trim()) linkSlot.innerHTML = ''; else void drawLinkPanel(); });
+
+  // ── Clone a public project into a private copy I own (then open THAT) ──
+  ctx.el.querySelector<HTMLButtonElement>('button[data-act="clone"]')
+    ?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      btn.disabled = true; msg.innerHTML = '';
+      try {
+        const r = await authFetch(`/gw/projects/${encodeURIComponent(p.id)}/clone`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+        });
+        if (!r.ok) { showErr(`Could not clone: ${await errText(r)}`); btn.disabled = false; return; }
+        const nw = await r.json().catch(() => ({} as any));
+        toast(`Cloned to "${nw.name || 'a new project'}" — ${nw.files_copied ?? 0} file(s) copied`);
+        if (nw.id) { ctx.filters.ws_project = nw.id; ctx.bus.set('ws_project', nw.id); await draw(ctx); }
+      } catch (err: any) {
+        showErr(`Could not clone: ${err?.message || String(err)}`); btn.disabled = false;
+      }
     });
 
   // ── Open in JupyterLab ──

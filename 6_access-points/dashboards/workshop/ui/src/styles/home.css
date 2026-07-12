@@ -245,3 +245,13 @@
   }
   .ws-main .foot .foot-coc a:hover { color: var(--navy-700); }
   .ws-main .foot .foot-coc a .ico { width: 13px; height: 13px; }
+
+/* ws-topbar page description (owner: the masthead felt empty) */
+.ws-topbar .tb-title .tb-desc {
+  margin: 0.25rem 0 0;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--ink-3, #64748b);
+  max-width: 70ch;
+  line-height: 1.45;
+}
