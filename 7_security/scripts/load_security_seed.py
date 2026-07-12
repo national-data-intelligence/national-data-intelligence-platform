@@ -760,12 +760,18 @@ def main() -> int:
     parser.add_argument("--pg-port", default=os.environ.get("POSTGRES_PORT", "5432"))
     parser.add_argument("--pg-user", default=os.environ.get("POSTGRES_USER", "postgres"))
     parser.add_argument("--pg-db",   default=os.environ.get("OPS_DB_NAME", "nhdw_ops"))
+    # bundle/roles/*.yaml (the OPA data-permission source for the #88 permission
+    # store). Defaults next to the repo; in-cluster the seed Job mounts it and sets
+    # NHDW_ROLES_DIR, since the roles live outside the seed-dir configMap.
+    parser.add_argument("--roles-dir", default=os.environ.get("NHDW_ROLES_DIR"))
     args = parser.parse_args()
 
     seed_dir = Path(args.seed_dir).resolve()
     if not seed_dir.is_dir():
         log.error("seed dir does not exist: %s", seed_dir)
         return 2
+    roles_dir = (Path(args.roles_dir).resolve() if args.roles_dir
+                 else seed_dir.parents[1] / "roles")
 
     log.info("loading security seeds from %s", seed_dir)
     log.info("→ postgres %s:%s db=%s user=%s", args.pg_host, args.pg_port, args.pg_db, args.pg_user)
@@ -850,8 +856,7 @@ def main() -> int:
             log.info("role_scope:           %d", n)
 
             # Task #88: normalized permission store from bundle/roles/*.yaml.
-            pn, ln = upsert_permissions_from_roles(
-                cur, seed_dir.parents[1] / "roles", code_to_id)
+            pn, ln = upsert_permissions_from_roles(cur, roles_dir, code_to_id)
             log.info("permissions:          %d unique · %d role links", pn, ln)
 
             counts = upsert_role_grants(cur, data.get("role_grants.yaml", []), code_to_id)

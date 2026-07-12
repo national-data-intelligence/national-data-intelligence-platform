@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS ops_perm.permission (
     code          text        UNIQUE,                       -- optional human handle, e.g. 'prg-agg-read-cat'
     subject       text        NOT NULL CHECK (subject IN ('PT','HP','FAC','PRD','PRG')),
     members       text        NOT NULL DEFAULT 'scoped' CHECK (members IN ('all','scoped','self')),
-    granularity   text        NOT NULL CHECK (granularity IN ('raw','aggregate','deidentified')),
+    granularity   text        NOT NULL CHECK (granularity IN ('raw','aggregate','deidentified','metadata')),
     verbs         text[]      NOT NULL,                      -- ['read','export','schedule',...]
     purposes      text[]      NOT NULL DEFAULT '{public-health}',
     data_classes  text[]      NOT NULL DEFAULT '{}',         -- empty = any (matches current YAML data_class:[])
@@ -36,6 +36,12 @@ COMMENT ON TABLE ops_perm.permission IS
     'Reusable data-access permission = one OPA allow-rule tuple (subject/members/'
     'granularity/verbs/purposes/data_classes/sensitivity). compile.py sources these '
     'from the DB to emit per-role rego; the tuple UNIQUE dedups shared permissions.';
+
+-- Heal the granularity domain if the table pre-exists with an older CHECK
+-- (CREATE TABLE IF NOT EXISTS won't alter an existing constraint). Idempotent.
+ALTER TABLE ops_perm.permission DROP CONSTRAINT IF EXISTS permission_granularity_check;
+ALTER TABLE ops_perm.permission ADD  CONSTRAINT permission_granularity_check
+    CHECK (granularity IN ('raw','aggregate','deidentified','metadata'));
 
 -- ── role_permission: M:N (a permission may be granted to many roles) ─────────
 CREATE TABLE IF NOT EXISTS ops_perm.role_permission (

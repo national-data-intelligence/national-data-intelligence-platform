@@ -16,6 +16,8 @@ Run from anywhere:
 """
 from __future__ import annotations
 
+import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -33,7 +35,9 @@ def rego_list(items):
     return json.dumps(items)
 
 REPO = Path(__file__).resolve().parents[3]
-ROLES_DIR = REPO / "bundle" / "roles"
+# NHDW_ROLES_DIR lets the compiler run outside the repo tree (e.g. the in-cluster
+# equivalence-check / Phase-3 bundle Job, where the role YAMLs are mounted).
+ROLES_DIR = Path(os.environ.get("NHDW_ROLES_DIR") or (REPO / "bundle" / "roles"))
 OUT_DIR = REPO / "7_security" / "opa" / "policies"
 
 
@@ -123,25 +127,79 @@ def emit_role_rego(role: dict) -> str:
     return "\n".join(lines)
 
 
+def _role_docs_from_yaml():
+    for yaml_path in sorted(ROLES_DIR.glob("*.yaml")):
+        with yaml_path.open() as f:
+            yield yaml.safe_load(f)["role"]
+
+
+def _perms_from_db(cur, role_id: int) -> list[dict]:
+    """One role's permissions from the normalized store, in YAML-declaration order
+    (rp.ordering) so the emitted rego matches the YAML-sourced rego byte-for-byte."""
+    cur.execute("""
+        SELECT p.subject, p.members, p.granularity, p.verbs, p.purposes,
+               p.data_classes, p.sensitivity
+          FROM ops_perm.role_permission rp
+          JOIN ops_perm.permission p ON p.id = rp.permission_id
+         WHERE rp.role_id = %s
+         ORDER BY rp.ordering
+    """, (role_id,))
+    return [
+        {"subject": s, "members": m, "granularity": g, "verbs": list(v),
+         "purpose_of_use": list(pu), "data_class": list(dc), "sensitivity": list(sn)}
+        for s, m, g, v, pu, dc, sn in cur.fetchall()
+    ]
+
+
+def _roles_from_db(conn_kwargs: dict):
+    """Role metadata (id, phase, intentional_deny) stays authored in the YAMLs;
+    the PERMISSIONS come from ops_perm (the normalized store)."""
+    import psycopg  # lazy — only needed in --from-db mode
+    with psycopg.connect(**conn_kwargs) as conn, conn.cursor() as cur:
+        cur.execute("SELECT code, id FROM ops_perm.role")
+        code_to_id = {c: i for c, i in cur.fetchall()}
+        for role in _role_docs_from_yaml():
+            role = dict(role)
+            rid = code_to_id.get(role["id"])
+            role["permissions"] = _perms_from_db(cur, rid) if rid is not None else []
+            yield role
+
+
 def main() -> int:
+    ap = argparse.ArgumentParser(description="Compile role permissions → OPA rego.")
+    ap.add_argument("--from-db", action="store_true",
+                    help="source permissions from ops_perm (DB) instead of the role YAMLs")
+    ap.add_argument("--out-dir", default=str(OUT_DIR),
+                    help="write rego here instead of the in-tree policies dir")
+    ap.add_argument("--pg-host", default=os.environ.get("POSTGRES_HOST", "localhost"))
+    ap.add_argument("--pg-port", default=os.environ.get("POSTGRES_PORT", "5432"))
+    ap.add_argument("--pg-user", default=os.environ.get("POSTGRES_USER", "postgres"))
+    ap.add_argument("--pg-db",   default=os.environ.get("OPS_DB_NAME", "nhdw_ops"))
+    args = ap.parse_args()
+
     if not ROLES_DIR.is_dir():
         print(f"roles dir not found: {ROLES_DIR}", file=sys.stderr)
         return 1
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.from_db:
+        conn_kwargs = dict(host=args.pg_host, port=args.pg_port, user=args.pg_user,
+                           dbname=args.pg_db, password=os.environ.get("PGPASSWORD"))
+        roles, src = _roles_from_db(conn_kwargs), "DB (ops_perm)"
+    else:
+        roles, src = _role_docs_from_yaml(), "bundle/roles/*.yaml"
 
     written = []
-    for yaml_path in sorted(ROLES_DIR.glob("*.yaml")):
-        with yaml_path.open() as f:
-            doc = yaml.safe_load(f)
-        role = doc["role"]
-        out_path = OUT_DIR / f"{role_id_to_module(role['id'])}.rego"
+    for role in roles:
+        out_path = out_dir / f"{role_id_to_module(role['id'])}.rego"
         out_path.write_text(emit_role_rego(role))
         written.append((role["id"], out_path.name, len(role.get("permissions") or [])))
 
-    print("compiled:")
+    print(f"compiled from {src}:")
     for rid, fname, n in written:
-        print(f"  {rid:14}  →  policies/{fname}  ({n} permission entries)")
-    print(f"total: {len(written)} role policies")
+        print(f"  {rid:14}  →  {fname}  ({n} permission entries)")
+    print(f"total: {len(written)} role policies → {out_dir}")
     return 0
 
 

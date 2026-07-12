@@ -39,7 +39,7 @@ echo "== APP/SECURITY seeding (→ ${OPS_DB}) =="
 # CREATE/ALTER ... IF NOT EXISTS (best-effort; duplicate-object errors are skipped)
 # → safe on a virgin boot too, where initdb already ran them.
 echo "▸ [perm-schema-heal] re-apply ops_perm schema (survives restore-state --clean)"
-for sql in 17_perm_schemas.sql 23_perm_admin_grants.sql 25_perm_scope_migration.sql; do
+for sql in 17_perm_schemas.sql 23_perm_admin_grants.sql 25_perm_scope_migration.sql 32_permission_store.sql; do
   f="$REPO/3_storage/postgres/init/${sql}"
   [ -f "$f" ] || { echo "  ! ${sql} missing — skipping"; continue; }
   kubectl -n "$NS" exec -i postgres-vault-0 -- \
@@ -69,9 +69,13 @@ else
     echo "  ✗ collect-catalog.py FAILED — fix the authored catalog files" >&2
     exit 1
   fi
+  # #88: the permission store is normalized from bundle/roles/*.yaml (the OPA
+  # data-permission source), which lives OUTSIDE the seed dir — mount those too
+  # (as r-*.yaml keys) and point the loader at /opt/seed via NHDW_ROLES_DIR.
   kubectl -n "$NS" create configmap security-seed-files \
     --from-file="$LOADER" --from-file="$CATFILE" \
     $(for y in "$SEC_DIR"/*.yaml; do echo "--from-file=$y"; done) \
+    $(for r in "$REPO"/bundle/roles/r-*.yaml; do echo "--from-file=$r"; done) \
     --dry-run=client -o yaml | kubectl -n "$NS" apply -f - >/dev/null
   rm -rf "$CATTMP"
 
@@ -100,6 +104,8 @@ spec:
             - { name: POSTGRES_PORT, value: "5432" }
             - { name: POSTGRES_USER, value: vault_admin }
             - { name: OPS_DB_NAME,   value: ${OPS_DB} }
+            # #88: role YAMLs are mounted alongside the seed files in /opt/seed.
+            - { name: NHDW_ROLES_DIR, value: /opt/seed }
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef: { name: postgres-vault-secrets, key: POSTGRES_PASSWORD }
