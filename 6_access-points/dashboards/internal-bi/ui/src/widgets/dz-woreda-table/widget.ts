@@ -10,16 +10,14 @@
  *   p_alarm:int(%) · readiness:'Ready'|'Partial'|'Limited' · reliability:'High'|'Medium'|'Low'
  * reactsTo: geography · programme.
  *
- * 2026-07-07 (final visual mandate): reference-golden plain ranked table (slate
- * rank chips, pills) in .scrollable — dt-standard round superseded. Region codes
- * render as full names; pill lookup stays case-insensitive for the live vocab.
+ * 2026-07-12 (X5): migrated onto the shared paginatedTable (sticky header, fixed-height
+ * scroll, search + click-to-sort). Region codes render as full names; the "#" column carries the
+ * pre-computed burden rank (rows arrive ranked worst-first).
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
+import type { TableColumn } from '../_shared/charts';
+import { paginatedTable } from '../_shared/charts';
 import { regionName } from '../_shared/reference';
-
-// Lowercased lookup — live mart vocabulary may differ in case from the mock.
-const READY_PILL: Record<string, string> = { ready: 'good', partial: 'watch', limited: 'alert' };
-const RELIA_PILL: Record<string, string> = { high: 'good', medium: 'watch', low: 'alert' };
 
 const def: WidgetDef = {
   id: 'dz-woreda-table',
@@ -29,27 +27,34 @@ const def: WidgetDef = {
     if (!rows || !rows.length) { ctx.empty('No hotspot woredas for the selected filters.'); return; }
     const t = ctx.theme;
 
-    const head = ['#', 'Woreda', 'Region', 'Cases (12w)', 'Incidence /100k', 'CFR %', 'P(alarm)', 'Readiness', 'Reliability'];
-    const body = rows.map(r => {
-      const p = Number(r.p_alarm ?? 0);
-      const ready = String(r.readiness ?? ''), relia = String(r.reliability ?? '');
-      return `<tr>
-        <td><span style="display:inline-grid;place-items:center;width:20px;height:20px;border-radius:4px;background:${t.navy['50']};color:${t.ink[1]};font-size:.72rem;font-weight:700">${r.rank ?? ''}</span></td>
-        <td style="font-weight:600;color:${t.ink[0]}">${r.woreda ?? '-'}</td>
-        <td style="color:${t.ink[2]}">${regionName(String(r.region ?? ''))}</td>
-        <td class="num" style="font-variant-numeric:tabular-nums">${Number(r.cases_12w ?? 0).toLocaleString()}</td>
-        <td class="num" style="font-variant-numeric:tabular-nums">${Number(r.incidence_100k ?? 0)}</td>
-        <td class="num" style="font-variant-numeric:tabular-nums">${Number(r.cfr_pct ?? 0).toFixed(1)}%</td>
-        <td class="num" style="font-variant-numeric:tabular-nums;font-weight:600">${p}%</td>
-        <td><span class="pill ${READY_PILL[ready.toLowerCase()] || 'neutral'}">${ready || '-'}</span></td>
-        <td><span class="pill ${RELIA_PILL[relia.toLowerCase()] || 'neutral'}">${relia || '-'}</span></td>
-      </tr>`;
-    }).join('');
+    const shaped = rows.map(r => ({
+      rank: r.rank ?? '',
+      woreda: r.woreda ?? '-',
+      region: regionName(String(r.region ?? '')),
+      cases: Number(r.cases_12w ?? 0).toLocaleString(),
+      incidence: Number(r.incidence_100k ?? 0),
+      cfr: `${Number(r.cfr_pct ?? 0).toFixed(1)}%`,
+      p_alarm: Number(r.p_alarm ?? 0),
+      readiness: String(r.readiness ?? '-'),
+      reliability: String(r.reliability ?? '-'),
+    }));
+    const columns: TableColumn[] = [
+      { id: 'rank', label: '#' },
+      { id: 'woreda', label: 'Woreda' },
+      { id: 'region', label: 'Region' },
+      { id: 'cases', label: 'Cases (12w)' },
+      { id: 'incidence', label: 'Incidence /100k' },
+      { id: 'cfr', label: 'CFR %' },
+      { id: 'p_alarm', label: 'P(alarm)', format: 'pct' },
+      { id: 'readiness', label: 'Readiness', format: 'pill' },
+      { id: 'reliability', label: 'Reliability', format: 'pill' },
+    ];
 
     ctx.el.innerHTML = `
       <p style="font-size:.82rem;color:${t.ink[2]};margin:0 0 .5rem">Highest-burden woredas · last 12 weeks</p>
-      <div class="scrollable" style="max-height:430px"><table class="dash"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
-    return () => { /* pure DOM */ };
+      <div class="dz-wt-tbl"></div>`;
+    const mount = ctx.el.querySelector<HTMLElement>('.dz-wt-tbl')!;
+    return paginatedTable(mount, shaped, columns, ctx.theme, { search: true, sort: true });
   },
 };
 export default def;
