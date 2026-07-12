@@ -163,12 +163,17 @@ export const dashboardApi: DashboardApi = {
 
   apply_global_filter({ name, value }) {
     const app: any = getBiApp();
-    if (!app.filters || !(name in app.filters)) {
+    // The tool-catalogue advertises `region`, but the app's global-filter dims
+    // are keyed geography/period/programme. Normalize the region→geography
+    // spelling (accept either) BEFORE the membership check so the model doesn't
+    // loop on a spurious "unknown global filter" error.
+    const key = name === 'region' ? 'geography' : name;
+    if (!app.filters || !(key in app.filters)) {
       return { ok: false, error: `unknown global filter ${name}` };
     }
-    app.setFilter(name, value);
+    app.setFilter(key, value);
     notify();
-    return { ok: true, name, value };
+    return { ok: true, name: key, value };
   },
 
   apply_widget_filter({ widget_id, name, value }) {

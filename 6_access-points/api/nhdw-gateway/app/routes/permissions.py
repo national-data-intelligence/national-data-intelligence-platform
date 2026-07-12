@@ -154,7 +154,7 @@ async def widget_data(widget_id: str, request: Request,
     # ALLOW a legitimate read instead of denying on a missing data_class — and we
     # push the caller's user_scope so OPA returns a row_filter the fetcher applies.
     # Unbound widgets fall back to the widget's requires (may be incomplete).
-    from ..fetchers import FETCHERS, PERIOD_KEYS, merge_ui_filters
+    from ..fetchers import DZ_MODELS, FETCHERS, PERIOD_KEYS, merge_ui_filters
     fetcher = FETCHERS.get(widget_id)
     opa_payload: dict[str, Any] = {"decision": "skipped (no mart binding)"}
     decision = None
@@ -190,6 +190,14 @@ async def widget_data(widget_id: str, request: Request,
             raise HTTPException(
                 400, f"unknown period value {period_val!r}; "
                      f"valid: {sorted(PERIOD_KEYS)}")
+        # Same allowlist guard for the disease-model dim — an unknown model would
+        # otherwise raise inside the fetcher's Param(DZ_MODELS) validation and
+        # surface as a 502 (data fetch failed) instead of an honest 400.
+        model_val = ui_filters.get("model")
+        if model_val is not None and model_val not in DZ_MODELS:
+            raise HTTPException(
+                400, f"unknown model value {model_val!r}; "
+                     f"valid: {sorted(DZ_MODELS)}")
         row_filter = merge_ui_filters(
             decision.row_filter if decision else {}, ui_filters)
 

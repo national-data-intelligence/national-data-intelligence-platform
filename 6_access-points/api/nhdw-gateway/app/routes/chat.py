@@ -75,7 +75,8 @@ CHAT_CONFIGS_DIR = Path(__file__).parent / "chat_configs"
 # ─── in-memory session store ──────────────────────────────────────────
 class _Session:
     __slots__ = ("user_kc_sub", "dashboard_id", "page_id", "messages",
-                 "tool_catalogue", "tool_calls", "rounds", "created_at")
+                 "tool_catalogue", "tool_calls", "rounds", "created_at",
+                 "seen_calls")
 
     def __init__(self, user_kc_sub: str, dashboard_id: str, page_id: str | None,
                  messages: list, tool_catalogue: list, created_at: float) -> None:
@@ -87,6 +88,9 @@ class _Session:
         self.tool_calls: list[dict] = []
         self.rounds         = 0
         self.created_at     = created_at
+        # signatures (name+args) of tool calls already issued this session — the
+        # idempotency guard uses these to short-circuit a repeated identical call.
+        self.seen_calls: set[str] = set()
 
 
 _sessions: dict[str, _Session] = {}
@@ -423,6 +427,22 @@ async def _drive_one_round(session: _Session, user: UserCtx) -> dict[str, Any]:
                                   "content": json.dumps({"ok": False,
                                                           "error": f"unknown tool {tool_name!r}"})})
         return await _drive_one_round(session, user)
+
+    # Idempotency guard: if the model re-issues a tool call identical to one it
+    # already made this session (same name + args), don't re-run it — feed back a
+    # short note and let it move on. This breaks the degenerate loop where the
+    # model repeats a call and re-announces success without progressing toward an
+    # answer. The recursion below re-enters _drive_one_round (a spent round), so
+    # it is bounded by MAX_ROUNDS like every other feed-back path.
+    sig = tool_name + ":" + json.dumps(args, sort_keys=True, default=str)
+    if sig in session.seen_calls:
+        session.messages.append(msg)
+        session.messages.append({"role": "tool", "content": json.dumps(
+            {"ok": True, "note": (f"{tool_name} was already called with these "
+             "arguments earlier in this conversation; its effect stands. Do not "
+             "repeat it — use the prior result and give your final answer.")})})
+        return await _drive_one_round(session, user)
+    session.seen_calls.add(sig)
 
     if spec.get("executor") == "gateway":
         executor = GATEWAY_EXECUTORS.get(tool_name)
