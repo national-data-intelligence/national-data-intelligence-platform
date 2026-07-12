@@ -54,23 +54,28 @@ const def: WidgetDef = {
     const draw = async () => {
       if (chartCleanup) { chartCleanup(); chartCleanup = undefined; }
       mount.innerHTML = '<p class="muted" style="padding:1rem">Loading…</p>';
-      const rows = await ctx.fetchData();
-      mount.innerHTML = '';
-      if (!rows || !rows.length) { mount.innerHTML = '<div class="widget-empty">No supply stress geography for the selected filters.</div>'; return; }
-      rowsByRegion = {}; const valuesByRegion: Record<string, number> = {};
-      // Mart rows key regions by 2-letter region_id (AA/AF/…) — translate to the
-      // SPA display name so the geojson feature join (normRegion) actually matches.
-      // Without this every region reads "no data" and the map renders flat.
-      for (const r of rows) { const name = regionName(String(r.region)); rowsByRegion[name] = r; valuesByRegion[name] = Number(r[metric] ?? 0); }
-      const geo = await loadEthGeo();
-      // supplyStress is ordered high→low; choropleth maps 0→first, so reverse → high stress = dark slate.
-      const ramp = [...ctx.theme.ramps.supplyStress].reverse();
-      const tooltip = (name: string) => {
-        const r = rowsByRegion[name];
-        if (!r) return `<b>${name}</b><br/>No data`;
-        return `<b>${name}</b><br/>Composite ${Number(r.composite_score ?? 0).toFixed(1)}<br/>Drug ${Number(r.drug_stress ?? 0).toFixed(1)} · Facility ${Number(r.facility_gap ?? 0).toFixed(1)} · Readiness ${Number(r.readiness_gap ?? 0).toFixed(1)}`;
-      };
-      chartCleanup = choropleth(mount, { valuesByRegion, fmt: (v: number) => v.toFixed(1), onSelect: updateInfo, ramp, tooltip }, ctx.theme, geo);
+      try {
+        const rows = await ctx.fetchData();
+        mount.innerHTML = '';
+        if (!rows || !rows.length) { mount.innerHTML = '<div class="widget-empty">No supply stress geography for the selected filters.</div>'; return; }
+        rowsByRegion = {}; const valuesByRegion: Record<string, number> = {};
+        // Mart rows key regions by 2-letter region_id (AA/AF/…) — translate to the
+        // SPA display name so the geojson feature join (normRegion) actually matches.
+        // Without this every region reads "no data" and the map renders flat.
+        for (const r of rows) { const name = regionName(String(r.region)); rowsByRegion[name] = r; valuesByRegion[name] = Number(r[metric] ?? 0); }
+        const geo = await loadEthGeo();
+        // supplyStress is ordered high→low; choropleth maps 0→first, so reverse → high stress = dark slate.
+        const ramp = [...ctx.theme.ramps.supplyStress].reverse();
+        const tooltip = (name: string) => {
+          const r = rowsByRegion[name];
+          if (!r) return `<b>${name}</b><br/>No data`;
+          return `<b>${name}</b><br/>Composite ${Number(r.composite_score ?? 0).toFixed(1)}<br/>Drug ${Number(r.drug_stress ?? 0).toFixed(1)} · Facility ${Number(r.facility_gap ?? 0).toFixed(1)} · Readiness ${Number(r.readiness_gap ?? 0).toFixed(1)}`;
+        };
+        chartCleanup = choropleth(mount, { valuesByRegion, fmt: (v: number) => v.toFixed(1), onSelect: updateInfo, ramp, tooltip }, ctx.theme, geo);
+      } catch {
+        // Never leave the "Loading…" placeholder stuck if the map/geo render throws.
+        mount.innerHTML = '<div class="widget-empty">Could not load the supply stress map. Please try again.</div>';
+      }
     };
 
     ctx.el.querySelectorAll<HTMLElement>('[data-metric]').forEach(b => {

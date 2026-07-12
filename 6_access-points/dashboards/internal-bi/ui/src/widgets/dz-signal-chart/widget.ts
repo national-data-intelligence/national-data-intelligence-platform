@@ -64,18 +64,24 @@ const def: WidgetDef = {
     const draw = async () => {
       if (chartCleanup) { chartCleanup(); chartCleanup = undefined; }
       mount.innerHTML = '<p class="muted" style="padding:1rem">Loading…</p>';
-      const rows = await ctx.fetchData({ model: signalModelId(model) });
-      mount.innerHTML = '';
-      const picked = rows && rows.length ? pickSeries(rows, ctx.filters.programme) : null;
-      if (!picked) { mount.innerHTML = '<div class="widget-empty">No signal series for the current scope.</div>'; cap.textContent = ''; return; }
-      const N = periodWeeks(ctx.filters.period);
-      const s = picked.series;
-      const sliced: SignalSeries = {
-        weeks: s.weeks.slice(-N), observed: s.observed.slice(-N), predicted: s.predicted.slice(-N),
-        lwr: s.lwr.slice(-N), upr: s.upr.slice(-N), threshold: s.threshold.slice(-N), alarm: s.alarm.slice(-N),
-      };
-      chartCleanup = timeSeriesBand(mount, sliced, ctx.theme, { showCI, showAlarms });
-      cap.innerHTML = `Focal disease: <strong>${picked.label}</strong>`;
+      try {
+        const rows = await ctx.fetchData({ model: signalModelId(model) });
+        mount.innerHTML = '';
+        const picked = rows && rows.length ? pickSeries(rows, ctx.filters.programme) : null;
+        if (!picked) { mount.innerHTML = '<div class="widget-empty">No signal series for the current scope.</div>'; cap.textContent = ''; return; }
+        const N = periodWeeks(ctx.filters.period);
+        const s = picked.series;
+        const sliced: SignalSeries = {
+          weeks: s.weeks.slice(-N), observed: s.observed.slice(-N), predicted: s.predicted.slice(-N),
+          lwr: s.lwr.slice(-N), upr: s.upr.slice(-N), threshold: s.threshold.slice(-N), alarm: s.alarm.slice(-N),
+        };
+        chartCleanup = timeSeriesBand(mount, sliced, ctx.theme, { showCI, showAlarms });
+        cap.innerHTML = `Focal disease: <strong>${picked.label}</strong>`;
+      } catch {
+        // Never leave the "Loading…" placeholder stuck if pickSeries/chart render throws.
+        mount.innerHTML = '<div class="widget-empty">Could not load the alarm signal. Please try again.</div>';
+        cap.textContent = '';
+      }
     };
 
     (ctx.el.querySelector('.dz-sig-model') as HTMLSelectElement).onchange = (e) => { model = (e.target as HTMLSelectElement).value; draw(); };

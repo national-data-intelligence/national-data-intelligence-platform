@@ -67,25 +67,30 @@ const def: WidgetDef = {
     const draw = async () => {
       if (chartCleanup) { chartCleanup(); chartCleanup = undefined; }
       mapMount.innerHTML = '<p class="muted" style="padding:1rem">Loading…</p>';
-      const rows = await ctx.fetchData();
-      mapMount.innerHTML = '';
-      if (!rows || !rows.length) { mapMount.innerHTML = '<div class="widget-empty">No geographic surveillance data for the selected filters.</div>'; return; }
-      rowsByRegion = {}; const valuesByRegion: Record<string, number> = {};
-      const m = META[metric];
-      // Mart rows key regions by 2-letter region_id (AA/AF/…) — translate to the
-      // SPA display name so the geojson feature join (normRegion) actually matches.
-      // Without this every region reads "no data" and the map renders flat.
-      for (const r of rows) { const name = regionName(String(r.region)); rowsByRegion[name] = r; valuesByRegion[name] = Number(r[m.col] ?? 0); }
-      const geo = await loadEthGeo();
-      // diseaseBurden is ordered high→low (+no-data); choropleth maps 0→first, so drop the
-      // no-data grey and reverse → low burden = pale, high burden = deep red.
-      const ramp = metric === 'burden' ? [...ctx.theme.ramps.diseaseBurden].slice(0, 5).reverse() : undefined;
-      const tooltip = (name: string) => {
-        const r = rowsByRegion[name];
-        if (!r) return `<b>${name}</b><br/>No data`;
-        return `<b>${name}</b><br/>Burden ${Math.round(Number(r.burden_incidence_100k ?? 0))}/100k · Readiness ${Number(r.readiness_pct ?? 0)}%<br/>P(alarm) ${Number(r.p_alarm ?? 0)}% · Cases 7d ${Number(r.cases_7d ?? 0).toLocaleString()}`;
-      };
-      chartCleanup = choropleth(mapMount, { valuesByRegion, fmt: m.fmt, onSelect: updateInfo, ramp, tooltip }, ctx.theme, geo);
+      try {
+        const rows = await ctx.fetchData();
+        mapMount.innerHTML = '';
+        if (!rows || !rows.length) { mapMount.innerHTML = '<div class="widget-empty">No geographic surveillance data for the selected filters.</div>'; return; }
+        rowsByRegion = {}; const valuesByRegion: Record<string, number> = {};
+        const m = META[metric];
+        // Mart rows key regions by 2-letter region_id (AA/AF/…) — translate to the
+        // SPA display name so the geojson feature join (normRegion) actually matches.
+        // Without this every region reads "no data" and the map renders flat.
+        for (const r of rows) { const name = regionName(String(r.region)); rowsByRegion[name] = r; valuesByRegion[name] = Number(r[m.col] ?? 0); }
+        const geo = await loadEthGeo();
+        // diseaseBurden is ordered high→low (+no-data); choropleth maps 0→first, so drop the
+        // no-data grey and reverse → low burden = pale, high burden = deep red.
+        const ramp = metric === 'burden' ? [...ctx.theme.ramps.diseaseBurden].slice(0, 5).reverse() : undefined;
+        const tooltip = (name: string) => {
+          const r = rowsByRegion[name];
+          if (!r) return `<b>${name}</b><br/>No data`;
+          return `<b>${name}</b><br/>Burden ${Math.round(Number(r.burden_incidence_100k ?? 0))}/100k · Readiness ${Number(r.readiness_pct ?? 0)}%<br/>P(alarm) ${Number(r.p_alarm ?? 0)}% · Cases 7d ${Number(r.cases_7d ?? 0).toLocaleString()}`;
+        };
+        chartCleanup = choropleth(mapMount, { valuesByRegion, fmt: m.fmt, onSelect: updateInfo, ramp, tooltip }, ctx.theme, geo);
+      } catch {
+        // Never leave the "Loading…" placeholder stuck if the map/geo render throws.
+        mapMount.innerHTML = '<div class="widget-empty">Could not load the burden &amp; readiness map. Please try again.</div>';
+      }
     };
 
     ctx.el.querySelectorAll<HTMLElement>('[data-metric]').forEach(b => {
