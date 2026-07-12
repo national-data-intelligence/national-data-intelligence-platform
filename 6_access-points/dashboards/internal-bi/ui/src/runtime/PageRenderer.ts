@@ -32,7 +32,7 @@ import { getWidgetDef } from './registry';
 import { resolveTheme } from './theme';
 import { filterBus } from './filterBus';
 import { fetchWidgetData, fetchEntity } from './dataHook';
-import { GLOBAL_DIMS, isWidgetHiddenAtScope, packRows } from './reactivity';
+import { GLOBAL_DIMS, isWidgetHiddenAtScope, packRows, filterParamsForWidget } from './reactivity';
 import { host } from './host';
 
 /** Section-id slug → sprite icon (docs/final-mockkups: section markers are icons, not ①②③). */
@@ -109,7 +109,15 @@ export function mountWidgetManaged(
       filters: filterBus.get(),
       bus: filterBus,
       host,
-      fetchData: (params) => fetchWidgetData(widget.data_url, params),
+      fetchData: (params) => {
+        // Inject the active global-filter values so the widget re-queries NARROWED
+        // data (gated by reactsTo ∩ supports; national/opted-out widgets inject
+        // nothing). Server caps every value against role_scope ∩ user_scope, so
+        // this can only intersect a role's scope. Widget-supplied params win.
+        const reacts = (d.reactsTo && d.reactsTo.length) ? d.reactsTo : (widget.reacts_to || []);
+        return fetchWidgetData(widget.data_url,
+          { ...filterParamsForWidget(widget, reacts, filterBus.get()), ...params });
+      },
       fetchEntity: (path, params) => fetchEntity(path, params),
       empty: (m) => emptyState(slot, m),
     };

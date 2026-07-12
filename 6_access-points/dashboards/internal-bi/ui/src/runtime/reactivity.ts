@@ -45,6 +45,35 @@ export function isWidgetHiddenAtScope(w: ResolvedWidget, state: FilterState): bo
   return GLOBAL_DIMS.some(d => sup[d] === false && isDimActive(state, d));
 }
 
+/** DIM → the query-param the gateway narrows on. geography/programme/period are
+ *  accepted directly (the gateway aliases region↔geography server-side). */
+const DIM_PARAM: Record<string, string> = {
+  geography: 'geography', programme: 'programme', period: 'period',
+  model: 'model', commodity: 'commodity',
+};
+
+/**
+ * The narrowing params to inject into a widget's data fetch. For each dim the
+ * widget REACTS TO, send the ACTIVE value IFF the widget's fetcher supports that
+ * dim (supports[dim] !== false). This is the opt-out: a national / opted-out
+ * widget (reactsTo:[] or supports[dim] === false) sends nothing for that dim and
+ * never narrows. The server still caps every value against role_scope ∩
+ * user_scope (gateway permissions.py), so injection can only INTERSECT a role's
+ * scope — never widen it. Widget-supplied params (local selectors) win over these.
+ */
+export function filterParamsForWidget(
+  w: ResolvedWidget, reacts: readonly string[], state: FilterState,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const sup = w.supports;
+  for (const dim of reacts) {
+    if (!isDimActive(state, dim)) continue;
+    if (sup && sup[dim] === false) continue;   // fetcher can't narrow this dim → skip
+    out[DIM_PARAM[dim] || dim] = String(state[dim]);
+  }
+  return out;
+}
+
 /**
  * Grid redistribution — pack widgets greedily into rows by their DECLARED
  * col_span (a widget that would overflow the row starts the next one), then
