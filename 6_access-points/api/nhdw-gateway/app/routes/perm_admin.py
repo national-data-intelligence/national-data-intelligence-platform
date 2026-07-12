@@ -286,6 +286,157 @@ async def delete_role(role_id: int, user: UserCtx = Depends(get_user)) -> dict:
                          pk={"id": role_id}, before=dict(before))
     return {"ok": True}
 
+
+# ─── #88: reusable data-access permission store (ops_perm.permission) ──
+# A permission is one OPA allow-rule tuple, reusable across roles via
+# ops_perm.role_permission. compile.py --from-db emits the rego from these,
+# so an edit here is authoritative for the policy once re-compiled.
+class PermissionIn(BaseModel):
+    subject: str
+    granularity: str
+    verbs: list[str]
+    members: str = "scoped"
+    purposes: list[str] = Field(default_factory=lambda: ["public-health"])
+    data_classes: list[str] = Field(default_factory=list)
+    sensitivity: list[str] = Field(default_factory=list)
+    code: Optional[str] = None
+    description: Optional[str] = None
+
+    def _cols(self) -> dict:
+        return {"code": self.code, "subject": self.subject, "members": self.members,
+                "granularity": self.granularity, "verbs": self.verbs,
+                "purposes": self.purposes, "data_classes": self.data_classes,
+                "sensitivity": self.sensitivity, "description": self.description}
+
+
+@router.get("/permissions")
+async def list_permissions(user: UserCtx = Depends(get_user)) -> list[dict]:
+    await _require_capability(user, "manage_users")
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT p.id, p.code, p.subject, p.members, p.granularity, p.verbs,
+                   p.purposes, p.data_classes, p.sensitivity, p.description,
+                   coalesce(array_agg(r.code ORDER BY r.code)
+                            FILTER (WHERE r.code IS NOT NULL), '{}') AS roles
+              FROM ops_perm.permission p
+              LEFT JOIN ops_perm.role_permission rp ON rp.permission_id = p.id
+              LEFT JOIN ops_perm.role r ON r.id = rp.role_id
+             GROUP BY p.id
+             ORDER BY p.subject, p.granularity, p.id
+        """)
+    return [dict(r) for r in rows]
+
+
+@router.post("/permissions", status_code=201)
+async def create_permission(body: PermissionIn,
+                            user: UserCtx = Depends(get_user)) -> dict:
+    await _require_capability(user, "edit_roles")
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            rev = await _new_revision(
+                conn, user.kc_sub, f"create permission {body.subject}/{body.granularity}")
+            try:
+                row = await conn.fetchrow("""
+                    INSERT INTO ops_perm.permission
+                        (code, subject, members, granularity, verbs, purposes,
+                         data_classes, sensitivity, description)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id
+                """, body.code, body.subject, body.members, body.granularity,
+                    body.verbs, body.purposes, body.data_classes,
+                    body.sensitivity, body.description)
+            except Exception as e:                                     # noqa: BLE001
+                raise HTTPException(409, f"permission create failed (duplicate tuple / bad value?): {e}")
+            await _audit(conn, actor_sub=user.kc_sub, revision_id=rev,
+                         table_name="permission", op="insert",
+                         pk={"id": row["id"]}, after=body._cols())
+    return {"id": row["id"]}
+
+
+@router.put("/permissions/{perm_id}")
+async def update_permission(perm_id: int, body: PermissionIn,
+                            user: UserCtx = Depends(get_user)) -> dict:
+    await _require_capability(user, "edit_roles")
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            before = await conn.fetchrow(
+                "SELECT * FROM ops_perm.permission WHERE id = $1", perm_id)
+            if not before:
+                raise HTTPException(404, "permission not found")
+            rev = await _new_revision(conn, user.kc_sub, f"update permission {perm_id}")
+            await conn.execute("""
+                UPDATE ops_perm.permission
+                SET code=$2, subject=$3, members=$4, granularity=$5, verbs=$6,
+                    purposes=$7, data_classes=$8, sensitivity=$9, description=$10,
+                    updated_at=now()
+                WHERE id=$1
+            """, perm_id, body.code, body.subject, body.members, body.granularity,
+                body.verbs, body.purposes, body.data_classes, body.sensitivity,
+                body.description)
+            await _audit(conn, actor_sub=user.kc_sub, revision_id=rev,
+                         table_name="permission", op="update", pk={"id": perm_id},
+                         before={k: before[k] for k in ("subject","granularity","verbs")},
+                         after=body._cols())
+    return {"ok": True, "id": perm_id}
+
+
+@router.delete("/permissions/{perm_id}")
+async def delete_permission(perm_id: int,
+                            user: UserCtx = Depends(get_user)) -> dict:
+    await _require_capability(user, "edit_roles")
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            before = await conn.fetchrow(
+                "SELECT subject, granularity FROM ops_perm.permission WHERE id=$1", perm_id)
+            if not before:
+                raise HTTPException(404, "permission not found")
+            rev = await _new_revision(conn, user.kc_sub, f"delete permission {perm_id}")
+            # CASCADE removes the role_permission links.
+            await conn.execute("DELETE FROM ops_perm.permission WHERE id=$1", perm_id)
+            await _audit(conn, actor_sub=user.kc_sub, revision_id=rev,
+                         table_name="permission", op="delete",
+                         pk={"id": perm_id}, before=dict(before))
+    return {"ok": True}
+
+
+class RolePermissionsIn(BaseModel):
+    permission_ids: list[int]
+
+
+@router.put("/roles/{role_id}/permissions")
+async def replace_role_permissions(role_id: int, body: RolePermissionsIn,
+                                   user: UserCtx = Depends(get_user)) -> dict:
+    """Replace a role's RUNTIME permission grants (managed_by='runtime'). The
+    seed-derived links (managed_by='seed', from the role YAMLs) are left intact —
+    a runtime grant is additive on top of the authored set and survives re-seed."""
+    await _require_capability(user, "edit_roles")
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            role = await conn.fetchrow("SELECT code FROM ops_perm.role WHERE id=$1", role_id)
+            if not role:
+                raise HTTPException(404, "role not found")
+            rev = await _new_revision(
+                conn, user.kc_sub, f"set runtime permissions for {role['code']}")
+            await conn.execute(
+                "DELETE FROM ops_perm.role_permission "
+                "WHERE role_id=$1 AND managed_by='runtime'", role_id)
+            if body.permission_ids:
+                await conn.executemany("""
+                    INSERT INTO ops_perm.role_permission (role_id, permission_id, ordering, managed_by)
+                    VALUES ($1, $2, 1000, 'runtime')
+                    ON CONFLICT (role_id, permission_id) DO NOTHING
+                """, [(role_id, pid) for pid in body.permission_ids])
+            await _audit(conn, actor_sub=user.kc_sub, revision_id=rev,
+                         table_name="role_permission", op="update",
+                         pk={"role_id": role_id},
+                         after={"runtime_permission_ids": body.permission_ids})
+    return {"ok": True, "role_id": role_id}
+
+
 # ─── role grants — the 4 axes, one atomic PUT ─────────────────────────
 class GrantsIn(BaseModel):
     dashboards: list[str] = []
