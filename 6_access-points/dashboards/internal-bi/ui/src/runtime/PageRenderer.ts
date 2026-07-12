@@ -222,14 +222,12 @@ function renderSection(section: ResolvedSection, page: ResolvedPage, mount: HTML
     const hdr = document.createElement('div');
     hdr.className = 'ps-hdr';
     const title = (section.title || '').replace(/^[①-⑳]\s*/, '');
-    // Appropriate section icon (sprite) keyed by the section-id slug — replaces
-    // the ①②③ circled-digit markers (which also render as tofu in some fonts).
-    const slug = (section.id.split('/').pop() || '');
-    const icon = SECTION_ICON[slug] || 'i-list';
+    // Section titles are icon-free (owner 2026-07-13 — no icons on section titles).
+    void SECTION_ICON;
     hdr.innerHTML = `
       <div>
         ${section.eyebrow ? `<div class="ps-eyebrow">${section.eyebrow}</div>` : ''}
-        ${title ? `<h3 class="ps-title"><svg class="ico" aria-hidden="true"><use href="#${icon}"/></svg>${title}</h3>` : ''}
+        ${title ? `<h3 class="ps-title">${title}</h3>` : ''}
         ${section.description ? `<p class="ps-sub">${section.description}</p>` : ''}
       </div>`;
     hdr.appendChild(noteEl);   // .ps-hdr is flex space-between → right-aligned

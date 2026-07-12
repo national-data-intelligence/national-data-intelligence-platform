@@ -35,7 +35,7 @@ function bandColor(v: number, theme: WidgetCtx['theme']): string {
 
 const def: WidgetDef = {
   id: 'ov-reliability-table',
-  reactsTo: ['geography', 'programme', 'period'],
+  reactsTo: ['geography'],
   async render(ctx: WidgetCtx) {
     const fetched = await ctx.fetchData();
     if (!fetched || !fetched.length) { ctx.empty('No regional reliability data for the current scope.'); return; }

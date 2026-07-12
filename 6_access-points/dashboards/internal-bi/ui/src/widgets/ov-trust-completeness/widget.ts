@@ -10,7 +10,7 @@ import { statCard } from '../_shared/charts';
 
 const def: WidgetDef = {
   id: 'ov-trust-completeness',
-  reactsTo: ['geography', 'programme', 'period'],
+  reactsTo: ['geography'],
   async render(ctx) {
     const r = (await ctx.fetchData())?.[0];
     if (!r) { ctx.empty('No reporting completeness for the selected filters.'); return; }

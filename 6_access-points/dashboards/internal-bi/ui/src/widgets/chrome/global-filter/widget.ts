@@ -16,6 +16,7 @@
 import type { WidgetDef, WidgetCtx } from '../../../runtime/types';
 import type { ResolvedFilter } from '../../../api/spec';
 import { REGIONS, PROGRAMMES, DISEASES, PERIOD_OPTS } from '../../../biApp';
+import { getWidgetDef } from '../../../runtime/registry';
 
 // Spec filter id → the bus/biApp filter key it drives.
 const DIM_KEY: Record<string, string> = {
@@ -53,7 +54,17 @@ const def: WidgetDef = {
     const CHIP_ORDER: Record<string, number> = isService
       ? { region: 0, geography: 0, programme: 1, period: 2 }
       : { region: 0, geography: 0, period: 1, programme: 2 };
+    // PAGE-SPECIFIC filter set (owner 2026-07-13): only offer a filter whose
+    // dimension a widget ON THIS PAGE actually reacts to — no generic
+    // region/period/programme on every page regardless of use. The resolved
+    // spec's reacts_to is null for core widgets, so derive it from the registry.
+    const usedDims = new Set<string>();
+    for (const w of (ctx.page.widgets || [])) {
+      const wdef = getWidgetDef(w.id);
+      for (const d of (wdef?.reactsTo || [])) usedDims.add(d);
+    }
     const filters = [...(ctx.page.global_filters || [])]
+      .filter(f => usedDims.has(DIM_KEY[f.id] || f.id))
       .sort((a, b) => (CHIP_ORDER[a.id] ?? 99) - (CHIP_ORDER[b.id] ?? 99));
     const el = ctx.el;
     let openId: string | null = null;

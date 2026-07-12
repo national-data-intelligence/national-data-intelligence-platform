@@ -12,7 +12,7 @@ import { statCard } from '../_shared/charts';
 
 const def: WidgetDef = {
   id: 'ov-trust-silent',
-  reactsTo: ['geography', 'programme', 'period'],
+  reactsTo: ['geography'],
   async render(ctx) {
     const r = (await ctx.fetchData())?.[0];
     if (!r) { ctx.empty('No active-but-silent facility data for the selected filters.'); return; }

@@ -20,7 +20,7 @@ const DEFAULTS = [
 
 const def: WidgetDef = {
   id: 'ov-benchmarks',
-  reactsTo: ['geography', 'period'],
+  reactsTo: ['geography'],
   frameless: true,   // tiles ARE the cards — host draws no wrapping card
   async render(ctx: WidgetCtx) {
     const rows = await ctx.fetchData();

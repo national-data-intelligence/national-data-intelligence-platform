@@ -168,8 +168,15 @@ function biApp() {
       return { realtime: 'Real-time', daily: 'Daily digest', weekly: 'Weekly summary' }[key] || key;
     },
 
-    // Global filter state (cascades to all pages) — Facility is NOT a global filter.
-    filters: { geography: 'all', period: 'all', programme: 'all' },
+    // Global filter state is PAGE-SCOPED (owner 2026-07-13): each page keeps its
+    // OWN slice, so a region set on one page never bleeds into another. `filters`
+    // is a getter that returns the ACTIVE page's slice (lazily created).
+    _filtersByPage: {} as Record<string, { geography: string; period: string; programme: string; [k: string]: string }>,
+    get filters(): { geography: string; period: string; programme: string; [k: string]: string } {
+      const p = (this.active as string) || 'overview';
+      return (this._filtersByPage[p] ||
+        (this._filtersByPage[p] = { geography: 'all', period: 'all', programme: 'all' }));
+    },
     filtersExpanded: false,
     openFilter: null,
     prgSearch: '',

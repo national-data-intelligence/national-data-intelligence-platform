@@ -139,7 +139,10 @@
   /* ═══ Top bar inside main · balanced left/right padding (reference-golden
      masthead: eyebrow + 2rem/800 title from Topbar.tsx, no band, no hairline) ═══ */
   .bi-topbar {
-    padding: 1.3rem 2.2rem 1.1rem 2.2rem;
+    /* Horizontal padding MUST match .bi-pageframe (3.6rem) so the masthead
+       title/breadcrumb sit flush-left with the page content below, not inset
+       ~1.4rem further left. Both are siblings in .bi-main (same left edge). */
+    padding: 1.3rem 3.6rem 1.1rem 3.6rem;
     display: flex; align-items: flex-end; justify-content: space-between;
     gap: 1.2rem;
   }

@@ -10,7 +10,7 @@ import { statCard } from '../_shared/charts';
 
 const def: WidgetDef = {
   id: 'ov-trust-mapping',
-  reactsTo: ['geography', 'programme', 'period'],
+  reactsTo: ['geography'],
   async render(ctx) {
     const r = (await ctx.fetchData())?.[0];
     if (!r) { ctx.empty('No facility mapping coverage for the selected filters.'); return; }
