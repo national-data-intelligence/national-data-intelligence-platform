@@ -34,9 +34,12 @@ def rego_list(items):
     """Format a Python list as a Rego array literal (double-quoted strings)."""
     return json.dumps(items)
 
-REPO = Path(__file__).resolve().parents[3]
-# NHDW_ROLES_DIR lets the compiler run outside the repo tree (e.g. the in-cluster
-# equivalence-check / Phase-3 bundle Job, where the role YAMLs are mounted).
+_here = Path(__file__).resolve()
+# In the repo compile.py is 7_security/opa/scripts/compile.py → parents[3] = root.
+# When mounted shallow in a pod (/src/compile.py) parents[3] doesn't exist, so
+# guard it — REPO is only a FALLBACK; NHDW_ROLES_DIR and --out-dir drive the real
+# paths in-cluster (the equivalence-check / policy-regen Jobs).
+REPO = _here.parents[3] if len(_here.parents) > 3 else _here.parent
 ROLES_DIR = Path(os.environ.get("NHDW_ROLES_DIR") or (REPO / "bundle" / "roles"))
 OUT_DIR = REPO / "7_security" / "opa" / "policies"
 
