@@ -92,7 +92,7 @@ const def: WidgetDef = {
     ctx.el.innerHTML = `
       <div style="display:grid;grid-template-columns:1.7fr 1fr;gap:1rem;align-items:start">
         <div style="min-width:0">
-          <textarea data-sql spellcheck="false" style="width:100%;min-height:225px;resize:vertical;
+          <textarea data-sql data-widget-input="ex-sql-editor" spellcheck="false" style="width:100%;min-height:225px;resize:vertical;
             font-family:${theme.fontMono};font-size:.84rem;line-height:1.5;padding:.6rem .7rem;
             border:1px solid ${theme.line};border-radius:8px;color:${theme.ink[0]};background:#F5F7FA;
             box-shadow:inset 0 1px 2px rgba(15,23,42,0.05)"

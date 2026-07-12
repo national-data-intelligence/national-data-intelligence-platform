@@ -52,6 +52,22 @@ function widgetEl(widgetId: string): HTMLElement | null {
       || document.getElementById(widgetId);
 }
 
+/** Resolve the actual EDITABLE control for a widget (AI-C2). The resolved node
+ *  is usually the card `<div data-widget-id>`, which has no `value`; the real
+ *  editor lives inside it (the ex-sql-editor's `<textarea data-sql
+ *  data-widget-input="ex-sql-editor">`). So: if the element is itself an
+ *  input/textarea use it, otherwise reach in for the first hooked control
+ *  (`[data-widget-input]` → `textarea[data-sql]` → any `textarea,input`). */
+function widgetInputEl(widgetId: string): HTMLInputElement | HTMLTextAreaElement | null {
+  const el = widgetEl(widgetId);
+  if (!el) return null;
+  const isInput = (n: Element | null): n is HTMLInputElement | HTMLTextAreaElement =>
+    !!n && 'value' in n && typeof (n as any).value === 'string';
+  if (isInput(el)) return el;
+  const inner = el.querySelector('[data-widget-input], textarea[data-sql], textarea, input');
+  return isInput(inner) ? inner : null;
+}
+
 function widgetIdsOnPage(section: string): string[] {
   const prefix = PAGE_PREFIXES[section];
   if (!prefix) return [];
@@ -89,14 +105,22 @@ function widgetState(widgetId: string): unknown {
   return ws ?? null;
 }
 
+/** AI-C1 — read_widget payload. `data` is the widget's REAL last-fetched tabular
+ *  data ({columns, rows}), recorded by the catalog runtime (runtime/PageRenderer)
+ *  under `window.__nhdwWidgetData` keyed by widget id — this matches the
+ *  tool-catalogue contract. Non-tabular / not-yet-fetched widgets carry
+ *  data:null and rely on `text_preview` (a trimmed innerText fallback), so the
+ *  model still has something to read but never mistakes an unlabelled text blob
+ *  for the widget's tabular data. */
 function widgetSnapshot(widgetId: string) {
   const el = widgetEl(widgetId);
   if (!el) return null;
   const text = (el.innerText || '').trim().slice(0, 600);
+  const data = (typeof window !== 'undefined' && window.__nhdwWidgetData?.[widgetId]) || null;
   return {
     id:           widgetId,
     title:        widgetTitle(widgetId),
-    state:        widgetState(widgetId),
+    data,
     text_preview: text,
   };
 }
@@ -112,7 +136,7 @@ export type DashboardApi = {
   navigate_to_page(args: { page_id: string }): unknown;
   apply_global_filter(args: { name: string; value: string }): unknown;
   apply_widget_filter(args: { widget_id: string; name: string; value: string }): unknown;
-  write_widget_input(args: { widget_id: string; value: string }): unknown;
+  write_widget_input(args: { widget_id: string; value: string; and_run?: boolean; run?: boolean }): unknown;
   scroll_to_widget(args: { widget_id: string }): unknown;
 };
 
@@ -140,12 +164,12 @@ export const dashboardApi: DashboardApi = {
   },
 
   read_widget_input({ widget_id }) {
-    const el = widgetEl(widget_id) as
-      HTMLTextAreaElement | HTMLInputElement | HTMLElement | null;
+    const el = widgetEl(widget_id);
     if (!el) return notFound();
-    if ('value' in el && typeof el.value === 'string') {
-      return { ok: true, value: el.value };
-    }
+    // Reach inside the card for the real editor (the SQL textarea has no id) —
+    // fall back to the card's text when there is no editable control.
+    const input = widgetInputEl(widget_id);
+    if (input) return { ok: true, value: input.value };
     return { ok: true, value: (el.innerText || '').trim() };
   },
 
@@ -188,17 +212,26 @@ export const dashboardApi: DashboardApi = {
     return { ok: true, widget_id, name, value };
   },
 
-  write_widget_input({ widget_id, value }) {
-    const el = widgetEl(widget_id) as
-      HTMLTextAreaElement | HTMLInputElement | null;
-    if (!el) return notFound();
-    if (!('value' in el)) {
-      return { ok: false, error: `widget ${widget_id} is not an input` };
+  write_widget_input({ widget_id, value, and_run, run }) {
+    if (!widgetEl(widget_id)) return notFound();
+    // The resolved node is the card `<div>` (no `value`); target the editor
+    // inside it (the ex-sql-editor's `<textarea data-widget-input>`).
+    const input = widgetInputEl(widget_id);
+    if (!input) {
+      return { ok: false, error: `widget ${widget_id} has no writable input` };
     }
-    el.value = value;
-    el.dispatchEvent(new Event('input',  { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    return { ok: true, widget_id };
+    input.value = value;
+    input.dispatchEvent(new Event('input',  { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    // Optional: also click the editor's Run button (ex-sql-editor: [data-run]).
+    let ran = false;
+    if (and_run || run) {
+      const card = widgetEl(widget_id);
+      const runBtn = card?.querySelector<HTMLButtonElement>('[data-run]')
+                  || card?.querySelector<HTMLButtonElement>('button');
+      if (runBtn) { runBtn.click(); ran = true; }
+    }
+    return { ok: true, widget_id, ran };
   },
 
   scroll_to_widget({ widget_id }) {
@@ -214,6 +247,9 @@ export const dashboardApi: DashboardApi = {
 declare global {
   interface Window {
     __nhdwDashboard?: DashboardApi;
+    /** AI-C1 read_widget registry — last-fetched {columns, rows} per widget id,
+     *  populated by the catalog runtime (runtime/PageRenderer.recordWidgetData). */
+    __nhdwWidgetData?: Record<string, { columns: string[]; rows: Record<string, any>[] } | null>;
   }
 }
 

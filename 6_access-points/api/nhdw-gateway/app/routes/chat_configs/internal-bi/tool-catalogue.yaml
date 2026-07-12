@@ -31,7 +31,7 @@ tools:
 
   - id: read_widget
     tool_group: read
-    description: "Read a specific widget's current state + rendered data. Returns {id, title, state, data:{columns, rows}}."
+    description: "Read a specific widget's currently-displayed data. Returns {id, title, data:{columns, rows}, text_preview} — `data` is the widget's REAL last-fetched rows (use these numbers); it is null for non-tabular widgets, in which case fall back to `text_preview`."
     executor: spa
     parameters:
       type: object
@@ -118,13 +118,14 @@ tools:
     tool_group: interact
     requires:
       widget: ex-sql-editor
-    description: "Replace the contents of an input widget (e.g. paste a SQL into the SQL editor)."
+    description: "Replace the contents of an input widget — targets the editor control inside the card (e.g. the SQL Lab textarea on the Export page, widget_id 'ex-sql-editor'). Set and_run:true to also click Run after writing (executes the SQL)."
     executor: spa
     parameters:
       type: object
       properties:
         widget_id: {type: string}
         value:     {type: string}
+        and_run:   {type: boolean, description: "if true, click the widget's Run button after writing (runs the SQL)"}
       required: [widget_id, value]
 
   - id: scroll_to_widget
