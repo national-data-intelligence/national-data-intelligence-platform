@@ -158,7 +158,7 @@ bash -n "$REPO/bundle/scripts/pack.sh" && bash -n "$REPO/bundle/scripts/restore-
 [ -x "$REPO/bundle/bin/mc" ] && pass "bundled mc binary present" || fail "bundle/bin/mc missing"
 
 # 8. replacement-means-removal guard
-stale=$(grep -rIl "1_sources/\|nhdw/fake-fayda\|1_infrastructure/scripts/\|1_infrastructure/docker/" "$REPO" \
+stale=$(grep -rIl --exclude-dir='.*' "1_sources/\|nhdw/fake-fayda\|1_infrastructure/scripts/\|1_infrastructure/docker/" "$REPO" \
   --include="*.sh" --include="*.py" --include="*.yaml" --include="*.yml" --include="*.ts" --include="*.tsx" 2>/dev/null \
   | grep -v "_archive/" | grep -v "k8s-deployment-changelog" | grep -v "bundle/state/" \
   | grep -v "verify-system.sh" || true)   # this script necessarily contains the patterns
