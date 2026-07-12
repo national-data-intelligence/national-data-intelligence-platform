@@ -35,7 +35,7 @@
   }
   .gov-row {
     max-width: 1600px; margin: 0 auto;
-    padding: 0.85rem 1.6rem;
+    padding: 0.85rem var(--pub-gutter);
     display: flex; align-items: center; gap: 2rem;
   }
   .gov-mark {
@@ -170,9 +170,18 @@
 
   /* Hero inner content + ghost side numeral */
   .hero-inner {
-    position: relative; z-index: 1;
+    position: relative; z-index: 2;
     max-width: 1600px; margin: 0 auto;
-    padding: 4.6rem 1.6rem 5rem;
+    padding: 5.6rem var(--pub-gutter) 7rem;
+  }
+  /* Bottom-edge darkening — the hero deepens to near-black at its lower edge so
+     it settles into the content surface below (owner; replaces the removed
+     bottom strip). Sits above the art, below the masthead text (z-index 2). */
+  .hero::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+    height: 45%; z-index: 1; pointer-events: none;
+    background: linear-gradient(180deg,
+      rgba(3,5,12,0) 0%, rgba(3,5,12,0.45) 55%, rgba(3,5,12,0.9) 100%);
   }
   .hero-eyebrow {
     display: inline-flex; align-items: center; gap: 0.85rem;
@@ -276,15 +285,12 @@
   .hero-strip { position: relative; z-index: 2; }
   .hero-strip--top {
     border-bottom: 1px solid rgba(255,255,255,0.08);
-    background: rgba(0,0,0,0.16);
-  }
-  .hero-strip--bot {
-    border-top: 1px solid rgba(255,255,255,0.08);
-    background: rgba(0,0,0,0.22);
+    /* SOLID blue-black (owner-specified #1f273d) — not a gradient. */
+    background: #1f273d;
   }
   .hero-strip-inner {
     max-width: 1600px; margin: 0 auto;
-    padding: 0.6rem 1.6rem;
+    padding: 0.6rem var(--pub-gutter);
     display: flex; align-items: center; justify-content: space-between;
     font-family: var(--font-mono);
     font-size: 0.72rem;
@@ -339,7 +345,7 @@
   /* ─── Page section blocks ─── */
   .page-section {
     max-width: 1600px; margin: 0 auto;
-    padding: 2.6rem 1.6rem 1.8rem;
+    padding: 2.6rem var(--pub-gutter) 1.8rem;
   }
   .page-section h2 { margin-bottom: 0.4rem; }
   .page-section .sub { font-size: 0.92rem; color: var(--ink-3); margin-bottom: 1.2rem; }
