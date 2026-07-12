@@ -72,7 +72,7 @@ tools:
 
   - id: run_sql
     tool_group: run_sql
-    description: "Run a single SELECT (PostgreSQL/Trino dialect, fully-qualified table names, LIMIT mandatory). Returns up to 500 rows. Only use mart/column names you have already seen via list_marts + describe_mart."
+    description: "Run a single SELECT (PostgreSQL/Trino dialect, fully-qualified table names, LIMIT mandatory). Returns up to 500 rows. Use ONLY mart/column names you have already seen via list_marts + describe_mart — never invent a name. Call this ONLY when the user explicitly asks to run/execute a query. If they only asked to write/place/draft a query in the editor, use write_widget_input with and_run:false instead and do NOT run."
     executor: gateway              # gateway calls /api/sql/execute internally
     parameters:
       type: object
@@ -118,14 +118,14 @@ tools:
     tool_group: interact
     requires:
       widget: ex-sql-editor
-    description: "Replace the contents of an input widget — targets the editor control inside the card (e.g. the SQL Lab textarea on the Export page, widget_id 'ex-sql-editor'). Set and_run:true to also click Run after writing (executes the SQL)."
+    description: "Replace the contents of an input widget — targets the editor control inside the card (e.g. the SQL Lab textarea on the Export page, widget_id 'ex-sql-editor'). Build SQL ONLY from marts/columns seen via list_marts + describe_mart — never invent a name. DEFAULT to and_run:false: this just PLACES the SQL and clicks nothing — use it when the user says write/place/put/draft, then STOP (do not call run_sql, do not report a result). Set and_run:true to also click Run (executes the SQL) ONLY when the user explicitly asks to run/execute. Call this LAST — never navigate_to_page after writing, it re-mounts the page and wipes the editor."
     executor: spa
     parameters:
       type: object
       properties:
         widget_id: {type: string}
         value:     {type: string}
-        and_run:   {type: boolean, description: "if true, click the widget's Run button after writing (runs the SQL)"}
+        and_run:   {type: boolean, description: "omit or false = only place the SQL, run nothing (use when asked to write/place/draft); true = click Run after writing (use ONLY when explicitly asked to run/execute)"}
       required: [widget_id, value]
 
   - id: scroll_to_widget
