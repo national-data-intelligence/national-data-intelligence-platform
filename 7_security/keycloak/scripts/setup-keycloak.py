@@ -897,6 +897,20 @@ def main() -> int:
     for c in DASHBOARD_CLIENTS:
         configure_client(token, c)
 
+    # privileged-ops has no profile/email/nhdw-flat-roles client scopes of its
+    # own — they are copied from moh-staff here. This MUST run BEFORE the tool +
+    # gate confidential clients below: each of those calls
+    # ensure_default_client_scopes([basic, profile, email, nhdw-flat-roles]) and
+    # can only assign scopes that already EXIST in the realm. Running it late
+    # (after the tool clients) left every privileged-ops tool client with `basic`
+    # only, so a super-user login to e.g. dbt-docs requested `openid profile
+    # email` and Keycloak rejected it with invalid_scope → "missing code/state".
+    # Dashboard clients already exist by now, so configure_realm_scopes' own
+    # client-assignment step still lands.
+    print("\n▸ realm client scopes (privileged-ops: copy profile/email/roles from moh-staff)")
+    for realm in ("privileged-ops",):
+        configure_realm_scopes(token, realm)
+
     print(f"\n▸ tool clients ({len(TOOL_CLIENTS)})")
     for c in TOOL_CLIENTS:
         configure_confidential_client(token, c)
@@ -921,10 +935,6 @@ def main() -> int:
 
     print("\n▸ password-only admin realm (strip any brokered IdP from privileged-ops)")
     ensure_no_brokers(token, "privileged-ops")
-
-    print("\n▸ realm client scopes (fix privileged-ops admin login)")
-    for realm in ("privileged-ops",):
-        configure_realm_scopes(token, realm)
 
     print("\n▸ idp_trust claim (P1.3 trust guard) — nhdw-flat-roles scope, both realms")
     for realm in ("moh-staff", "privileged-ops"):
