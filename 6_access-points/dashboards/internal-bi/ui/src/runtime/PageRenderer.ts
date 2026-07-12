@@ -254,7 +254,13 @@ function renderSection(section: ResolvedSection, page: ResolvedPage, mount: HTML
   // Cascades) keep a section-like vertical cadence instead of cramming rows 16px apart.
   grid.style.columnGap = '1rem';
   grid.style.rowGap = '1.4rem';
-  grid.style.alignItems = 'stretch';
+  // X9: 'start' (not 'stretch') so a short card keeps its NATURAL height instead
+  // of stretching to match its tallest row-neighbour and showing a big internal
+  // void. Widgets carry intrinsic heights (charts via bindAspect, the 380px table
+  // scroll box, KPI tiles), so nothing collapses; ragged bottoms read as a natural
+  // masonry rather than empty stretched cards. Per-section row_span tuning is a
+  // separate follow-up for the remaining grid-track whitespace.
+  grid.style.alignItems = 'start';
   band.appendChild(grid);
 
   // ── Cards + managed mounts ────────────────────────────────────────────────
