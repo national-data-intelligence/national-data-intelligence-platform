@@ -63,7 +63,10 @@ NUM_CTX     = int(os.environ.get("NHDW_LLM_NUM_CTX", "8192"))
 KEEP_ALIVE  = os.environ.get("NHDW_LLM_KEEP_ALIVE", "30m")
 MAX_HISTORY = int(os.environ.get("NHDW_CHAT_MAX_HISTORY", "8"))
 MAX_ROUNDS  = int(os.environ.get("NHDW_CHAT_MAX_ROUNDS", "8"))
-LLM_TIMEOUT = float(os.environ.get("NHDW_CHAT_HTTP_TIMEOUT_S", "60"))
+# 180s (not 60): the external ollama may be COLD on the first request after an
+# idle period — loading a 14B model into VRAM before it can generate can exceed
+# 60s, which otherwise surfaces to the SPA as a misleading "model unreachable".
+LLM_TIMEOUT = float(os.environ.get("NHDW_CHAT_HTTP_TIMEOUT_S", "180"))
 SESSION_TTL_S = 300
 
 # Per-dashboard chat config lives next to this endpoint (the gateway is

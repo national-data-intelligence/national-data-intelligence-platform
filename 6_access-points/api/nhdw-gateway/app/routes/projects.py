@@ -257,6 +257,62 @@ async def create_project(
     return out
 
 
+# ── clone ──────────────────────────────────────────────────────────────────
+@router.post("/{project_id}/clone", status_code=201)
+async def clone_project(project_id: str,
+                        user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    """Copy a project you can SEE into a NEW PRIVATE project you own — files and
+    all. This is how you work on a PUBLIC project owned by someone else without
+    opening a lab on their shared file space (labs sync to the project's ONE
+    MinIO prefix, so two people on the same project would clobber each other).
+    Group projects intentionally share files, so members open them directly and
+    don't need this."""
+    if not user.kc_sub:
+        raise HTTPException(401, "authenticated session required")
+    await ops_db.upsert_user(user)
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        src = await _fetch_visible(conn, project_id, user.kc_sub)
+        if src is None:
+            raise HTTPException(404, "project not found")
+        new_pid = str(uuid4())
+        new_name = f"Copy of {src['name']}"[:120]
+        slug = _slugify(new_name, new_pid)
+        row = await conn.fetchrow("""
+            INSERT INTO ops_workspace.project
+                (id, slug, name, owner_kc_sub, visibility, description, created_at, updated_at)
+            VALUES ($1::uuid, $2, $3, $4::uuid, 'private', $5, now(), now())
+            RETURNING *,
+                (SELECT username FROM ops_identity."user" WHERE kc_sub = $4::uuid) AS owner_username;
+        """, new_pid, slug, new_name, user.kc_sub, src["description"])
+
+    # Copy the source's files/ tree into the clone's prefix (best-effort).
+    src_prefix, dst_prefix = _files_prefix(project_id), _files_prefix(new_pid)
+    copied = 0
+    try:
+        objs = await minio_client.list_prefix(prefix=src_prefix, bucket=PROJECTS_BUCKET)
+        for o in objs:
+            k = o["key"]
+            if k == src_prefix:
+                continue
+            await minio_client.copy_object(src_key=k, dst_key=dst_prefix + k[len(src_prefix):],
+                                           bucket=PROJECTS_BUCKET, src_bucket=PROJECTS_BUCKET)
+            copied += 1
+        if not copied:
+            await minio_client.ensure_prefix(prefix=dst_prefix, bucket=PROJECTS_BUCKET)
+    except Exception as exc:                                        # noqa: BLE001
+        log.warning("clone %s→%s: MinIO copy failed: %s", project_id, new_pid, exc)
+
+    await _create_experiment(new_pid)
+    await ops_db.log_data_event(user=user, kind="project.cloned",
+                                payload={"source": project_id, "project_id": new_pid, "files": copied})
+    out = _row_out(row)
+    out["files_prefix"] = dst_prefix
+    out["cloned_from"] = project_id
+    out["files_copied"] = copied
+    return out
+
+
 # ── list ─────────────────────────────────────────────────────────────────
 @router.get("")
 async def list_projects(
