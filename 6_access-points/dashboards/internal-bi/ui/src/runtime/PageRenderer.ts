@@ -32,7 +32,7 @@ import { getWidgetDef } from './registry';
 import { resolveTheme } from './theme';
 import { filterBus } from './filterBus';
 import { fetchWidgetData, fetchEntity } from './dataHook';
-import { GLOBAL_DIMS, isWidgetHiddenAtScope, packRows, filterParamsForWidget } from './reactivity';
+import { GLOBAL_DIMS, isWidgetHiddenAtScope, packRows, filterParamsForWidget, effectiveReactsTo } from './reactivity';
 import { host } from './host';
 
 /** Section-id slug → sprite icon (docs/final-mockkups: section markers are icons, not ①②③). */
@@ -114,7 +114,7 @@ export function mountWidgetManaged(
         // data (gated by reactsTo ∩ supports; national/opted-out widgets inject
         // nothing). Server caps every value against role_scope ∩ user_scope, so
         // this can only intersect a role's scope. Widget-supplied params win.
-        const reacts = (d.reactsTo && d.reactsTo.length) ? d.reactsTo : (widget.reacts_to || []);
+        const reacts = effectiveReactsTo(d.reactsTo, widget.reacts_to, widget.supports);
         return fetchWidgetData(widget.data_url,
           { ...filterParamsForWidget(widget, reacts, filterBus.get()), ...params });
       },
@@ -139,7 +139,7 @@ export function mountWidgetManaged(
     if (disposed) return;
     started = d;
     if (!isHidden?.()) draw(d);
-    const reacts = (d.reactsTo && d.reactsTo.length) ? d.reactsTo : (widget.reacts_to || []);
+    const reacts = effectiveReactsTo(d.reactsTo, widget.reacts_to, widget.supports);
     unsub = reacts.length
       ? filterBus.subscribe(reacts, () => {
           if (disposed || isHidden?.()) return;   // hidden → defer; notifyShown redraws

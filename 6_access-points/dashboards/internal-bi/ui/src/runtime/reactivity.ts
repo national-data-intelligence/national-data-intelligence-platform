@@ -75,6 +75,24 @@ export function filterParamsForWidget(
 }
 
 /**
+ * The dims a widget re-fetches / re-renders on when a filter changes. An explicit
+ * reactsTo (WidgetDef.reactsTo, else the catalog reacts_to) wins; otherwise DEFAULT
+ * to the dims the widget's fetcher SUPPORTS. This is what makes a widget that
+ * declared no reactsTo still adapt to the filters it can honour — the root fix for
+ * "some widgets don't react at all". Unbound widgets (supports == null) react to
+ * nothing, correctly.
+ */
+export function effectiveReactsTo(
+  reactsTo: readonly string[] | undefined,
+  catalogReacts: readonly string[] | undefined,
+  supports: Record<string, boolean> | null | undefined,
+): string[] {
+  if (reactsTo && reactsTo.length) return [...reactsTo];
+  if (catalogReacts && catalogReacts.length) return [...catalogReacts];
+  return supports ? GLOBAL_DIMS.filter(d => supports[d] === true) : [];
+}
+
+/**
  * Grid redistribution — pack widgets greedily into rows by their DECLARED
  * col_span (a widget that would overflow the row starts the next one), then
  * grow each underfilled row's widgets PROPORTIONALLY to their declared spans
