@@ -90,6 +90,23 @@
   --font-sans:'Inter','system-ui',-apple-system,sans-serif;
   --font-mono:'JetBrains Mono','Menlo',monospace;
 
+  /* ── Type ramp — single canonical scale for headings/labels. Values map
+       1:1 to the current look (h1 2.0 / h2 1.5 / h3 1.20 / h4 1.02rem), so
+       this is consolidation, not a resize. Reference these instead of ad-hoc
+       rem sizes. Widgets migrate in a later step — for now only the base
+       heading rules below consume the ramp. ── */
+  --fs-2xs: 0.72rem;   /* captions, eyebrows, table headers, pills */
+  --fs-xs:  0.78rem;   /* small labels, sub-text */
+  --fs-sm:  0.84rem;   /* body-small, table cells */
+  --fs-md:  0.92rem;   /* default control / field text */
+  --fs-lg:  1.02rem;   /* h4, lead body */
+  --fs-xl:  1.20rem;   /* h3, section titles */
+  --fs-2xl: 1.50rem;   /* h2 */
+  --fs-3xl: 2.00rem;   /* h1 */
+  /* consistent heading treatment — every heading shares one weight + tracking */
+  --fw-heading: 600;
+  --tracking-heading: -0.01em;
+
   /* ── NEW canonical warm tokens (for Phase 3 component restyles) ── */
   --brown:      #9a6a3a;
   --brown-dark: #6f4a2e;
@@ -159,11 +176,11 @@ body {
 a { color: var(--navy-700); text-decoration: none; }
 a:hover { color: var(--navy-500); }
 
-h1,h2,h3,h4 { font-family:var(--font-serif); color:var(--ink); font-weight:600; letter-spacing:-0.01em; margin:0; }
-h1 { font-size: 2.0rem; }
-h2 { font-size: 1.5rem; }
-h3 { font-size: 1.20rem; }
-h4 { font-size: 1.02rem; }
+h1,h2,h3,h4 { font-family:var(--font-serif); color:var(--ink); font-weight:var(--fw-heading); letter-spacing:var(--tracking-heading); margin:0; }
+h1 { font-size: var(--fs-3xl); }
+h2 { font-size: var(--fs-2xl); }
+h3 { font-size: var(--fs-xl); }
+h4 { font-size: var(--fs-lg); }
 p  { margin:0; color:var(--ink-2); }
 .eyebrow { font-family: var(--font-sans); font-size:0.74rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-4); }
 code, pre { font-family: var(--font-mono); font-size: 0.85em; background: #f1f5f9; padding: 1px 5px; border-radius: 3px; }
