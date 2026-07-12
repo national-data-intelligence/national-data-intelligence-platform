@@ -374,6 +374,18 @@ bash "$SCRIPTS/seed-projects.sh" || { echo; echo "✗ projects/datasets seed FAI
 step "7.57 · resource-request seed (real /api/workspace/resource-request + decide APIs)"
 bash "$SCRIPTS/seed-resource-requests.sh" || { echo; echo "✗ resource-request seed FAILED — the compute review queue is not demoable. See the errors above."; exit 1; }
 
+# ─── 7.58 · model-projects seed (platform models → approved public projects) ──
+# Makes each of the 5 PLATFORM ML models (already trained + integrated by the ML
+# seed 7.5) a full, approved workshop PROJECT — a project row + its package files
+# + a kind='model' artifact bound to the EXISTING MLflow model + an approved
+# review record — by driving the real POST /api/graduation/.../adopt-model
+# endpoint (never by INSERTing rows; it re-uses the integrated model, never
+# re-trains). Runs AFTER the ML (7.5) + projects (7.55) seeds so the models +
+# project APIs exist, and BEFORE the community graduation demo (7.6). Convergent;
+# a failure means the platform models have no project home, so gate the boot.
+step "7.58 · model-projects seed (bundle/seeds/ml → real adopt-model API)"
+bash "$SCRIPTS/seed-model-projects.sh" || { echo; echo "✗ model-projects seed FAILED — the platform models have no project home. See the errors above."; exit 1; }
+
 # ─── 7.6 · graduation seed (PROJECT-centric review flow, real gateway API) ───
 # Populates the project-review lifecycle HONESTLY — drives the same
 # submit / approve / reject endpoints a contributor + reviewer use, never by

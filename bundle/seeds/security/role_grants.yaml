@@ -236,9 +236,13 @@
     - sv-risk-woredas
     - sv-topline-kpis
     workshop:
-    - ws-sandbox
-    - ws-orientation
-    - ws-groups
+    - ws-running-labs
+    - ws-stats
+    - ws-group-inbox
+    - ws-my-groups
+    - ws-groups-discover
+    - ws-group-sent
+    - ws-group-invite
     - ws-dataset-builder
     - ws-datasets-table
     - ws-models-table
@@ -266,9 +270,13 @@
     - pub-region
     - pub-supply
     workshop:
-    - ws-sandbox
-    - ws-orientation
-    - ws-groups
+    - ws-running-labs
+    - ws-stats
+    - ws-group-inbox
+    - ws-my-groups
+    - ws-groups-discover
+    - ws-group-sent
+    - ws-group-invite
     - ws-dataset-builder
     - ws-datasets-table
     - ws-models-table
@@ -296,9 +304,13 @@
     - pub-region
     - pub-supply
     workshop:
-    - ws-sandbox
-    - ws-orientation
-    - ws-groups
+    - ws-running-labs
+    - ws-stats
+    - ws-group-inbox
+    - ws-my-groups
+    - ws-groups-discover
+    - ws-group-sent
+    - ws-group-invite
     - ws-dataset-builder
     - ws-datasets-table
     - ws-models-table
@@ -492,9 +504,13 @@
     - sv-compliance
     - sv-flagship-table
     workshop:
-    - ws-sandbox
-    - ws-orientation
-    - ws-groups
+    - ws-running-labs
+    - ws-stats
+    - ws-group-inbox
+    - ws-my-groups
+    - ws-groups-discover
+    - ws-group-sent
+    - ws-group-invite
     - ws-dataset-builder
     - ws-datasets-table
     - ws-models-table

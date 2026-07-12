@@ -245,7 +245,7 @@ fi
 #                            NOT take at initdb on a fresh boot (11/27 split), so
 #                            the runner's write_drift hit UndefinedColumn 'kind'.
 #                            Runs BEFORE seed-ml (7.5), so drift/score work. Idempotent.
-for mig in 22_project.sh 26_artifact_project.sh 28_dataset_project_link.sh 29_project_review.sh 27_ml_monitoring.sh; do
+for mig in 22_project.sh 26_artifact_project.sh 28_dataset_project_link.sh 29_project_review.sh 27_ml_monitoring.sh 33_workshop_group_flows.sh; do
   echo "▸ [ops-migration] ${mig}"
   if kubectl -n "$NS" exec -i postgres-vault-0 -- \
         env POSTGRES_USER=vault_admin OPS_DB_NAME="$OPS_DB" PGPASSWORD="$PGADMIN_PW" \
@@ -256,6 +256,16 @@ for mig in 22_project.sh 26_artifact_project.sh 28_dataset_project_link.sh 29_pr
     FAILED=1
   fi
 done
+
+# ── group invite/request DEMO content (after 33 tables + 15 groups exist) ────
+echo "▸ [workshop-group-flows] 34_workshop_group_flows_seed.sh"
+if kubectl -n "$NS" exec -i postgres-vault-0 -- \
+      env POSTGRES_USER=vault_admin OPS_DB_NAME="$OPS_DB" PGPASSWORD="$PGADMIN_PW" \
+      bash -s < "$REPO/3_storage/postgres/init/34_workshop_group_flows_seed.sh" >/dev/null 2>&1; then
+  echo "  ✓ group invite/request demo content seeded"
+else
+  echo "  ! group-flow demo seed skipped (non-fatal)"
+fi
 
 if [ "${FAILED:-0}" -ne 0 ]; then
   echo "== app/security seeding FAILED (see ✗ above) =="
