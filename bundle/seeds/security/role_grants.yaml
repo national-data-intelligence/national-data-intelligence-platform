@@ -19,11 +19,9 @@
     - dz-outbreaks-table
     - dz-region-map
     - dz-risk-bands
-    - dz-forecast-backtest
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
-    - dz-zscore-grid
     - ex-audit-trail
     - ex-saved-queries
     - ex-sql-editor
@@ -53,8 +51,6 @@
     - rm-act-week
     - rm-hotspots
     - rm-map
-    - rm-order-next
-    - rm-pipeline
     - rm-statboard
     - rm-stock-heatmap
     - rm-stockout-impact
@@ -98,7 +94,6 @@
     - dz-outbreaks-table
     - dz-region-map
     - dz-risk-bands
-    - dz-forecast-backtest
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
@@ -117,8 +112,6 @@
     - rm-act-week
     - rm-hotspots
     - rm-map
-    - rm-order-next
-    - rm-pipeline
     - rm-statboard
     - rm-stock-heatmap
     - rm-workforce
@@ -186,11 +179,9 @@
     - dz-outbreaks-table
     - dz-region-map
     - dz-risk-bands
-    - dz-forecast-backtest
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
-    - dz-zscore-grid
     - ex-audit-trail
     - ex-saved-queries
     - ex-sql-editor
@@ -220,8 +211,6 @@
     - rm-act-week
     - rm-hotspots
     - rm-map
-    - rm-order-next
-    - rm-pipeline
     - rm-statboard
     - rm-stock-heatmap
     - rm-stockout-impact
@@ -367,11 +356,9 @@
     - dz-outbreaks-table
     - dz-region-map
     - dz-risk-bands
-    - dz-forecast-backtest
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
-    - dz-zscore-grid
     - ex-audit-trail
     - ex-saved-queries
     - ex-sql-editor
@@ -391,8 +378,6 @@
     - rm-act-week
     - rm-hotspots
     - rm-map
-    - rm-order-next
-    - rm-pipeline
     - rm-statboard
     - rm-stockout-impact
     - rm-wastage
@@ -472,11 +457,9 @@
     - dz-outbreaks-table
     - dz-region-map
     - dz-risk-bands
-    - dz-forecast-backtest
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
-    - dz-zscore-grid
     - ex-audit-trail
     - ex-saved-queries
     - ex-sql-editor
@@ -495,7 +478,6 @@
     - rm-act-week
     - rm-hotspots
     - rm-map
-    - rm-order-next
     - rm-statboard
     - rm-stock-heatmap
     - rm-workforce

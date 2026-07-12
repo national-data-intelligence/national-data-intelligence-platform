@@ -86,7 +86,7 @@ const PERIOD_OPTS = { 'all':'All time','last_4wk':'Last 4 weeks','last_12wk':'La
 
 function biApp() {
   return {
-    active: 'disease',
+    active: 'overview',
     pages: [
       {id: 'overview', ico: 'i-grid',         title: 'Overview'},
       {id: 'disease',  ico: 'i-alert',        title: 'Disease Surveillance'},

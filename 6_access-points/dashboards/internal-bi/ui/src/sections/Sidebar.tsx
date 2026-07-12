@@ -46,9 +46,6 @@ export default function Sidebar() {
         </a>
       </div>
 
-      <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', margin: '0.9rem 0 0.2rem',
-        fontSize: '0.8rem', fontWeight: 500, color: 'var(--nav-muted, rgba(255,255,255,0.55))' }}>← Back to portal</a>
-
       <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
         color: 'rgba(255,255,255,0.4)', margin: '1rem 0 0.4rem' }}>Dashboards</div>
 

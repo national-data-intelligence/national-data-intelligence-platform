@@ -50,7 +50,7 @@ const check = (c, l) => { console.log((c ? '  ✓ ' : '  ✗ ') + l); if (!c) fa
       noRenderer: document.body.innerText.includes('No renderer registered'),
       widgets: {
         kpi: w('dz-kpi-strip'), risk: w('dz-risk-bands'), map: w('dz-region-map'),
-        woreda: w('dz-woreda-table'), signal: w('dz-signal-chart'), zscore: w('dz-zscore-grid'),
+        woreda: w('dz-woreda-table'), signal: w('dz-signal-chart'),
         outbreaks: w('dz-outbreaks-table'), climTs: w('dz-climate-ts'), climCorr: w('dz-climate-corr'),
       },
     };
@@ -66,7 +66,6 @@ const check = (c, l) => { console.log((c ? '  ✓ ' : '  ✗ ') + l); if (!c) fa
   check(W.map.present && W.map.canvas && !W.map.empty, `dz-region-map choropleth drawn (canvas=${W.map.canvas})`);
   check(W.woreda.present && W.woreda.rows > 0 && !W.woreda.empty, `dz-woreda-table real rows (${W.woreda.rows})`);
   check(W.signal.present && W.signal.canvas && !W.signal.empty, `dz-signal-chart band drawn (canvas=${W.signal.canvas})`);
-  check(W.zscore.present && W.zscore.canvas && !W.zscore.empty, `dz-zscore-grid heatmap drawn (canvas=${W.zscore.canvas})`);
   check(W.outbreaks.present && (W.outbreaks.rows > 0 || W.outbreaks.empty), `dz-outbreaks-table rows or honest empty (${W.outbreaks.rows} rows${W.outbreaks.empty ? ', empty' : ''})`);
   check(W.climTs.present && (W.climTs.canvas || W.climTs.empty), `dz-climate-ts drawn or honest empty (canvas=${W.climTs.canvas})`);
   check(W.climCorr.present && (W.climCorr.canvas || W.climCorr.empty), `dz-climate-corr drawn or honest empty (canvas=${W.climCorr.canvas})`);

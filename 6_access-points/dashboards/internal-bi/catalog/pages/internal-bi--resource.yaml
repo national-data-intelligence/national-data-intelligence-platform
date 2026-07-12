@@ -10,4 +10,3 @@ sections:
 - internal-bi/resource/supply-stress-geography
 - internal-bi/resource/commodity-detail
 - internal-bi/resource/stockout-impact-service
-- internal-bi/resource/procurement

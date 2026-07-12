@@ -393,41 +393,6 @@ FETCHERS: dict[str, Fetcher] = {
             f"FROM obs o FULL JOIN pred pr ON pr.disease = o.disease_code "
             f"AND pr.year = o.year AND pr.week = o.week "
             f"ORDER BY 1, 3, 4")),
-    # Risk calendar: disease × week grid of alarm probability (id kept for the
-    # seeded widget registry; the z-score semantics are replaced by alarm_prob).
-    # Cross-disease anomaly grid (friend contract: disease, region, z_score,
-    # thin_baseline). The anomaly z is the EARS-style standardised exceedance of
-    # the latest observed week over the model's forecast for the same disease×
-    # region: z = (observed − pred_mean) / σ, with σ derived from the forecast's
-    # 95% band ((upr95 − mean)/1.96, floored so a near-zero band can't blow up).
-    # thin_baseline flags cells backed by < 4 woreda-forecasts (preliminary).
-    "dz-zscore-grid": Fetcher(
-        schema="bi_idsr", table="mart_idsr_disease_weekly",
-        subject="PRG", data_class="DC.PRO",
-        geo_col="region_id", prog_col="programme_id", period_col="week_start",
-        params_spec={"model": Param("ears", DZ_MODELS)},
-        sql=lambda t, w, p: (
-            f"WITH b AS (SELECT * FROM {t}{w}), "
-            f"mx AS (SELECT max(week_start) AS m FROM b), "
-            f"labels AS (SELECT disease_code, max(disease_label) AS disease_label FROM b GROUP BY 1), "
-            f"scope AS (SELECT DISTINCT woreda_uid, region_id, disease_code FROM b), "
-            f"obs AS (SELECT b.region_id, b.disease_code, sum(b.new_cases) AS obs "
-            f"FROM b CROSS JOIN mx WHERE b.week_start = mx.m GROUP BY 1, 2), "
-            f"ml AS ({_ml_latest_run(p['model'])}), "
-            f"mlx AS (SELECT max(year * 100 + week) AS yw FROM ml), "
-            f"pr AS (SELECT s.region_id, m.disease AS disease_code, "
-            f"sum(m.pred_cases_mean) AS pred, "
-            f"sqrt(sum(power(GREATEST(m.pred_cases_upr95 - m.pred_cases_mean, 0.5) / 1.96, 2))) AS sigma, "
-            f"count(*) AS n "
-            f"FROM ml m CROSS JOIN mlx "
-            f"JOIN scope s ON s.woreda_uid = m.district AND s.disease_code = m.disease "
-            f"WHERE m.year * 100 + m.week = mlx.yw GROUP BY 1, 2) "
-            f"SELECT l.disease_label AS disease, pr.region_id AS region, "
-            f"round((COALESCE(o.obs, 0) - pr.pred) / NULLIF(pr.sigma, 0), 2) AS z_score, "
-            f"(pr.n < 4) AS thin_baseline "
-            f"FROM pr JOIN labels l ON l.disease_code = pr.disease_code "
-            f"LEFT JOIN obs o ON o.region_id = pr.region_id AND o.disease_code = pr.disease_code "
-            f"ORDER BY 1, 2")),
     # Risk map: region grain — latest-week observed totals + peak alarm
     # probability. ?metric=cases|alarm_prob picks the choropleth value column.
     # Region choropleth (friend contract: region, burden_incidence_100k,
@@ -567,45 +532,6 @@ FETCHERS: dict[str, Fetcher] = {
             f"CAST(count(*) FILTER (WHERE cmp.cur_b > cmp.prv_b) "
             f"- count(*) FILTER (WHERE cmp.cur_b < cmp.prv_b) AS bigint) AS net_escalations "
             f"FROM cmp CROSS JOIN rep GROUP BY 1, 2, 3")),
-
-    # dz-forecast-backtest: does the EWARS forecast EARN trust? Federated
-    # Trino join across the ML registry (ops.ops_ml.ml_predictions — every
-    # historical alarm the model raised) and observed surveillance
-    # (marts.bi_idsr.mart_idsr_disease_weekly): per region, alarms that
-    # MATERIALIZED (observed cases exceeded the model's own endemic mean+2sd
-    # in that woreda-week) vs false alarms vs misses → precision/recall a
-    # programme officer can hold the model to. ?model= picks the engine.
-    "dz-forecast-backtest": Fetcher(
-        schema="bi_idsr", table="mart_idsr_disease_weekly",
-        subject="PRG", data_class="DC.PRO",
-        geo_col="region_id", prog_col="programme_id", period_col="week_start",
-        params_spec={"model": Param("ears", DZ_MODELS)},
-        sql=lambda t, w, p: (
-            f"WITH b AS (SELECT * FROM {t}{w}), "
-            f"obs AS (SELECT region_id, woreda_uid, disease_code, "
-            f"CAST(substr(iso_week, 1, 4) AS integer) AS yr, "
-            f"CAST(substr(iso_week, 7, 2) AS integer) AS wk, "
-            f"sum(new_cases) AS cases FROM b GROUP BY 1, 2, 3, 4, 5), "
-            f"pred AS (SELECT district, disease, year, week, alarm_flag, endemic_mean, endemic_sd "
-            f"FROM ops.ops_ml.ml_predictions WHERE model_name = '{p['model']}'), "
-            f"joined AS (SELECT o.region_id, "
-            f"CASE WHEN pr.alarm_flag = 1 AND o.cases > pr.endemic_mean + 2 * pr.endemic_sd THEN 'hit' "
-            f"WHEN pr.alarm_flag = 1 THEN 'false_alarm' "
-            f"WHEN o.cases > pr.endemic_mean + 2 * pr.endemic_sd THEN 'miss' "
-            f"ELSE 'quiet' END AS outcome "
-            f"FROM obs o JOIN pred pr ON pr.district = o.woreda_uid "
-            f"AND pr.disease = o.disease_code AND pr.year = o.yr AND pr.week = o.wk) "
-            f"SELECT region_id, "
-            f"CAST(count(*) FILTER (WHERE outcome = 'hit') AS bigint) AS hits, "
-            f"CAST(count(*) FILTER (WHERE outcome = 'false_alarm') AS bigint) AS false_alarms, "
-            f"CAST(count(*) FILTER (WHERE outcome = 'miss') AS bigint) AS misses, "
-            f"round(100.0 * count(*) FILTER (WHERE outcome = 'hit') "
-            f"/ nullif(count(*) FILTER (WHERE outcome IN ('hit', 'false_alarm')), 0), 1) AS precision_pct, "
-            f"round(100.0 * count(*) FILTER (WHERE outcome = 'hit') "
-            f"/ nullif(count(*) FILTER (WHERE outcome IN ('hit', 'miss')), 0), 1) AS recall_pct "
-            f"FROM joined GROUP BY region_id "
-            f"HAVING count(*) FILTER (WHERE outcome <> 'quiet') > 0 "
-            f"ORDER BY region_id")),
 
     # dz-malaria-kpi: the HLR Table 7 malaria MVP KPIs as a monthly series —
     # test-positivity (microscopy+RDT split), confirmed per 1,000, ITN/IRS
@@ -814,21 +740,6 @@ FETCHERS: dict[str, Fetcher] = {
             f"SELECT commodity_name AS commodity, CAST(projected_days_remaining AS bigint) AS days_left, "
             f"0 AS floor_days, 90 AS horizon_days FROM {t}{w} "
             f"ORDER BY projected_days_remaining, commodity_name LIMIT 12")),
-    # rm-order-next (friend contract). days_left + urgency real from the forecast;
-    # suggested_order/estimated_cost_etb/lead_time_* HONEST NULL (no procurement/
-    # pricing/lead-time feed — the handoff flags "Raise PO" as inert until one lands).
-    # period HIDDEN: same single-as_of forecast snapshot as rm-forecast.
-    "rm-order-next": Fetcher(
-        schema="bi_supply", table="mart_supply_stockout_forecast",
-        subject="PRD", data_class="DC.STK", geo_col=None,
-        sql=lambda t, w: (
-            f"SELECT commodity_name AS commodity, CAST(projected_days_remaining AS bigint) AS days_left, "
-            f"CAST(NULL AS double) AS national_coverage_pct, CAST(NULL AS bigint) AS regions_covered, "
-            f"CAST(NULL AS bigint) AS suggested_order, CAST(NULL AS double) AS estimated_cost_etb, "
-            f"CAST(NULL AS bigint) AS lead_time_days, CAST(NULL AS varchar) AS lead_time_source, "
-            f"CASE WHEN projected_days_remaining < 30 THEN 'Critical' WHEN projected_days_remaining < 60 THEN 'High' ELSE 'Normal' END AS urgency, "
-            f"'Review reorder' AS action FROM {t}{w} "
-            f"ORDER BY projected_days_remaining, commodity_name LIMIT 6")),
     # rm-wastage (friend contract: commodity, wastage_score, use_band). Score =
     # % of received units wasted; band from the score.
     "rm-wastage": Fetcher(
@@ -1000,16 +911,6 @@ FETCHERS["rm-events"] = Fetcher(
         f"months_out, days_out, severity, status "
         f"FROM {t}{w} ORDER BY episode_start_month DESC, region_id, commodity_name, episode_id LIMIT 50"))
 
-# rm-pipeline: open vaccine purchase orders (HCMIS Vaccine.PurchaseOrder).
-# geo_col=region_id → a regional user sees only their hub's orders.
-FETCHERS["rm-pipeline"] = Fetcher(
-    schema="bi_supply", table="mart_supply_pipeline",
-    subject="PRD", data_class="DC.STK", geo_col="region_id",
-    period_col="order_date",                                  # POs ORDERED in window
-    sql=lambda t, w: (
-        f"SELECT po_id AS po_number, commodity_name AS commodity, region_id AS destination, "
-        f"CAST(eta_days AS bigint) AS eta_days, CAST(NULL AS bigint) AS days_vs_need, status "
-        f"FROM {t}{w} ORDER BY eta_days, po_id LIMIT 30"))
 
 
 # ── Overview digest widgets ────────────────────────────────────────────────
@@ -1189,10 +1090,10 @@ FETCHERS["ov-reliability-table"] = Fetcher(
         f"smx AS (SELECT max(month_id) AS m FROM bi_supply.mart_supply_region_stock), "
         f"rdy AS (SELECT s.region_id, round(100.0 * count(*) FILTER (WHERE s.mos >= 1) / nullif(count(*), 0), 1) AS readiness "
         f"FROM bi_supply.mart_supply_region_stock s CROSS JOIN smx WHERE s.month_id = smx.m GROUP BY 1) "
-        f"SELECT row_number() OVER (ORDER BY (COALESCE(cvr.coverage_pct, 0) * 0.6 + COALESCE(rdy.readiness, 0) * 0.4) DESC, "
+        f"SELECT row_number() OVER (ORDER BY (COALESCE(cvr.coverage_pct, 0) * 0.40 + COALESCE(cvr.conf, 0) * 0.35 + COALESCE(rdy.readiness, 0) * 0.25) DESC, "
         f"COALESCE(cvr.region_id, rdy.region_id)) AS rank, "
         f"COALESCE(cvr.region_id, rdy.region_id) AS region, "
-        f"round(COALESCE(cvr.coverage_pct, 0) * 0.6 + COALESCE(rdy.readiness, 0) * 0.4, 1) AS composite_score, "
+        f"round(COALESCE(cvr.coverage_pct, 0) * 0.40 + COALESCE(cvr.conf, 0) * 0.35 + COALESCE(rdy.readiness, 0) * 0.25, 1) AS composite_score, "
         f"cvr.coverage_pct, cvr.conf AS coverage_confidence_pct, rdy.readiness AS commodity_readiness_pct, "
         f"'Unweighted' AS pop_weight_status "
         f"FROM cvr FULL JOIN rdy ON rdy.region_id = cvr.region_id ORDER BY rank LIMIT 15"))

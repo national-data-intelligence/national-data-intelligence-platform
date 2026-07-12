@@ -255,6 +255,38 @@ export default function ChatbotPanel() {
   );
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Minimal, XSS-safe markdown for assistant messages: escape first, THEN apply
+// bold / italic / inline-code / fenced-code / links / lists / line-breaks.
+// No external lib (offline cluster — no CDN). Fixes literal ** and ` showing up.
+function mdToHtml(src: string): string {
+  const blocks: string[] = [];
+  let s = escapeHtml(src).replace(/```([\s\S]*?)```/g, (_m, code) => {
+    blocks.push('<pre class="ai-code">' + String(code).replace(/^\n/, '') + '</pre>');
+    return '@@CB' + (blocks.length - 1) + '@@';
+  });
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>')
+       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+       .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+       .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+       .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const out: string[] = [];
+  let ul = false, ol = false;
+  const close = () => { if (ul) { out.push('</ul>'); ul = false; } if (ol) { out.push('</ol>'); ol = false; } };
+  for (const ln of s.split('\n')) {
+    const mu = ln.match(/^\s*[-*]\s+(.*)$/), mo = ln.match(/^\s*\d+\.\s+(.*)$/);
+    if (mu) { if (!ul) { close(); out.push('<ul>'); ul = true; } out.push('<li>' + mu[1] + '</li>'); }
+    else if (mo) { if (!ol) { close(); out.push('<ol>'); ol = true; } out.push('<li>' + mo[1] + '</li>'); }
+    else if (ln.trim() === '') { close(); }
+    else { close(); out.push('<div>' + ln + '</div>'); }
+  }
+  close();
+  return out.join('').replace(/@@CB(\d+)@@/g, (_m, i) => blocks[Number(i)]);
+}
+
 function Turn({ t }: { t: ChatTurn }) {
   if (t.who === 'user') {
     return <div className="ai-msg user">{t.text}</div>;
@@ -264,7 +296,7 @@ function Turn({ t }: { t: ChatTurn }) {
   }
   return (
     <>
-      <div className="ai-msg bot">{t.text}</div>
+      <div className="ai-msg bot" dangerouslySetInnerHTML={{ __html: mdToHtml(t.text) }} />
       {(t.tool_calls || []).length > 0 && (
         <details className="ai-tool-calls">
           <summary>{t.tool_calls!.length} tool call{t.tool_calls!.length > 1 ? 's' : ''}</summary>

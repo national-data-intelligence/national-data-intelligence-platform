@@ -1,8 +1,0 @@
-id: rm-order-next
-title: Order Next
-kind: table
-requires:
-  subject: PRD
-  verb: read
-  granularity: aggregate
-  sensitivity: default
