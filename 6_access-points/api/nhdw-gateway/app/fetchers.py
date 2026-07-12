@@ -1033,15 +1033,18 @@ FETCHERS["ov-benchmarks"] = Fetcher(
     subject="PRG", data_class="DC.PRF", geo_col="region_id",
     sql=lambda t, w: (
         f"WITH f AS (SELECT * FROM {t}{w}), "
-        f"fs AS (SELECT count(*) AS facilities, count(*) FILTER (WHERE reporting_status = 'online') AS reporting, "
-        f"count(DISTINCT region_id) AS regions FROM f), "
-        f"pop AS (SELECT sum(population) AS population FROM bi_facility.mart_health_workforce) "
+        f"fs AS (SELECT count(*) AS facilities, count(DISTINCT region_id) AS regions, "
+        f"count(DISTINCT woreda) AS woredas FROM f), "
+        # Population MUST react to the region filter: sum only the regions present
+        # in the (region-filtered) facility set, not the national total.
+        f"pop AS (SELECT sum(population) AS population FROM bi_facility.mart_health_workforce "
+        f"WHERE region_id IN (SELECT DISTINCT region_id FROM f)) "
         f"SELECT icon, value, label, note FROM ("
         f"SELECT 1 AS ord, 'building' AS icon, CAST((SELECT facilities FROM fs) AS varchar) AS value, "
-        f"'Facilities' AS label, 'Reporting to DHIS2' AS note "
-        f"UNION ALL SELECT 2, 'users', CAST(CAST(round((SELECT population FROM pop) / 1e6, 1) AS decimal(8,1)) AS varchar) || 'M', 'Population', 'National catchment' "
+        f"'Facilities' AS label, 'On the master registry' AS note "
+        f"UNION ALL SELECT 2, 'users', CAST(CAST(round((SELECT population FROM pop) / 1e6, 1) AS decimal(8,1)) AS varchar) || 'M', 'Population', 'Catchment served' "
         f"UNION ALL SELECT 3, 'map', CAST((SELECT regions FROM fs) AS varchar), 'Regions', 'Administrative regions' "
-        f"UNION ALL SELECT 4, 'check-circle', CAST(round(100.0 * (SELECT reporting FROM fs) / nullif((SELECT facilities FROM fs), 0)) AS varchar) || '%', 'Reporting rate', 'Active this period' "
+        f"UNION ALL SELECT 4, 'map', CAST((SELECT woredas FROM fs) AS varchar), 'Woredas covered', 'Districts with a facility' "
         f") x ORDER BY ord"))
 
 # ov-trust-mapping: facility-registry coverage (% facilities placed in the DHIS2 org

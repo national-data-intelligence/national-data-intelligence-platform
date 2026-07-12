@@ -79,7 +79,7 @@ const def: WidgetDef = {
         ${dot(t.status.good, 'Strong (&gt;70)')}
       </div>`;
     const mount = ctx.el.querySelector<HTMLElement>('.ov-rt-tbl')!;
-    return paginatedTable(mount, shaped, columns, ctx.theme, {});
+    return paginatedTable(mount, shaped, columns, ctx.theme, { search: true, sort: true, pageSize: 12 });
   },
 };
 export default def;
