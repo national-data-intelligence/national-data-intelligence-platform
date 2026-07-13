@@ -95,13 +95,15 @@
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
-    - ov-national-kpis
-    - ov-disease-pulse
-    - ov-disease-outbreaks
-    - ov-resource-status
-    - ov-resource-facilities
-    - ov-service-attainment
-    - ov-service-cascade
+    - ov-brief
+    - ov-benchmarks
+    - ov-reliability-table
+    - ov-act-first-woredas
+    - ov-source-pulse
+    - ov-trust-completeness
+    - ov-trust-mapping
+    - ov-trust-silent
+    - ov-disease-snapshot
     - rm-equipment
     - rm-events
     - rm-facilities
@@ -123,6 +125,7 @@
     - sv-cascade-tb
     - sv-compliance
     - sv-flagship-table
+    - sv-risk-woredas
 - role: R-PD-HIV
   dashboards:
   - public
@@ -143,6 +146,15 @@
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
+    - ov-brief
+    - ov-benchmarks
+    - ov-reliability-table
+    - ov-act-first-woredas
+    - ov-source-pulse
+    - ov-trust-completeness
+    - ov-trust-mapping
+    - ov-trust-silent
+    - ov-disease-snapshot
     - rm-hero
     - rm-statboard
     - rm-stock-heatmap
