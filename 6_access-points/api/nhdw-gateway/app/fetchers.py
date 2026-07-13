@@ -1013,7 +1013,11 @@ FETCHERS["ov-benchmarks"] = Fetcher(
     sql=lambda t, w: (
         f"WITH f AS (SELECT * FROM {t}{w}), "
         f"fs AS (SELECT count(*) AS facilities, count(DISTINCT region_id) AS regions, "
-        f"count(DISTINCT woreda) AS woredas FROM f), "
+        # 'Woredas covered' = distinct facility-parent org units in the DHIS2 path
+        # (/root/region/zone/woreda/facility → strip the leaf). mart_facility_capacity
+        # has no woreda column; the path is the honest woreda signal. Region-reactive
+        # because f is already narrowed by the geography filter.
+        f"count(DISTINCT regexp_replace(dhis2_path, '/[^/]+$', '')) AS woredas FROM f), "
         # Population MUST react to the region filter: sum only the regions present
         # in the (region-filtered) facility set, not the national total.
         f"pop AS (SELECT sum(population) AS population FROM bi_facility.mart_health_workforce "
