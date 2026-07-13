@@ -11,16 +11,16 @@
  *   §1 Roles & grants   — roles master list (left pane) + per-role grants
  *                         view (right pane). The editor replaces/extends
  *                         the right pane.
- *   §2 Policy (OPA)     — enforcement summary + live tester + recent
- *                         decisions (the audited evidence).
- *   §3 Catalogs         — read-only widget & filter catalogs (what is
- *                         grantable); the editor's pickers draw from these.
+ *   §2 Audit trail      — every permission change, the audited evidence.
+ *   §3 Policy (OPA)     — live policy tester (POST /gw/policy/evaluate).
+ * The read-only widget & filter catalogs moved to Dashboard Control
+ * (owner 2026-07-13) — they belong next to the placements they back.
  *
  * Data: /gw/perm-admin/* (catalog, roles, grants, user-roles — every write
- * lands an audit_permission_change row) and /gw/policy/* (recent decisions,
- * live evaluate). All values real; degraded feeds say so.
+ * lands an audit_permission_change row) and /gw/policy/evaluate (live
+ * decision). All values real; degraded feeds say so.
  *
- * Table standard: catalogs + decisions use tableKit (fixed height +
+ * Table standard: roles + audit use tableKit (fixed height +
  * pagination + search/filter controls).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -68,10 +68,10 @@ const OPA_ENFORCED_ROLE_CODES = new Set<string>([
   'R-OPS-ENG', 'R-OPS-ADM', 'R-OPS-SEC', 'R-PUB-ANON',
 ]);
 
-// widget id-prefix → dashboard id. Same convention WidgetCatalogPanel uses,
-// copied here per the repo's copy-not-share rule. The catalog exposes no
-// widget→page placement, so the widget-grant editor groups by DASHBOARD and
-// the gateway expands each grant across that dashboard's pages on save.
+// widget id-prefix → dashboard id. Same convention the Dashboard Control
+// widget-catalog panel uses (copied per the repo's copy-not-share rule). The
+// catalog exposes no widget→page placement, so the widget-grant editor groups
+// by DASHBOARD and the gateway expands each grant across its pages on save.
 const WIDGET_PREFIX_DASHBOARD: Record<string, string> = {
   pub: 'public', ov: 'internal-bi', dz: 'internal-bi', rm: 'internal-bi',
   sv: 'internal-bi', ex: 'internal-bi', st: 'internal-bi', adm: 'admin',
@@ -152,6 +152,13 @@ function RolesGrants({ catalog }: { catalog: api.Catalog | null }) {
     if (selectedId != null) reloadDetail(selectedId);
     else setDetail(null);
   }, [selectedId, reloadDetail]);
+  // Never leave the detail pane empty on load: once the roles arrive and
+  // nothing is selected (and we're not mid-create), auto-select the first one.
+  useEffect(() => {
+    if (!creating && selectedId == null && roles && roles.length > 0) {
+      setSelectedId(roles[0].id);
+    }
+  }, [roles, selectedId, creating]);
 
   function select(id: number) { setCreating(false); setSelectedId(id); }
 
@@ -934,35 +941,6 @@ function fmtAgo(iso: string | null): string {
 }
 
 function PolicyPanel() {
-  // ── Recent decisions table ──────────────────────────────────────────
-  const [rows, setRows]       = useState<policy.PolicyDecisionRow[] | null>(null);
-  const [rowsErr, setRowsErr] = useState<string | null>(null);
-  const [filter, setFilter]   = useState<'' | 'allow' | 'deny'>('');
-
-  const loadRecent = async (f: '' | 'allow' | 'deny') => {
-    setRows(null); setRowsErr(null);
-    try {
-      const data = await policy.fetchRecentDecisions(50, f || undefined);
-      setRows(data);
-    } catch (e: any) {
-      setRowsErr(e.message || String(e));
-    }
-  };
-
-  useEffect(() => { loadRecent(filter); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [filter]);
-
-  const kit = useTableKit(rows, {
-    pageSize: 10,
-    search: r => `${r.kc_sub ?? ''} ${r.action} ${r.resource} ${r.decision} ${r.rule_hits.join(' ')}`,
-    sortVals: {
-      ts: r => r.ts,
-      action: r => r.action,
-      resource: r => r.resource,
-      decision: r => r.decision,
-    },
-    initialSort: { key: 'ts', dir: 'desc' },
-  });
-
   // ── Test-policy evaluator ───────────────────────────────────────────
   const [role, setRole]         = useState(OPA_ROLES[2][0]);      // R-PD-HIV
   const [resource, setResource] = useState(OPA_RESOURCES[0][0]);  // PT
@@ -996,23 +974,7 @@ function PolicyPanel() {
         </div>
       </div>
 
-      <div className="grid grid-2 gap-lg">
-        {/* Honest summary — there is no policy-file listing endpoint, so no fabricated rows. */}
-        <div className="card card-elev">
-          <div className="card-hdr"><h4>Policy enforcement</h4><span className="meta">OPA · query-layer PEP</span></div>
-          <p style={{ fontSize: '0.85rem', lineHeight: 1.6 }}>
-            <svg className="ico"><use href="#i-shield-check" /></svg> Access is enforced by <strong>Open Policy Agent</strong>.
-            Each role is a Rego bundle compiled from its role definition; the gateway asks OPA for a decision on
-            every <code>action × resource</code> and AND-applies the returned row-filter and column-mask obligations
-            to the live query.
-          </p>
-          <p className="text-xs muted" style={{ lineHeight: 1.6 }}>
-            There is no policy-file listing API — the <strong>Test policy</strong> panel runs a live decision, and
-            the <strong>Recent policy decisions</strong> table below is the audited evidence of enforcement.
-            The role definitions those bundles compile from are edited in <strong>Roles &amp; grants</strong> above.
-          </p>
-        </div>
-
+      <div style={{ maxWidth: 560 }}>
         {/* Real evaluator → POST /gw/policy/evaluate */}
         <div className="card card-elev">
           <div className="card-hdr"><h4>Test policy</h4><span className="meta">Simulate access for a role × resource</span></div>
@@ -1069,200 +1031,6 @@ function PolicyPanel() {
           )}
         </div>
       </div>
-
-      <div className="section-hdr">
-        <h3>Recent policy decisions</h3>
-      </div>
-      <div className="card card-elev" style={{ paddingTop: '0.8rem' }}>
-        {rowsErr && <p className="text-xs" style={{ color: 'var(--alert)' }}>Failed to load decisions: {rowsErr}</p>}
-        {!rows && !rowsErr && <p className="muted">Loading recent decisions…</p>}
-        {rows && rows.length === 0 && <p className="muted">No policy decisions logged yet.</p>}
-        {rows && rows.length > 0 && (
-          <>
-            <TableToolbar kit={kit} placeholder="Search principal, action, resource, rule…" unit="decisions">
-              <select value={filter} onChange={e => setFilter(e.target.value as '' | 'allow' | 'deny')}>
-                <option value="">All decisions</option>
-                <option value="allow">Allowed only</option>
-                <option value="deny">Denied only</option>
-              </select>
-            </TableToolbar>
-            <div className="tk-scroll">
-              <table className="dash">
-                <thead><tr>
-                  <SortTh kit={kit} k="ts">When</SortTh>
-                  <th>Principal</th>
-                  <SortTh kit={kit} k="action">Action</SortTh>
-                  <SortTh kit={kit} k="resource">Resource</SortTh>
-                  <th>Rules fired</th>
-                  <SortTh kit={kit} k="decision">Decision</SortTh>
-                </tr></thead>
-                <tbody>
-                  {kit.pageRows.map(r => (
-                    <tr key={r.id}>
-                      <td title={r.ts}>{fmtAgo(r.ts)}</td>
-                      <td>{r.kc_sub ? <code title={r.kc_sub}>{r.kc_sub.slice(0, 8)}</code> : <span className="muted">—</span>}</td>
-                      <td><code>{r.action}</code></td>
-                      <td><code>{r.resource}</code></td>
-                      <td>{r.rule_hits.length ? r.rule_hits.map((h, i) => <code key={i} style={{ marginRight: '0.35rem' }}>{h}</code>) : <span className="muted">—</span>}</td>
-                      <td><span className={`pill ${r.decision === 'allow' ? 'good' : 'alert'}`}>{r.decision}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <TablePager kit={kit} />
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════ §3 Catalogs ════════════════════════════════════ */
-
-function WidgetCatalogPanel({ catalog }: { catalog: api.Catalog | null }) {
-  const [kindFilter, setKindFilter] = useState<string>('all');
-  const [dashFilter, setDashFilter] = useState<string>('all');
-
-  // For each widget, the dashboard it belongs to. There is no widget→page
-  // mapping in the catalog payload (many-to-many, resolved at grant time),
-  // so use the id-prefix convention every widget follows.
-  const widgetDashboards = useMemo(() => {
-    const out: Record<string, Set<string>> = {};
-    if (!catalog) return out;
-    const mapping: Record<string, string[]> = {
-      pub: ['public'], ov: ['internal-bi'], dz: ['internal-bi'],
-      rm: ['internal-bi'], sv: ['internal-bi'], ex: ['internal-bi'],
-      st: ['internal-bi'], adm: ['admin'], ws: ['workshop'],
-    };
-    catalog.widgets.forEach(w => {
-      const prefix = w.id.split('-')[0];
-      out[w.id] = new Set(mapping[prefix] || []);
-    });
-    return out;
-  }, [catalog]);
-
-  const kinds = catalog ? Array.from(new Set(catalog.widgets.map(w => w.kind))).sort() : [];
-
-  const rows = useMemo(() => (catalog?.widgets ?? []).filter(w => {
-    if (kindFilter !== 'all' && w.kind !== kindFilter) return false;
-    if (dashFilter !== 'all' && !widgetDashboards[w.id]?.has(dashFilter)) return false;
-    return true;
-  }), [catalog, kindFilter, dashFilter, widgetDashboards]);
-
-  const kit = useTableKit(rows, {
-    pageSize: 12,
-    search: w => `${w.id} ${w.title}`,
-    sortVals: { id: w => w.id, title: w => w.title, kind: w => w.kind },
-    initialSort: { key: 'id', dir: 'asc' },
-  });
-
-  return (
-    <div className="card card-elev" style={{ paddingTop: '0.8rem' }}>
-      <div className="card-hdr" style={{ paddingBottom: '0.4rem' }}>
-        <h4>Widget catalog</h4>
-        <span className="meta">every renderable widget in ops_perm.widget · read-only</span>
-      </div>
-      <TableToolbar kit={kit} placeholder="Search widget id or title…" unit="widgets">
-        <select value={dashFilter} onChange={(e) => setDashFilter(e.target.value)}>
-          <option value="all">All dashboards</option>
-          {(catalog?.dashboards ?? []).map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
-        </select>
-        <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
-          <option value="all">All kinds</option>
-          {kinds.map(k => <option key={k} value={k}>{k}</option>)}
-        </select>
-      </TableToolbar>
-      <div className="tk-scroll">
-        <table className="dash">
-          <thead>
-            <tr>
-              <SortTh kit={kit} k="id">ID</SortTh>
-              <SortTh kit={kit} k="title">Title</SortTh>
-              <SortTh kit={kit} k="kind">Kind</SortTh>
-              <th>Dashboard</th><th>Mart-backed?</th>
-            </tr>
-          </thead>
-          <tbody>
-            {kit.pageRows.map(w => {
-              const dashes = Array.from(widgetDashboards[w.id] || []);
-              return (
-                <tr key={w.id}>
-                  <td><code>{w.id}</code></td>
-                  <td>{w.title}</td>
-                  <td><span className="pill neutral">{w.kind}</span></td>
-                  <td>{dashes.length ? dashes.join(', ') : <span className="muted">—</span>}</td>
-                  <td>
-                    {w.requires
-                      ? <span className="pill info">{`${w.requires.subject}/${w.requires.granularity}`}</span>
-                      : <span className="muted">no</span>}
-                  </td>
-                </tr>
-              );
-            })}
-            {catalog && rows.length === 0 && (
-              <tr><td colSpan={5} className="muted" style={{ padding: '1rem' }}>No widgets match the current filters.</td></tr>
-            )}
-            {!catalog && <tr><td colSpan={5} className="muted" style={{ padding: '1rem' }}>Loading catalog…</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <TablePager kit={kit} />
-    </div>
-  );
-}
-
-function FilterCatalogPanel({ catalog }: { catalog: api.Catalog | null }) {
-  const kit = useTableKit(catalog?.filters ?? null, {
-    pageSize: 12,
-    search: f => `${f.id} ${f.title} ${f.source} ${f.source_ref ?? ''}`,
-    sortVals: { id: f => f.id, title: f => f.title, source: f => f.source },
-    initialSort: { key: 'id', dir: 'asc' },
-  });
-
-  return (
-    <div className="card card-elev mt-md" style={{ paddingTop: '0.8rem' }}>
-      <div className="card-hdr" style={{ paddingBottom: '0.4rem' }}>
-        <h4>Filter catalog</h4>
-        <span className="meta">the dimensions a role can be constrained by · read-only</span>
-      </div>
-      <p className="text-xs muted" style={{ marginBottom: '0.5rem' }}>
-        e.g. "RHB-Oromia can only see <code>region=Oromia</code>". The <code>source</code> enum
-        tells the resolver where canonical values come from — static enum, live mart, or ops-DB lookup.
-      </p>
-      <TableToolbar kit={kit} placeholder="Search filter id, title, source…" unit="filters" />
-      <div className="tk-scroll">
-        <table className="dash">
-          <thead>
-            <tr>
-              <SortTh kit={kit} k="id">ID</SortTh>
-              <SortTh kit={kit} k="title">Title</SortTh>
-              <SortTh kit={kit} k="source">Source</SortTh>
-              <th>Source ref</th><th>Canonical values</th>
-            </tr>
-          </thead>
-          <tbody>
-            {kit.pageRows.map(f => (
-              <tr key={f.id}>
-                <td><code>{f.id}</code></td>
-                <td>{f.title}</td>
-                <td><span className={`pill ${f.source === 'static' ? 'good' : 'info'}`}>{f.source}</span></td>
-                <td>{f.source_ref ? <code>{f.source_ref}</code> : <span className="muted">—</span>}</td>
-                <td>
-                  {f.source === 'static' && f.static_values
-                    ? <span className="text-xs">{f.static_values.length} values: {f.static_values.slice(0, 5).join(', ')}{f.static_values.length > 5 ? '…' : ''}</span>
-                    : <span className="muted text-xs">(resolved at request time)</span>}
-                </td>
-              </tr>
-            ))}
-            {catalog && catalog.filters.length === 0 && (
-              <tr><td colSpan={5} className="muted" style={{ padding: '1rem' }}>No filters defined.</td></tr>
-            )}
-            {!catalog && <tr><td colSpan={5} className="muted" style={{ padding: '1rem' }}>Loading catalog…</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <TablePager kit={kit} />
     </div>
   );
 }
@@ -1282,8 +1050,8 @@ function RolesPermissions() {
     <section id="roles-permissions">
       <p className="page-lede">
         The whole permission surface in one place: role definitions and their 4-axis grants,
-        the OPA enforcement layer with a live policy tester, and the widget &amp; filter
-        catalogs those grants draw from.
+        the permission-change audit trail, and the OPA enforcement layer with a live policy tester.
+        The widget &amp; filter catalogs now live under <strong>Dashboard Control</strong>.
       </p>
 
       {catErr && (
@@ -1295,17 +1063,6 @@ function RolesPermissions() {
       <RolesGrants catalog={catalog} />
       <AuditPanel />
       <PolicyPanel />
-
-      <div className="page-section">
-        <div className="ps-hdr">
-          <div>
-            <h3 className="ps-title"><svg className="ico"><use href="#i-grid" /></svg> Catalogs</h3>
-            <p className="ps-sub">What is grantable — the future permission editor's pickers draw from these.</p>
-          </div>
-        </div>
-        <WidgetCatalogPanel catalog={catalog} />
-        <FilterCatalogPanel catalog={catalog} />
-      </div>
     </section>
   );
 }

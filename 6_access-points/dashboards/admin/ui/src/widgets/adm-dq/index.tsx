@@ -383,7 +383,39 @@ function DQ() {
       </div>
 
       {/* ═══ Quality dimensions & reconciliation ═══ */}
+      {/* Compact band (owner 2026-07-13): dense inline-stat rows so this
+          reconciliation summary stops wasting vertical space. All CSS is
+          scoped locally to this widget (dqc-* / .dq-qr-compact) so it never
+          touches the shared globals. Real data (dims + recon) unchanged. */}
       <div className="page-section">
+        <style>{`
+          .dq-qr-compact { margin-top: 0.2rem; align-items: stretch; }
+          .dq-qr-compact > .card { display: flex; flex-direction: column; padding: 0.85rem 1rem 0.95rem; }
+          .dq-qr-compact .card-hdr { margin-bottom: 0.45rem; }
+          .dq-qr-compact .card-hdr h4 { font-size: 0.9rem; }
+          .dqc-list { display: flex; flex-direction: column; }
+          .dqc-dim { display: grid; grid-template-columns: 7.25rem 1fr 3rem; align-items: center; gap: 0.7rem; padding: 0.42rem 0; }
+          .dqc-dim + .dqc-dim, .dqc-row + .dqc-row { border-top: 1px solid var(--border); }
+          .dqc-dim-name { font-size: 0.8rem; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+          .dqc-dim .dq-meter, .dqc-row .dq-meter { height: 5px; }
+          .dqc-dim-pct { text-align: right; font-size: 0.92rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+          .dqc-dim.good  .dqc-dim-pct { color: var(--good); }
+          .dqc-dim.watch .dqc-dim-pct { color: var(--watch); }
+          .dqc-dim.alert .dqc-dim-pct { color: var(--alert); }
+          .dqc-row { padding: 0.5rem 0; }
+          .dqc-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
+          .dqc-row-name { font-size: 0.82rem; font-weight: 700; color: var(--ink); }
+          .dqc-row-sys { font-size: 0.68rem; color: var(--ink-4); }
+          .dqc-row-pct { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: var(--ink-3); }
+          .dqc-row-pct.good  { color: var(--good); }
+          .dqc-row-pct.watch { color: var(--watch); }
+          .dqc-row-pct.alert { color: var(--alert); }
+          .dqc-row .dq-meter { margin: 0.32rem 0 0.3rem; }
+          .dqc-row-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.35rem 0.6rem; font-size: 0.7rem; color: var(--ink-3); }
+          .dqc-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+          .dqc-chip { display: inline-flex; padding: 0.08rem 0.42rem; border-radius: 999px; font-size: 0.64rem; font-weight: 600; background: var(--bg-2); color: var(--ink-3); white-space: nowrap; }
+          .dqc-empty { margin: 0.3rem 0; font-size: 0.8rem; color: var(--ink-4); }
+        `}</style>
         <div className="ps-hdr">
           <div>
             <h3 className="ps-title"><svg className="ico"><use href="#i-shield-check" /></svg> Quality &amp; reconciliation</h3>
@@ -391,56 +423,53 @@ function DQ() {
           </div>
         </div>
 
-        <div className="grid grid-2 gap-lg dq-qr">
-          {/* Dimension scorecard */}
+        <div className="grid grid-2 dq-qr-compact" style={{ gap: '1rem' }}>
+          {/* Dimension scorecard — dense inline rows (name · meter · %) */}
           <div className="card card-elev">
             <div className="card-hdr">
               <h4>DQ dimension scorecard</h4>
               <span className="meta">rolled up across the warehouse</span>
             </div>
-            <div className="dq-dim-list">
+            <div className="dqc-list">
               {DIM_ORDER.map(d => {
                 const v = dims?.dimensions?.[d.key] ?? null;
                 const tone = pctTone(v);
                 return (
-                  <div className={`dq-dim ${tone}`} key={d.key}>
-                    <div className="dq-dim-head">
-                      <span className="dq-dim-name">{d.label}</span>
-                      <span className="dq-dim-pct">{fmtPct(v)}</span>
-                    </div>
+                  <div className={`dqc-dim ${tone}`} key={d.key} title={dims?.basis?.[d.key] ?? d.hint}>
+                    <span className="dqc-dim-name">{d.label}</span>
                     <Meter pct={v} tone={tone} />
-                    <div className="dq-dim-hint">{dims?.basis?.[d.key] ?? d.hint}</div>
+                    <span className="dqc-dim-pct">{fmtPct(v)}</span>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Cross-source reconciliation */}
+          {/* Cross-source reconciliation — compact stacked rows */}
           <div className="card card-elev">
             <div className="card-hdr">
               <h4>Cross-source reconciliation</h4>
               <span className="meta">business-vault same-as links</span>
             </div>
             {recon && recon.checks.length > 0 ? (
-              <div className="dq-recon-list">
+              <div className="dqc-list">
                 {recon.checks.map(c => {
                   const tone = pctTone(c.agreement_pct, 85, 60);
                   return (
-                    <div className="dq-recon" key={c.check}>
-                      <div className="dq-recon-head">
+                    <div className="dqc-row" key={c.check}>
+                      <div className="dqc-row-head">
                         <div>
-                          <div className="dq-recon-name">{c.check}</div>
-                          <div className="dq-recon-sys muted">{c.systems}</div>
+                          <div className="dqc-row-name">{c.check}</div>
+                          <div className="dqc-row-sys">{c.systems}</div>
                         </div>
-                        <div className={`dq-recon-pct ${tone}`}>{fmtPct(c.agreement_pct)}</div>
+                        <div className={`dqc-row-pct ${tone}`}>{fmtPct(c.agreement_pct)}</div>
                       </div>
                       <Meter pct={c.agreement_pct} tone={tone} />
-                      <div className="dq-recon-foot">
-                        <span>{fmtNum(c.matched)} of {fmtNum(c.conformed)} recognised by ≥2 sources</span>
-                        <span className="dq-recon-chips">
+                      <div className="dqc-row-foot">
+                        <span>{fmtNum(c.matched)} of {fmtNum(c.conformed)} matched by ≥2 sources</span>
+                        <span className="dqc-chips">
                           {c.sources.map(s => (
-                            <span className="dq-chip" key={s.source}>{s.source} · {fmtNum(s.count)}</span>
+                            <span className="dqc-chip" key={s.source}>{s.source} · {fmtNum(s.count)}</span>
                           ))}
                         </span>
                       </div>
@@ -449,7 +478,7 @@ function DQ() {
                 })}
               </div>
             ) : (
-              <p className="muted dq-empty">
+              <p className="dqc-empty">
                 {recon?.note ?? 'Loading cross-source agreement…'}
               </p>
             )}

@@ -320,6 +320,13 @@ function UsersAccess() {
         </p>
       )}
 
+      {/* ═══ Users & role assignment ═══ */}
+      <div className="section-hdr">
+        <h3>Users</h3>
+        <span className="meta">live from ops_perm role assignments · assign / revoke inline</span>
+      </div>
+      <UsersPanel />
+
       {/* ═══ Access requests ═══ */}
       <div className="section-hdr">
         <h3>Pending requests</h3>
@@ -399,13 +406,6 @@ function UsersAccess() {
         </div>
         <TablePager kit={resolvedKit} />
       </div>
-
-      {/* ═══ Users & role assignment ═══ */}
-      <div className="section-hdr">
-        <h3>Users</h3>
-        <span className="meta">live from ops_perm role assignments · assign / revoke inline</span>
-      </div>
-      <UsersPanel />
     </section>
     <ReviewModal />
     </>
