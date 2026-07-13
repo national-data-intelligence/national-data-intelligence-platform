@@ -20,7 +20,7 @@ import {
   type ProjectRow, type ProjectVisibility,
 } from '../../api/projects';
 import { listGroups, type GroupRow } from '../../api/groups';
-import { esc, errText, toast } from '../_shared/helpers';
+import { esc, errText, toast, relTime } from '../_shared/helpers';
 
 const VISIBILITIES: ProjectVisibility[] = ['private', 'group', 'public'];
 
@@ -74,9 +74,14 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   const canSubmitReview = isOwner && (rs === 'draft' || rs === 'changes_requested' || rs === 'rejected');
   const submitLabel = rs === 'changes_requested' || rs === 'rejected' ? 'Re-submit for review' : 'Submit for review';
 
+  // "Your role" on this project — derived from ownership + visibility (all real,
+  // no new fetch): owner, a group member sharing files, or a public viewer.
+  const roleLabel = isOwner ? 'Owner' : (p.visibility === 'group' ? 'Member' : 'Viewer');
+  const roleIcon  = isOwner ? 'i-user' : (p.visibility === 'group' ? 'i-users' : 'i-eye');
+
   ctx.el.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:.9rem">
-      <div class="prj-header" style="background:${projectGradient(p.id)};margin:0">
+    <div class="prj-detail">
+      <div class="prj-header" style="background:${projectGradient(p.id)}">
         <div class="prj-header-body">
           <div class="prj-header-badges">
             <span class="prj-vis-badge ${esc(visibilityPillClass(p.visibility))}">
@@ -89,8 +94,6 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
           <h2 class="prj-header-name">${esc(p.name)}</h2>
           <div class="prj-header-meta">
             <span>Owner <strong>${esc(p.owner_username || (isOwner ? 'you' : p.owner_kc_sub))}</strong></span>
-            <span>·</span><span><code>${esc(p.slug)}</code></span>
-            <span>·</span><span>Created ${esc(fmtDate(p.created_at))}</span>
             ${p.contributor_count != null
               ? `<span>·</span><span>${esc(p.contributor_count)} contributor${p.contributor_count === 1 ? '' : 's'}</span>` : ''}
           </div>
@@ -98,7 +101,26 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
         </div>
       </div>
 
-      <div class="prj-actions" style="margin:0">
+      <div class="prj-statstrip">
+        <div class="prj-stat">
+          <span class="prj-stat-lbl"><svg class="ico"><use href="#${roleIcon}"/></svg> Your role</span>
+          <span class="prj-stat-val">${esc(roleLabel)}</span>
+        </div>
+        <div class="prj-stat">
+          <span class="prj-stat-lbl"><svg class="ico"><use href="#i-link"/></svg> Handle</span>
+          <span class="prj-stat-val"><code>${esc(p.slug)}</code></span>
+        </div>
+        <div class="prj-stat">
+          <span class="prj-stat-lbl"><svg class="ico"><use href="#i-calendar"/></svg> Created</span>
+          <span class="prj-stat-val">${esc(fmtDate(p.created_at))}</span>
+        </div>
+        <div class="prj-stat">
+          <span class="prj-stat-lbl"><svg class="ico"><use href="#i-clock"/></svg> Last activity</span>
+          <span class="prj-stat-val">${esc(relTime(p.updated_at))}</span>
+        </div>
+      </div>
+
+      <div class="prj-actions">
         ${!canOpenLab
           ? `<button class="btn btn-sm btn-ghost" disabled aria-disabled="true"
                title="Public project you don't own — clone it to open a lab on your own copy.">

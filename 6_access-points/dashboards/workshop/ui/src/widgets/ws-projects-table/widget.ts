@@ -11,37 +11,54 @@ import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { authFetch } from '../../api/useAuth';
 import {
   listProjects, visibilityLabel, visibilityIcon, visibilityPillClass,
-  statusLabel, statusPillClass, projectGradient, fmtDate, type ProjectRow,
+  statusLabel, statusPillClass, reviewStatusLabel, reviewStatusPillClass,
+  projectGradient, fmtDate, type ProjectRow,
 } from '../../api/projects';
-import { esc } from '../_shared/helpers';
+import { esc, relTime } from '../_shared/helpers';
+
+/** Two-letter monogram from a project name (first + last word initials) — the
+ *  card's offline "cover art", tinted by the same stable projectGradient. */
+function initials(name: string): string {
+  const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return '·';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+}
 
 function card(p: ProjectRow, selected: boolean): string {
+  const rs = (p.review_status as string) || 'draft';
+  // Review pill only when it says something beyond the default "draft".
+  const reviewPill = rs && rs !== 'draft'
+    ? `<span class="pill ${esc(reviewStatusPillClass(rs))}">${esc(reviewStatusLabel(rs))}</span>` : '';
+  const statusPill = p.status !== 'active'
+    ? `<span class="pill ${esc(statusPillClass(p.status))}">${esc(statusLabel(p.status))}</span>` : '';
   return `
     <button class="prj-card${selected ? ' active' : ''}" data-pid="${esc(p.id)}"
             title="Open this project's detail below">
-      <div class="prj-card-cover" style="background:${projectGradient(p.id)}"></div>
-      <div class="prj-card-body">
-        <div class="prj-card-row1">
-          <span class="prj-vis-badge ${esc(visibilityPillClass(p.visibility))}">
-            <svg class="ico ico-sm"><use href="#${esc(visibilityIcon(p.visibility))}"/></svg>
-            ${esc(visibilityLabel(p.visibility))}
-          </span>
-          ${p.status !== 'active'
-            ? `<span class="pill ${esc(statusPillClass(p.status))}">${esc(statusLabel(p.status))}</span>` : ''}
-        </div>
-        <h4 class="prj-card-name">${esc(p.name)}</h4>
-        <p class="prj-card-desc">${esc(p.description || 'No description yet.')}</p>
-        <div class="prj-card-foot">
+      <div class="prj-card-head">
+        <span class="prj-monogram" style="background:${projectGradient(p.id)}" aria-hidden="true">${esc(initials(p.name))}</span>
+        <div class="prj-card-heading">
+          <h4 class="prj-card-name">${esc(p.name)}</h4>
           <span class="prj-card-owner">
             <svg class="ico ico-sm"><use href="#i-user"/></svg>
-            ${esc(p.owner_username || 'you')}
-          </span>
-          <span class="prj-card-foot-right">
-            ${(p.artifact_count != null && p.artifact_count > 0)
-              ? `<span title="Artifacts"><svg class="ico ico-sm"><use href="#i-package"/></svg> ${esc(p.artifact_count)}</span>` : ''}
-            <span class="muted">Updated ${esc(fmtDate(p.updated_at))}</span>
+            <span>${esc(p.owner_username || 'you')}</span>
           </span>
         </div>
+        <span class="prj-vis-badge ${esc(visibilityPillClass(p.visibility))}">
+          <svg class="ico ico-sm"><use href="#${esc(visibilityIcon(p.visibility))}"/></svg>
+          ${esc(visibilityLabel(p.visibility))}
+        </span>
+      </div>
+      <p class="prj-card-desc">${esc(p.description || 'No description yet.')}</p>
+      <div class="prj-card-foot">
+        <div class="prj-card-metas">
+          <span class="prj-meta-chip" title="Last updated ${esc(fmtDate(p.updated_at))}">
+            <svg class="ico ico-sm"><use href="#i-clock"/></svg>
+            ${esc(relTime(p.updated_at))}
+          </span>
+          ${statusPill}${reviewPill}
+        </div>
+        <span class="prj-card-open">Open <svg class="ico ico-sm"><use href="#i-arrow-right"/></svg></span>
       </div>
     </button>`;
 }
@@ -101,11 +118,11 @@ async function draw(ctx: WidgetCtx) {
       listEl.innerHTML = sections.map(s => `
         <div class="prj-group">
           <div class="prj-group-hdr">
-            <svg class="ico"><use href="#${esc(s.icon)}"/></svg>
+            <span class="prj-group-ico"><svg class="ico"><use href="#${esc(s.icon)}"/></svg></span>
             <h3>${esc(s.label)}</h3>
-            <span class="muted prj-group-count">${s.items.length}</span>
+            <span class="prj-group-count">${s.items.length}</span>
           </div>
-          <div class="grid grid-3 prj-grid">
+          <div class="prj-grid">
             ${s.items.map(p => card(p, p.id === selected)).join('')}
           </div>
         </div>`).join('');
