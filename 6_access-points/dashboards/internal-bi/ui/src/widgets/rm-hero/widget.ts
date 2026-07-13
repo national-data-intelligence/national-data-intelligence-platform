@@ -10,24 +10,25 @@
  *   commodities_at_risk:int · commodity_region_pairs:int · already_stockout:int ·
  *   value_at_risk_etb:num · services_exposed:int · estimated_service_disruption:int ·
  *   urgent_items:str ("name|days;name|days;…")
- * reactsTo: geography · period.
+ * reactsTo: geography · period · commodity.
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 
 const def: WidgetDef = {
   id: 'rm-hero',
-  reactsTo: ['geography', 'period'],
+  reactsTo: ['geography', 'period', 'commodity'],
   async render(ctx: WidgetCtx) {
     const r = (await ctx.fetchData())?.[0];
     if (!r) { ctx.empty('No stockout headline data for the selected filters.'); return; }
     const t = ctx.theme;
     // Shared card DNA — copied from the Overview Headline stat cards (ov-benchmarks) so these read
     // as the same, considered system: paper surface, soft shadow, radius 16, even 1rem 1.1rem padding.
+    // Borderless (owner rule: cards never have borders) — the soft shadow carries the elevation.
     const tint = (hex: string, a: number) => {
       const m = /^#?([0-9a-f]{6})$/i.exec(hex); if (!m) return hex;
       const n = parseInt(m[1], 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
     };
-    const CARD = `background:${t.paper};border:1px solid ${t.line};border-radius:16px;padding:1rem 1.1rem;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:.35rem;min-width:0`;
+    const CARD = `background:${t.paper};border-radius:16px;padding:1rem 1.1rem;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:.35rem;min-width:0`;
     const chip = (icon: string, col: string) => `<span style="display:inline-grid;place-items:center;width:32px;height:32px;border-radius:8px;background:${tint(col, 0.12)};color:${col};flex-shrink:0"><svg class="ico" aria-hidden="true"><use href="#${icon}"/></svg></span>`;
     const label = (s: string) => `<span style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:${t.ink[3]}">${s}</span>`;
     // A lower impact card — vertically centered in its (tall) grid row, no bottom-pinning.

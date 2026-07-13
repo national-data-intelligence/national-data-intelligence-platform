@@ -33,6 +33,28 @@
   source_ref: null
   static_values: [HIV, TB, EPI, MNCH, NCD, Malaria, FP, Nutrition]
 
+# Commodity is a PLAIN UI narrowing filter (like 'period') — it has NO scope
+# dimension (absent from app/dimensions.py::FILTER_DIMENSION), so it is always
+# wildcard and never role-capped; it narrows purely via the fetchers' commodity
+# column WHERE. static_values are the EXACT commodity_name values in the supply
+# marts (bi_supply.mart_supply_region_stock / mart_resource_allocation).
+- id: commodity
+  title: Commodity
+  source: static
+  source_ref: null
+  static_values:
+    ["Amlodipine 5mg", "Amoxicillin 250 DT", "Artemether-Lumefantrine",
+     "BCG vaccine", "COVID-19 vaccine", "Combined oral contracept.",
+     "Depo-Provera", "Fortified blended food", "GeneXpert cartridge",
+     "HIV RDT kit", "HPV vaccine", "IPV (inactivated polio)", "Implanon NXT",
+     "Insulin · regular 100 IU", "Iron-folate", "Isoniazid 300mg",
+     "LLIN bed net", "Losartan 50mg", "Magnesium sulphate 50%",
+     "Malaria RDT pf/pv", "Measles-Rubella", "Metformin 500mg",
+     "OPV trivalent", "ORS sachet", "Oxytocin 10 IU/ml", "PCV-13",
+     "Paracetamol 500mg", "Pediatric ART", "Pentavalent DTwP-HepB-Hib",
+     "RHZE fixed-dose combo", "RUTF (ready-to-use)", "Rotavirus vaccine",
+     "TLD · adult ART", "Tetanus toxoid"]
+
 - id: disease
   title: Notifiable disease
   source: static

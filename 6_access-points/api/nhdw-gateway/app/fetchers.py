@@ -130,19 +130,24 @@ def _and_period(period: str | None, col: str, kind: str, fq_table: str) -> str:
 
 
 def _where(row_filter: dict[str, Any], *, geo_col: str | None,
-           prog_col: str | None, period_col: str | None = None,
+           prog_col: str | None, commodity_col: str | None = None,
+           period_col: str | None = None,
            period_kind: str = "date", fq_table: str | None = None) -> str:
     """Build a WHERE clause from the merged row_filter (OPA's scope obligation
     ∩ the UI's validated global-filter narrowing). Only dimensions the mart
     actually has a column for are applied. The period predicate goes into the
-    SAME WHERE as geo/prog (it bounds the base CTE `b`), so every fetcher's
-    internal max()-anchored window coherently narrows with it instead of
-    stacking a second conflicting clause."""
+    SAME WHERE as geo/prog/commodity (it bounds the base CTE `b`), so every
+    fetcher's internal max()-anchored window coherently narrows with it instead of
+    stacking a second conflicting clause. commodity is a PLAIN UI filter (no OPA
+    scope obligation ever carries it) applied exactly like geo/prog — the commodity
+    clause precedes period so the period anchor follows the commodity-scoped data."""
     clauses: list[str] = []
     if geo_col and row_filter.get("geography"):
         clauses.append(_in_clause(geo_col, row_filter["geography"]))
     if prog_col and row_filter.get("programme"):
         clauses.append(_in_clause(prog_col, row_filter["programme"]))
+    if commodity_col and row_filter.get("commodity"):
+        clauses.append(_in_clause(commodity_col, row_filter["commodity"]))
     if period_col and fq_table and row_filter.get("period"):
         pv = row_filter["period"]
         pv = pv[0] if isinstance(pv, (list, tuple)) else pv
@@ -159,6 +164,7 @@ FILTER_DIM_PARAMS: dict[str, tuple[str, ...]] = {
     "geography": ("geography", "region"),
     "programme": ("programme",),
     "period":    ("period",),
+    "commodity": ("commodity",),
 }
 
 
@@ -233,6 +239,11 @@ class Fetcher:
     sensitivity: str = "default"
     geo_col: str | None = None        # column for the geography row_filter (or None)
     prog_col: str | None = None       # column for the programme row_filter (or None)
+    commodity_col: str | None = None  # column for the commodity UI filter (or None).
+                                      # Plain narrowing dim (not an OPA scope obligation):
+                                      # set on commodity-grain rm-* marts that carry a
+                                      # commodity_name column; region-grain marts leave
+                                      # it None (they honestly can't apply it).
     period_col: str | None = None     # the widget's native date/week/month column
                                       # (week_start, month_id, ...) — None = the mart
                                       # genuinely has no time dimension (honest
@@ -256,11 +267,13 @@ class Fetcher:
         param (via period_col OR the period_param seam) — never advertise a
         dim the query ignores (that would re-create the L1 bug per-widget)."""
         return {"geography": bool(self.geo_col), "programme": bool(self.prog_col),
-                "period": bool(self.period_col) or self.period_param}
+                "period": bool(self.period_col) or self.period_param,
+                "commodity": bool(self.commodity_col)}
 
     async def fetch(self, params: dict, row_filter: dict[str, Any]) -> dict[str, Any]:
         fq = f'marts.{self.schema}."{self.table}"'
         where = _where(row_filter, geo_col=self.geo_col, prog_col=self.prog_col,
+                       commodity_col=self.commodity_col,
                        period_col=self.period_col, period_kind=self.period_kind,
                        fq_table=fq)
         args: list[Any] = [fq, where]
@@ -671,6 +684,7 @@ FETCHERS: dict[str, Fetcher] = {
     "rm-hero": Fetcher(
         schema="bi_supply", table="mart_resource_allocation",
         subject="PRD", data_class="DC.STK", prog_col="programme_id",
+        commodity_col="commodity_name",
         sql=lambda t, w: (
             f"WITH b AS (SELECT * FROM {t}{w}), mx AS (SELECT max(month_id) AS m FROM b), "
             f"nat AS (SELECT count(*) FILTER (WHERE mos < 3) AS at_risk, count(*) FILTER (WHERE mos < 1) AS stockout "
@@ -692,6 +706,7 @@ FETCHERS: dict[str, Fetcher] = {
     "rm-statboard": Fetcher(
         schema="bi_supply", table="mart_resource_allocation",
         subject="PRD", data_class="DC.STK", prog_col="programme_id",
+        commodity_col="commodity_name",
         sql=lambda t, w: (
             f"WITH b AS (SELECT * FROM {t}{w}), mx AS (SELECT max(month_id) AS m FROM b), "
             f"a AS (SELECT round(100e0 * count(*) FILTER (WHERE mos >= 3) / nullif(count(*), 0), 1) AS avail, "
@@ -715,6 +730,7 @@ FETCHERS: dict[str, Fetcher] = {
     "rm-forecast": Fetcher(
         schema="bi_supply", table="mart_supply_stockout_forecast",
         subject="PRD", data_class="DC.STK", geo_col=None,
+        commodity_col="commodity_name",
         sql=lambda t, w: (
             f"SELECT commodity_name AS commodity, CAST(projected_days_remaining AS bigint) AS days_left, "
             f"0 AS floor_days, 90 AS horizon_days FROM {t}{w} "
@@ -724,6 +740,7 @@ FETCHERS: dict[str, Fetcher] = {
     "rm-wastage": Fetcher(
         schema="bi_supply", table="mart_resource_allocation",
         subject="PRD", data_class="DC.STK", prog_col="programme_id",
+        commodity_col="commodity_name",
         period_col="month_id", period_kind="month",
         sql=lambda t, w: (
             f"WITH b AS (SELECT commodity_name, sum(wastage_units) AS wu, sum(received) AS rc FROM {t}{w} GROUP BY 1) "
@@ -873,6 +890,7 @@ FETCHERS["rm-cold-chain"] = Fetcher(
 FETCHERS["rm-stock-heatmap"] = Fetcher(
     schema="bi_supply", table="mart_supply_region_stock",
     subject="PRD", data_class="DC.STK", geo_col="region_id", prog_col="programme_id",
+    commodity_col="commodity_name",
     period_col="month_id", period_kind="month",
     sql=lambda t, w: (
         f"WITH b AS (SELECT * FROM {t}{w}), "
@@ -884,6 +902,7 @@ FETCHERS["rm-stock-heatmap"] = Fetcher(
 FETCHERS["rm-events"] = Fetcher(
     schema="bi_supply", table="mart_supply_stockout_events",
     subject="PRD", data_class="DC.STK", geo_col="region_id", prog_col="programme_id",
+    commodity_col="commodity_name",
     period_col="episode_start_month", period_kind="month",   # episodes STARTING in window
     sql=lambda t, w: (
         f"SELECT region_id, commodity_name, episode_start_month, "

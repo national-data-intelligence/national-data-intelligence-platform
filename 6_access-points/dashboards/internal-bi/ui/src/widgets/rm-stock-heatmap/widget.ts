@@ -6,7 +6,7 @@ import { regionName } from '../_shared/reference';
 
 const def: WidgetDef = {
   id: 'rm-stock-heatmap',
-  reactsTo: ['geography'],
+  reactsTo: ['geography', 'commodity'],
   async render(ctx) {
     const rows = await ctx.fetchData();
     if (!rows || !rows.length) { ctx.empty('No regional stock data for the current scope.'); return; }

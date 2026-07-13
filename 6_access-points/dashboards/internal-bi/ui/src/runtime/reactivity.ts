@@ -23,8 +23,13 @@
 import type { FilterState } from './types';
 import type { ResolvedWidget } from '../api/spec';
 
-/** The named global dimensions the reactivity contract covers. */
-export const GLOBAL_DIMS = ['geography', 'programme', 'period'] as const;
+/** The named global dimensions the reactivity contract covers. `commodity` is a
+ *  first-class dim like `programme` (a plain UI narrowing filter offered on the
+ *  Resource page): a widget declaring supports.commodity === false hides when a
+ *  commodity is picked; one that supports it re-fetches narrowed to it. It is
+ *  never active on pages that don't offer the commodity filter, so it is inert
+ *  everywhere else. */
+export const GLOBAL_DIMS = ['geography', 'programme', 'period', 'commodity'] as const;
 
 /** A dim is ACTIVE when it holds a real value — i.e. anything but 'all'. */
 export function isDimActive(state: FilterState, dim: string): boolean {

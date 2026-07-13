@@ -82,6 +82,48 @@ const DISEASES = [
 ];
 const DISEASE_NAME = Object.fromEntries(DISEASES.map(d => [d.key, d.name]));
 const PERIOD_OPTS = { 'all':'All time','last_4wk':'Last 4 weeks','last_12wk':'Last 12 weeks','last_6mo':'Last 6 months','last_12mo':'Last 12 months','last_24mo':'Last 24 months','ytd':'Year to date','efy_ytd':'Ethiopian FY to date' };
+// Commodity filter values are the EXACT mart commodity_name strings — the code IS
+// the name because the supply marts (bi_supply.mart_supply_region_stock /
+// mart_resource_allocation) key on commodity_name directly. Kept in sync with the
+// filter catalog (bundle/seeds/security/filters.yaml, id: commodity) and the
+// fetchers' commodity_col narrowing. A PLAIN narrowing filter (like period): no
+// role scope, always the full list.
+const COMMODITIES = [
+  { code: 'Amlodipine 5mg', name: 'Amlodipine 5mg' },
+  { code: 'Amoxicillin 250 DT', name: 'Amoxicillin 250 DT' },
+  { code: 'Artemether-Lumefantrine', name: 'Artemether-Lumefantrine' },
+  { code: 'BCG vaccine', name: 'BCG vaccine' },
+  { code: 'COVID-19 vaccine', name: 'COVID-19 vaccine' },
+  { code: 'Combined oral contracept.', name: 'Combined oral contracept.' },
+  { code: 'Depo-Provera', name: 'Depo-Provera' },
+  { code: 'Fortified blended food', name: 'Fortified blended food' },
+  { code: 'GeneXpert cartridge', name: 'GeneXpert cartridge' },
+  { code: 'HIV RDT kit', name: 'HIV RDT kit' },
+  { code: 'HPV vaccine', name: 'HPV vaccine' },
+  { code: 'IPV (inactivated polio)', name: 'IPV (inactivated polio)' },
+  { code: 'Implanon NXT', name: 'Implanon NXT' },
+  { code: 'Insulin · regular 100 IU', name: 'Insulin · regular 100 IU' },
+  { code: 'Iron-folate', name: 'Iron-folate' },
+  { code: 'Isoniazid 300mg', name: 'Isoniazid 300mg' },
+  { code: 'LLIN bed net', name: 'LLIN bed net' },
+  { code: 'Losartan 50mg', name: 'Losartan 50mg' },
+  { code: 'Magnesium sulphate 50%', name: 'Magnesium sulphate 50%' },
+  { code: 'Malaria RDT pf/pv', name: 'Malaria RDT pf/pv' },
+  { code: 'Measles-Rubella', name: 'Measles-Rubella' },
+  { code: 'Metformin 500mg', name: 'Metformin 500mg' },
+  { code: 'OPV trivalent', name: 'OPV trivalent' },
+  { code: 'ORS sachet', name: 'ORS sachet' },
+  { code: 'Oxytocin 10 IU/ml', name: 'Oxytocin 10 IU/ml' },
+  { code: 'PCV-13', name: 'PCV-13' },
+  { code: 'Paracetamol 500mg', name: 'Paracetamol 500mg' },
+  { code: 'Pediatric ART', name: 'Pediatric ART' },
+  { code: 'Pentavalent DTwP-HepB-Hib', name: 'Pentavalent DTwP-HepB-Hib' },
+  { code: 'RHZE fixed-dose combo', name: 'RHZE fixed-dose combo' },
+  { code: 'RUTF (ready-to-use)', name: 'RUTF (ready-to-use)' },
+  { code: 'Rotavirus vaccine', name: 'Rotavirus vaccine' },
+  { code: 'TLD · adult ART', name: 'TLD · adult ART' },
+  { code: 'Tetanus toxoid', name: 'Tetanus toxoid' },
+];
 
 
 function biApp() {
@@ -180,7 +222,7 @@ function biApp() {
     filtersExpanded: false,
     openFilter: null,
     prgSearch: '',
-    PERIOD_OPTS, REGIONS, PROGRAMMES, DISEASES, DISEASE_NAME,
+    PERIOD_OPTS, REGIONS, PROGRAMMES, DISEASES, DISEASE_NAME, COMMODITIES,
 
     currentPage() {
       return this.pages.find(p => p.id === this.active);
@@ -441,4 +483,4 @@ export function initBiApp(): any {
   return app;
 }
 
-export { REGIONS, PROGRAMMES, DISEASES, DISEASE_NAME, PERIOD_OPTS };
+export { REGIONS, PROGRAMMES, DISEASES, DISEASE_NAME, PERIOD_OPTS, COMMODITIES };

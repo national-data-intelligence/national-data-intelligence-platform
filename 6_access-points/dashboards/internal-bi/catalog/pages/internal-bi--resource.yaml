@@ -5,6 +5,7 @@ filters:
 - region
 - period
 - programme
+- commodity
 sections:
 - internal-bi/resource/stockout-headline
 - internal-bi/resource/supply-stress-geography

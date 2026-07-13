@@ -11,7 +11,7 @@
  *   kind='stat': label · value:num · unit:'percent'|'etb-m' · target:str · delta_text:str ·
  *                delta_good:bool · spark:int[]
  *   kind='integrity': label · value:num · unit:'percent'|'count'
- * reactsTo: geography · period.
+ * reactsTo: geography · period · commodity.
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { sparklineSvg } from '../_shared/charts';
@@ -22,7 +22,7 @@ const fmt = (v: number, unit: string) =>
 
 const def: WidgetDef = {
   id: 'rm-statboard',
-  reactsTo: ['geography', 'period'],
+  reactsTo: ['geography', 'period', 'commodity'],
   async render(ctx: WidgetCtx) {
     const rows = await ctx.fetchData();
     if (!rows || !rows.length) { ctx.empty('No resource statboard data for the selected filters.'); return; }
@@ -36,7 +36,7 @@ const def: WidgetDef = {
     const card = (r: any) => {
       const spark = Array.isArray(r.spark) ? r.spark.map(Number) : null;
       const deltaColor = r.delta_good === false ? t.status.alert : t.status.good;
-      return `<div style="border:1px solid ${t.line};border-radius:12px;padding:.7rem .8rem;display:flex;flex-direction:column;gap:.25rem">
+      return `<div style="background:${t.paper};border-radius:12px;padding:.7rem .8rem;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:.25rem">
         <div style="font-size:.74rem;font-weight:600;color:${t.ink[2]}">${r.label}</div>
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.4rem">
           <div style="font-size:1.5rem;font-weight:800;letter-spacing:-.03em;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1">${fmt(Number(r.value ?? 0), String(r.unit ?? ''))}</div>
