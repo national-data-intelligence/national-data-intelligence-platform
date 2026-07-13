@@ -835,15 +835,16 @@ export function choropleth(
   let boundingCoords: number[][] | undefined;
   if (opts.worldContext) {
     if (rb) {
-      // Focus a region — a small margin keeps the region-adaptive zoom, still on land.
-      const mx = Math.max(0.7, (rb[2] - rb[0]) * 0.4), my = Math.max(0.7, (rb[3] - rb[1]) * 0.4);
+      // Focus a region — a tight margin keeps the region-adaptive zoom, still on land.
+      const mx = Math.max(0.5, (rb[2] - rb[0]) * 0.32), my = Math.max(0.5, (rb[3] - rb[1]) * 0.32);
       boundingCoords = [[rb[0] - mx, rb[3] + my], [rb[2] + mx, rb[1] - my]];
     } else if (isFinite(na)) {
-      // National — a compact box around Ethiopia so the country stays prominent
-      // (the wide/short host is fit by height → Ethiopia ~70% tall). The LON
-      // letterbox the wide host leaves is filled automatically by neighbouring
-      // land; the modest LAT margin gives a band of sea/land above and below.
-      const mx = (nc - na) * 0.15 + 1.0, my = (nd - nb) * 0.12 + 1.2;
+      // National — a TIGHT box around Ethiopia so the country reads large (the
+      // box is always fully fit, so a smaller margin never clips Ethiopia — it
+      // just zooms in). The LON letterbox the wide host leaves is filled
+      // automatically by neighbouring land; a slim LAT margin keeps a thin band
+      // of sea/land above and below.
+      const mx = (nc - na) * 0.05 + 0.35, my = (nd - nb) * 0.04 + 0.4;
       boundingCoords = [[na - mx, nd + my], [nc + mx, nb - my]];
     }
   }
