@@ -844,7 +844,7 @@ export function choropleth(
       // just zooms in). The LON letterbox the wide host leaves is filled
       // automatically by neighbouring land; a slim LAT margin keeps a thin band
       // of sea/land above and below.
-      const mx = (nc - na) * 0.05 + 0.35, my = (nd - nb) * 0.04 + 0.4;
+      const mx = (nc - na) * 0.02 + 0.12, my = (nd - nb) * 0.02 + 0.15;
       boundingCoords = [[na - mx, nd + my], [nc + mx, nb - my]];
     }
   }
