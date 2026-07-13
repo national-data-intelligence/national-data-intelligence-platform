@@ -52,9 +52,16 @@ class PublicSubmission(BaseModel):
     purpose:    str        = Field(min_length=10, max_length=4000)
     supervisor_email: EmailStr | None = None
     irb:        str | None = Field(default=None, max_length=120)
-    # Optional Fayda (national eID) verification attached by the public form's
-    # "Verify with Fayda" popup — carried into the row so the admin queue can
-    # see a request came from a verified citizen.
+    # Optional identity verification attached by the public form's identity
+    # step. `id_type` is one of 'fayda' / 'national-id' / 'passport'.
+    #  · Fayda: the popup actually verifies the citizen, so verified_via='fayda'
+    #    and fayda_id carries the verified identity (the admin queue renders a
+    #    "Fayda-verified" badge purely on fayda_id's presence).
+    #  · National ID / Passport: there is no backend that can verify these, so
+    #    the number is treated as "provided, pending manual verification" — it is
+    #    NEVER written to fayda_id (that would falsely trip the verified badge).
+    id_type:      str | None = Field(default=None, max_length=40)
+    id_number:    str | None = Field(default=None, max_length=120)
     fayda_id:     str | None = Field(default=None, max_length=120)
     verified_via: str | None = Field(default=None, max_length=60)
 
@@ -76,9 +83,54 @@ async def submit_public_access_request(
     client_ip = (request.client.host if request.client else None)
     user_agent = request.headers.get("user-agent")
 
+    # Honest verification marker (§6.3): 'fayda' ONLY when the Fayda popup
+    # actually verified the citizen; a National ID / Passport number is recorded
+    # as '<type>_pending' (provided, pending manual verification) and never as
+    # verified. fayda_id is written ONLY on genuine Fayda verification because
+    # the admin queue renders the "Fayda-verified" badge on its presence alone.
+    if body.verified_via == "fayda":
+        verified_via: str | None = "fayda"
+        fayda_id: str | None = body.fayda_id
+    elif body.id_type and body.id_number:
+        verified_via = f"{body.id_type}_pending"
+        fayda_id = None
+    else:
+        verified_via = body.verified_via or None
+        fayda_id = body.fayda_id
+
     pool = await ops_db.ensure_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
+            # Duplicate guard (§6.3): reject a second ACTIVE (pending) request
+            # from the same requester (matched case-insensitively on email) whose
+            # requested scope OVERLAPS an already-pending one. A disjoint scope is
+            # accepted; an identical/overlapping (or a repeated blanket) request
+            # returns 409 so the queue never accrues duplicate rows for one
+            # applicant. Kept inside the txn so a burst of identical submits from
+            # one applicant does not race two rows in.
+            existing = await conn.fetch(
+                "SELECT tracking_id, dashboards "
+                "FROM ops_governance.access_request "
+                "WHERE status = 'pending' AND lower(email) = lower($1);",
+                str(body.email))
+            new_scope = set(dashboards)
+            for ex in existing:
+                ex_scope = set(ex["dashboards"] or [])
+                overlaps = bool(new_scope & ex_scope) or (
+                    not new_scope and not ex_scope)
+                if overlaps:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "duplicate_pending",
+                            "tracking_id": ex["tracking_id"],
+                            "message": (
+                                "You already have a pending access request "
+                                f"({ex['tracking_id']}) that covers this access. "
+                                "We will review it shortly; please wait for a "
+                                "decision before submitting the same request "
+                                "again."),
+                        })
             tracking_id = await conn.fetchval(
                 "SELECT ops_governance.next_access_request_tracking_id();")
             row = await conn.fetchrow("""
@@ -94,7 +146,7 @@ async def submit_public_access_request(
                 body.org, body.role,
                 str(body.supervisor_email) if body.supervisor_email else None,
                 body.irb, dashboards, body.purpose, client_ip, user_agent,
-                body.fayda_id, body.verified_via)
+                fayda_id, verified_via)
     return {
         "tracking_id": row["tracking_id"],
         "id":          str(row["id"]),

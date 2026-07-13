@@ -554,25 +554,7 @@
     color: var(--ink-3); max-width: 62ch; font-variant-numeric: tabular-nums;
   }
 
-  /* ── Summary stat rail — borderless, flush-left, hairline dividers.
-       The first stat's icon sits on the page gutter, aligned with the H1. ── */
-  .od-stats {
-    display: flex; flex-wrap: wrap; align-items: center;
-    gap: 0.5rem 0; margin-bottom: 1.9rem;
-  }
-  .od-stat { position: relative; display: inline-flex; align-items: center; gap: 0.6rem; padding: 0.2rem 0; }
-  .od-stat + .od-stat { padding-left: 1.9rem; margin-left: 1.9rem; }
-  .od-stat + .od-stat::before {
-    content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-    width: 1px; height: 26px; background: var(--border);
-  }
-  .od-stat-ico { color: var(--navy-500); display: inline-flex; }
-  .od-stat-ico .ico { width: 18px; height: 18px; }
-  .od-stat-txt { display: inline-flex; align-items: baseline; gap: 0.42rem; white-space: nowrap; }
-  .od-stat-txt b { font-size: 1.0rem; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
-  .od-stat-txt span { font-size: 0.8rem; color: var(--ink-3); }
-
-  /* ── Unified control bar — ONE cohesive surface: search · (tabs) · selects ── */
+  /* ── Unified control bar — ONE cohesive surface: search, tabs, selects ── */
   .od-toolbar {
     display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem 0.9rem;
     background: var(--paper); border-radius: 15px; box-shadow: var(--shadow-1);

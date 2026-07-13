@@ -155,14 +155,6 @@ function DataCatalogue({ host }: { host: PublicHost }) {
     { v: 'facility-level', label: 'Facility' },
   ];
 
-  const newest = useMemo(() => DATA.map(d => d.updated).filter(Boolean).sort().pop() || '', [DATA]);
-  const chips = [
-    { icon: 'i-database', big: String(DATA.length), small: DATA.length === 1 ? 'dataset' : 'datasets' },
-    { icon: 'i-download', big: 'CSV', small: 'downloads' },
-    { icon: 'i-eye',      big: 'Preview', small: 'in-browser' },
-    { icon: 'i-calendar', big: newest ? monthYear(newest) : 'Monthly', small: 'last updated' },
-  ];
-
   // Detail preview pagination.
   const rowTotal = preview?.total_rows ?? 0;
   const rowSlice = preview ? preview.rows.slice(rowPage * rowsPerPage, (rowPage + 1) * rowsPerPage) : [];
@@ -179,16 +171,6 @@ function DataCatalogue({ host }: { host: PublicHost }) {
           <h1 className="od-title">Public dataset catalog</h1>
           <p className="od-sub">{DATA.length} curated datasets, openly licensed under CC-BY 4.0 — preview in the browser, download as CSV.</p>
         </header>
-
-        {/* Summary stat rail — borderless, flush with the title */}
-        <div className="od-stats">
-          {chips.map((c, i) => (
-            <div className="od-stat" key={i}>
-              <span className="od-stat-ico"><svg className="ico"><use href={`#${c.icon}`} /></svg></span>
-              <span className="od-stat-txt"><b>{c.big}</b><span>{c.small}</span></span>
-            </div>
-          ))}
-        </div>
 
         {/* Unified control bar */}
         <div className="od-toolbar">

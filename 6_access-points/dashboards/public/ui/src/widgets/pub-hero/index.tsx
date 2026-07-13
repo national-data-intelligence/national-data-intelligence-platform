@@ -67,9 +67,10 @@ function Hero({ host }: { host: PublicHost }) {
         </p>
 
         {/* Trust ribbon — the governance posture is the credibility, not fine print. */}
-        <p className="hero-trust">
+        <p className="hero-trust"
+           title="Aggregate and privacy-protected, k-anonymity at least 5, sourced from national health systems">
           <svg className="ico ico-sm"><use href="#i-shield-check"/></svg>
-          Aggregate &amp; privacy-protected · k-anonymity ≥ 5 · sourced from national health systems
+          Privacy-protected national health data
         </p>
 
         <div className="hero-actions">
