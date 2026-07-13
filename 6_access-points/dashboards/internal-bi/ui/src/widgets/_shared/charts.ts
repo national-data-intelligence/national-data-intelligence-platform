@@ -740,9 +740,37 @@ function rampInterp(stops: string[]): (t: number) => string {
   };
 }
 
+/** Bounding box [minLng, minLat, maxLng, maxLat] of a GeoJSON feature, walking
+ *  Polygon / MultiPolygon coordinate nests. null when the feature has no geometry. */
+function featureBBox(f: any): [number, number, number, number] | null {
+  let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+  const walk = (co: any) => {
+    if (typeof co[0] === 'number') {
+      if (co[0] < a) a = co[0]; if (co[0] > c) c = co[0];
+      if (co[1] < b) b = co[1]; if (co[1] > d) d = co[1];
+    } else for (const x of co) walk(x);
+  };
+  const g = f?.geometry; if (!g?.coordinates) return null;
+  walk(g.coordinates);
+  return isFinite(a) ? [a, b, c, d] : null;
+}
+
 export function choropleth(
   el: HTMLElement,
-  opts: { valuesByRegion: Record<string, number>; fmt: (v: number) => string; selected?: string; onSelect: (region: string) => void; ramp?: string[]; tooltip?: (region: string) => string },
+  opts: {
+    valuesByRegion: Record<string, number>; fmt: (v: number) => string;
+    selected?: string; onSelect: (region: string) => void; ramp?: string[];
+    tooltip?: (region: string) => string;
+    /** ADDITIVE — when set (an SPA region name), the map zooms to fill that
+     *  region's bounding box and de-emphasizes the rest; the region is drawn at
+     *  full colour. Unset (the default) → the full national map, byte-for-byte
+     *  the prior behaviour, so every other consumer is unaffected. */
+    focusRegion?: string;
+    /** ADDITIVE — hide the built-in visualMap gradient legend (a consumer that
+     *  draws its own legend, e.g. the redesigned dz-region-map sidebar). Default
+     *  true keeps the legend for existing callers. */
+    showScale?: boolean;
+  },
   theme: Theme, geo: any,
 ): () => void {
   const host = document.createElement('div'); host.className = 'map-graticule'; host.style.width = '100%'; host.style.height = '440px'; host.style.position = 'relative'; el.appendChild(host);
@@ -755,14 +783,35 @@ export function choropleth(
     const key = Object.keys(vals).find(r => normRegion(r) === normRegion(spaOrGeoName));
     return key != null ? vals[key] : 0;
   };
+  // Region focus (Task 1): zoom to the selected region's bbox + de-emphasize the
+  // rest. Additive — focusName null ⇒ national view, unchanged.
+  const focusName = opts.focusRegion ? geoNameFor(geo, opts.focusRegion) : null;
+  let focusCenter: [number, number] | undefined;
+  let focusZoom: number | undefined;
+  if (focusName) {
+    const feat = geo.features.find((f: any) => normRegion(f.properties.name) === normRegion(focusName));
+    const rb = feat ? featureBBox(feat) : null;
+    let na = Infinity, nb = Infinity, nc = -Infinity, nd = -Infinity;
+    for (const f of geo.features) { const bb = featureBBox(f); if (bb) { na = Math.min(na, bb[0]); nb = Math.min(nb, bb[1]); nc = Math.max(nc, bb[2]); nd = Math.max(nd, bb[3]); } }
+    if (rb && isFinite(na)) {
+      focusCenter = [(rb[0] + rb[2]) / 2, (rb[1] + rb[3]) / 2];
+      const rw = Math.max(1e-6, rb[2] - rb[0]), rh = Math.max(1e-6, rb[3] - rb[1]);
+      // 0.82 leaves a little breathing room; clamp so a tiny region (Dire Dawa/
+      // Harari) doesn't over-zoom past the map's detail.
+      focusZoom = Math.max(1.4, Math.min(11, 0.82 * Math.min((nc - na) / rw, (nd - nb) / rh)));
+    }
+  }
+  const zMax = focusZoom ? 12 : 6;
   // Soften fills ~30% (alpha over the off-white host) so the map reads gentler; full colour on hover.
   const soft = (c: string) => c.replace('rgb(', 'rgba(').replace(')', ',0.72)');
+  const faded = (c: string) => c.replace('rgb(', 'rgba(').replace(')', ',0.16)');
   const seriesData = geo.features.map((f: any) => {
     const name = f.properties.name; const value = valFor(name);
     const col = interp(max > 0 ? value / max : 0);
+    const isFocus = !focusName || normRegion(name) === normRegion(focusName);
     return {
       name, value,
-      itemStyle: { areaColor: soft(col), borderColor: '#fff', borderWidth: 0.8 },
+      itemStyle: { areaColor: isFocus ? soft(col) : faded(col), borderColor: '#fff', borderWidth: 0.8, opacity: isFocus ? 1 : 0.85 },
       emphasis: { itemStyle: { areaColor: col, borderColor: '#334155', borderWidth: 1.6 }, label: { show: true } },
       select: { itemStyle: { areaColor: col, borderColor: '#111827', borderWidth: 2.5 }, label: { show: true } },
     };
@@ -772,19 +821,21 @@ export function choropleth(
     tooltip: opts.tooltip
       ? { trigger: 'item', backgroundColor: '#fff', borderColor: theme.line, textStyle: { color: theme.ink[1], fontSize: 11 }, formatter: (p: any) => opts.tooltip!(p.name) }
       : { show: false },
-    visualMap: { type: 'continuous', min: 0, max: Math.max(1, max), calculable: false, orient: 'vertical', right: 8, bottom: 18, itemWidth: 9, itemHeight: 110, textStyle: { fontSize: 10, color: theme.ink[2] }, inRange: { color: [interp(0), interp(0.5), interp(1)] }, seriesIndex: -1, text: [opts.fmt(Math.max(1, max)), opts.fmt(0)] },
+    visualMap: { show: opts.showScale !== false, type: 'continuous', min: 0, max: Math.max(1, max), calculable: false, orient: 'vertical', right: 8, bottom: 18, itemWidth: 9, itemHeight: 110, textStyle: { fontSize: 10, color: theme.ink[2] }, inRange: { color: [interp(0), interp(0.5), interp(1)] }, seriesIndex: -1, text: [opts.fmt(Math.max(1, max)), opts.fmt(0)] },
     series: [{
       // roam:'move' = drag-to-pan only. Scroll-wheel zoom is intentionally OFF so scrolling the
       // PAGE over the map never hijacks into a zoom; deliberate zoom is via the +/− buttons below.
-      type: 'map', map: 'ethiopia', roam: 'move', zoom: 1, aspectScale: 0.85,
-      layoutCenter: ['50%', '50%'], layoutSize: '100%', scaleLimit: { min: 1, max: 6 },
+      type: 'map', map: 'ethiopia', roam: 'move', zoom: focusZoom ?? 1, aspectScale: 0.85,
+      ...(focusCenter ? { center: focusCenter } : {}),
+      layoutCenter: ['50%', '50%'], layoutSize: '100%', scaleLimit: { min: 1, max: zMax },
       label: { show: true, fontSize: 9, color: theme.ink[1], textBorderColor: '#fff', textBorderWidth: 2.5 },
       selectedMode: 'single', data: seriesData,
     }],
   });
 
-  // Deliberate zoom controls (no scroll-hijack).
-  let zoom = 1;
+  // Deliberate zoom controls (no scroll-hijack). Seed from the focus zoom so the
+  // +/− buttons step from where the region-focus put the view.
+  let zoom = focusZoom ?? 1;
   const zc = document.createElement('div');
   zc.style.cssText = 'position:absolute;top:8px;left:8px;display:flex;flex-direction:column;gap:4px;z-index:5';
   const mkBtn = (label: string) => {
@@ -794,7 +845,7 @@ export function choropleth(
     return b;
   };
   const zin = mkBtn('+'), zout = mkBtn('−');
-  const applyZoom = (z: number) => { zoom = Math.max(1, Math.min(6, z)); chart.setOption({ series: [{ zoom }] }); };
+  const applyZoom = (z: number) => { zoom = Math.max(1, Math.min(zMax, z)); chart.setOption({ series: [{ zoom }] }); };
   zin.onclick = () => applyZoom(zoom * 1.4);
   zout.onclick = () => applyZoom(zoom / 1.4);
   zc.appendChild(zin); zc.appendChild(zout); host.appendChild(zc);

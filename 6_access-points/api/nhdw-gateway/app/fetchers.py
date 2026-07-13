@@ -282,6 +282,61 @@ class Fetcher:
                 "row_count": res.get("row_count", len(res.get("rows", [])))}
 
 
+# ── dz-region-map SQL (aggregate map + weekly sparkline) ────────────────────
+# Two shapes off the SAME fetcher/grant so the redesigned widget's sparkline
+# needs no new widget id: default = one row per region (map + Top-5 + summary);
+# ?spark=1 = the scoped region's weekly case series for the sidebar sparkline.
+def _dz_region_map_sql(t: str, w: str, p: dict) -> str:
+    return (
+        f"WITH b AS (SELECT * FROM {t}{w}), "
+        f"mx AS (SELECT max(week_start) AS m FROM b), "
+        f"obs AS (SELECT b.region_id, sum(b.new_cases) AS cases_7d, sum(b.deaths) AS deaths_7d "
+        f"FROM b CROSS JOIN mx WHERE b.week_start = mx.m GROUP BY 1), "
+        f"scope AS (SELECT DISTINCT woreda_uid, region_id, disease_code FROM b), "
+        f"ml AS ({_ml_latest_run(p['model'])}), "
+        f"mlx AS (SELECT max(year * 100 + week) AS yw FROM ml), "
+        f"pr AS (SELECT s.region_id, max(m.alarm_prob) AS p_alarm "
+        f"FROM ml m CROSS JOIN mlx "
+        f"JOIN scope s ON s.woreda_uid = m.district AND s.disease_code = m.disease "
+        f"WHERE m.year * 100 + m.week = mlx.yw GROUP BY 1), "
+        # reliability = reporting completeness per region (bi_quality); readiness =
+        # share of tracer commodities with ≥1 month of stock per region (bi_supply).
+        f"rel AS (SELECT region_id, CAST(round(avg(completeness_pct), 1) AS double) AS reliability_pct "
+        f"FROM bi_quality.mart_data_quality GROUP BY region_id), "
+        f"rdy AS (SELECT region_id, CAST(round(100.0 * count_if(mos >= 1) "
+        f"/ NULLIF(count(*), 0), 1) AS double) AS readiness_pct "
+        f"FROM bi_supply.mart_supply_region_stock GROUP BY region_id), "
+        # burden = 12-week cases per 100k, population from bi_facility.mart_health_workforce.
+        f"pop AS (SELECT region_id, sum(population) AS pop "
+        f"FROM bi_facility.mart_health_workforce GROUP BY region_id), "
+        f"inc AS (SELECT b.region_id, CAST(round(1e5 * sum(b.new_cases) "
+        f"/ NULLIF(max(pop.pop), 0), 1) AS double) AS burden_incidence_100k "
+        f"FROM b JOIN pop ON pop.region_id = b.region_id "
+        f"CROSS JOIN mx WHERE b.week_start >= date_add('day', -84, mx.m) "
+        f"GROUP BY b.region_id) "
+        f"SELECT COALESCE(o.region_id, pr.region_id) AS region, "
+        f"inc.burden_incidence_100k, "
+        f"rdy.readiness_pct, rel.reliability_pct, "
+        f"round(pr.p_alarm, 3) AS p_alarm, o.cases_7d, "
+        f"round(100.0 * o.deaths_7d / NULLIF(o.cases_7d, 0), 2) AS cfr_pct, "
+        # data_through = the latest reported week in scope → the sidebar freshness tile.
+        f"(SELECT m FROM mx) AS data_through "
+        f"FROM obs o FULL JOIN pr ON pr.region_id = o.region_id "
+        f"LEFT JOIN rel ON rel.region_id = COALESCE(o.region_id, pr.region_id) "
+        f"LEFT JOIN rdy ON rdy.region_id = COALESCE(o.region_id, pr.region_id) "
+        f"LEFT JOIN inc ON inc.region_id = COALESCE(o.region_id, pr.region_id) "
+        f"ORDER BY 1")
+
+
+def _dz_region_spark_sql(t: str, w: str) -> str:
+    # Weekly case series for the scoped region ({w} already narrows region_id +
+    # programme). Ordered ascending; the widget takes the trailing weeks.
+    return (
+        f"SELECT date_format(week_start, '%Y-%m-%d') AS week, "
+        f"CAST(sum(new_cases) AS bigint) AS cases "
+        f"FROM {t}{w} GROUP BY week_start ORDER BY week_start")
+
+
 # ── the registry ──────────────────────────────────────────────────────────
 # Grows as widgets are bound to marts. Keyed by the canonical widget id
 # (bundle/seeds/security/widgets.yaml).
@@ -404,49 +459,12 @@ FETCHERS: dict[str, Fetcher] = {
         schema="bi_idsr", table="mart_idsr_disease_weekly",
         subject="PRG", data_class="DC.PRO",
         geo_col="region_id", prog_col="programme_id", period_col="week_start",
-        params_spec={"model": Param("ears", DZ_MODELS)},
+        # spark=1 switches this fetcher to the scoped region's weekly case series
+        # (the redesigned sidebar sparkline) — same grant/mart, no new widget id.
+        params_spec={"model": Param("ears", DZ_MODELS), "spark": Param("0", ("0", "1"))},
         sql=lambda t, w, p: (
-            f"WITH b AS (SELECT * FROM {t}{w}), "
-            f"mx AS (SELECT max(week_start) AS m FROM b), "
-            f"obs AS (SELECT b.region_id, sum(b.new_cases) AS cases_7d, sum(b.deaths) AS deaths_7d "
-            f"FROM b CROSS JOIN mx WHERE b.week_start = mx.m GROUP BY 1), "
-            f"scope AS (SELECT DISTINCT woreda_uid, region_id, disease_code FROM b), "
-            f"ml AS ({_ml_latest_run(p['model'])}), "
-            f"mlx AS (SELECT max(year * 100 + week) AS yw FROM ml), "
-            f"pr AS (SELECT s.region_id, max(m.alarm_prob) AS p_alarm "
-            f"FROM ml m CROSS JOIN mlx "
-            f"JOIN scope s ON s.woreda_uid = m.district AND s.disease_code = m.disease "
-            f"WHERE m.year * 100 + m.week = mlx.yw GROUP BY 1), "
-            # reliability = reporting completeness per region (bi_quality); readiness =
-            # share of tracer commodities with ≥1 month of stock per region (bi_supply).
-            # Both are REAL region-grain signals from existing marts — LEFT-joined so a
-            # region absent from either mart shows NULL (honest), never a fabricated score.
-            f"rel AS (SELECT region_id, CAST(round(avg(completeness_pct), 1) AS double) AS reliability_pct "
-            f"FROM bi_quality.mart_data_quality GROUP BY region_id), "
-            f"rdy AS (SELECT region_id, CAST(round(100.0 * count_if(mos >= 1) "
-            f"/ NULLIF(count(*), 0), 1) AS double) AS readiness_pct "
-            f"FROM bi_supply.mart_supply_region_stock GROUP BY region_id), "
-            # burden = 12-week cases per 100k. Population denominator is REAL:
-            # bi_facility.mart_health_workforce carries per-region population
-            # (sums to the national 92.4M; MFR-fed). Verified variance DD 148 → CE 16
-            # → the friend's orange gradient finally has signal to show.
-            f"pop AS (SELECT region_id, sum(population) AS pop "
-            f"FROM bi_facility.mart_health_workforce GROUP BY region_id), "
-            f"inc AS (SELECT b.region_id, CAST(round(1e5 * sum(b.new_cases) "
-            f"/ NULLIF(max(pop.pop), 0), 1) AS double) AS burden_incidence_100k "
-            f"FROM b JOIN pop ON pop.region_id = b.region_id "
-            f"CROSS JOIN mx WHERE b.week_start >= date_add('day', -84, mx.m) "
-            f"GROUP BY b.region_id) "
-            f"SELECT COALESCE(o.region_id, pr.region_id) AS region, "
-            f"inc.burden_incidence_100k, "
-            f"rdy.readiness_pct, rel.reliability_pct, "
-            f"round(pr.p_alarm, 3) AS p_alarm, o.cases_7d, "
-            f"round(100.0 * o.deaths_7d / NULLIF(o.cases_7d, 0), 2) AS cfr_pct "
-            f"FROM obs o FULL JOIN pr ON pr.region_id = o.region_id "
-            f"LEFT JOIN rel ON rel.region_id = COALESCE(o.region_id, pr.region_id) "
-            f"LEFT JOIN rdy ON rdy.region_id = COALESCE(o.region_id, pr.region_id) "
-            f"LEFT JOIN inc ON inc.region_id = COALESCE(o.region_id, pr.region_id) "
-            f"ORDER BY 1")),
+            _dz_region_spark_sql(t, w) if p.get("spark") == "1"
+            else _dz_region_map_sql(t, w, p))),
     # High-risk woredas: latest observed week vs the model's latest week,
     # ranked by alarm probability. top_disease = the woreda's peak-risk disease.
     # High-risk woredas (friend contract: rank, woreda, region, cases_12w,
@@ -494,45 +512,6 @@ FETCHERS: dict[str, Fetcher] = {
             f"LEFT JOIN rel ON rel.woreda_uid = recent.woreda_uid "
             f"LEFT JOIN rdy ON rdy.region_id = recent.region "
             f"ORDER BY rank LIMIT 12")),
-    # Alarm-probability bands: woredas bucketed by their latest-week peak
-    # alarm_prob (EWARS bands: low <0.25, watch <0.5, elevated <0.8, high ≥0.8).
-    # EWARS escalation summary (friend contract, 1 row): total_woredas,
-    # expected/observed_woreda_weeks (reporting completeness), and week-over-week
-    # band transitions — escalated (moved up a band), de_escalated (down),
-    # stable_watch (unchanged & in watch/above), very_low (band 1), net_escalations
-    # (escalated − de_escalated). Bands from the model's alarm_prob (Low<0.25,
-    # Watch<0.5, Elevated<0.8, High≥0.8), compared latest vs prior model week.
-    "dz-risk-bands": Fetcher(
-        schema="bi_idsr", table="mart_idsr_disease_weekly",
-        subject="PRG", data_class="DC.PRO",
-        geo_col="region_id", prog_col="programme_id", period_col="week_start",
-        params_spec={"model": Param("ears", DZ_MODELS)},
-        sql=lambda t, w, p: (
-            f"WITH b AS (SELECT * FROM {t}{w}), "
-            f"scope AS (SELECT DISTINCT woreda_uid, disease_code FROM b), "
-            f"rep AS (SELECT count(DISTINCT woreda_uid) AS total_woredas, "
-            f"count(DISTINCT woreda_uid || '|' || iso_week) AS observed_woreda_weeks, "
-            f"count(DISTINCT woreda_uid) * count(DISTINCT iso_week) AS expected_woreda_weeks FROM b), "
-            f"ml AS ({_ml_latest_run(p['model'])}), "
-            f"yws AS (SELECT DISTINCT year * 100 + week AS yw FROM ml ORDER BY yw DESC LIMIT 2), "
-            f"cur AS (SELECT max(yw) AS yw FROM yws), prv AS (SELECT min(yw) AS yw FROM yws), "
-            f"band AS (SELECT m.district, m.year * 100 + m.week AS yw, "
-            f"CASE WHEN max(m.alarm_prob) >= 0.8 THEN 4 WHEN max(m.alarm_prob) >= 0.5 THEN 3 "
-            f"WHEN max(m.alarm_prob) >= 0.25 THEN 2 ELSE 1 END AS bnd "
-            f"FROM ml m JOIN scope s ON s.woreda_uid = m.district AND s.disease_code = m.disease GROUP BY 1, 2), "
-            f"cmp AS (SELECT c.district, c.bnd AS cur_b, "
-            f"COALESCE(pb.bnd, c.bnd) AS prv_b FROM band c JOIN cur ON c.yw = cur.yw "
-            f"LEFT JOIN (SELECT b2.district, b2.bnd FROM band b2 JOIN prv ON b2.yw = prv.yw) pb "
-            f"ON pb.district = c.district) "
-            f"SELECT rep.total_woredas, rep.expected_woreda_weeks, rep.observed_woreda_weeks, "
-            f"CAST(count(*) FILTER (WHERE cmp.cur_b > cmp.prv_b) AS bigint) AS escalated, "
-            f"CAST(count(*) FILTER (WHERE cmp.cur_b = cmp.prv_b AND cmp.cur_b >= 2) AS bigint) AS stable_watch, "
-            f"CAST(count(*) FILTER (WHERE cmp.cur_b < cmp.prv_b) AS bigint) AS de_escalated, "
-            f"CAST(count(*) FILTER (WHERE cmp.cur_b = 1) AS bigint) AS very_low, "
-            f"CAST(count(*) FILTER (WHERE cmp.cur_b > cmp.prv_b) "
-            f"- count(*) FILTER (WHERE cmp.cur_b < cmp.prv_b) AS bigint) AS net_escalations "
-            f"FROM cmp CROSS JOIN rep GROUP BY 1, 2, 3")),
-
     # dz-malaria-kpi: the HLR Table 7 malaria MVP KPIs as a monthly series —
     # test-positivity (microscopy+RDT split), confirmed per 1,000, ITN/IRS
     # coverage, inpatient deaths. The multi-line monthly chart Table 7 asks

@@ -1,5 +1,5 @@
 /**
- * Regression: catalog-driven Disease Surveillance page (9 dz-* widget folders).
+ * Regression: catalog-driven Disease Surveillance page (dz-* widget folders).
  * Verifies every widget renders REAL data (echarts canvas / table rows / KPI
  * tiles), no synthetic, no "no renderer", no runtime errors. R-DEC (national)
  * sees the full page with programme=all (so the cross-disease heatmap + region
@@ -49,9 +49,10 @@ const check = (c, l) => { console.log((c ? '  ✓ ' : '  ✗ ') + l); if (!c) fa
       sections: document.querySelectorAll('.catalog-page .page-section').length,
       noRenderer: document.body.innerText.includes('No renderer registered'),
       widgets: {
-        kpi: w('dz-kpi-strip'), risk: w('dz-risk-bands'), map: w('dz-region-map'),
+        kpi: w('dz-kpi-strip'), map: w('dz-region-map'),
         woreda: w('dz-woreda-table'), signal: w('dz-signal-chart'),
         outbreaks: w('dz-outbreaks-table'), climTs: w('dz-climate-ts'), climCorr: w('dz-climate-corr'),
+        riskGone: !document.querySelector('[data-widget-id="dz-risk-bands"]'),
       },
     };
   });
@@ -62,7 +63,7 @@ const check = (c, l) => { console.log((c ? '  ✓ ' : '  ✗ ') + l); if (!c) fa
   check(r.sections >= 4, `sections rendered (${r.sections})`);
   check(!r.noRenderer, 'no "no renderer" placeholders');
   check(W.kpi.present && W.kpi.kpis >= 3 && !W.kpi.empty, `dz-kpi-strip real KPI tiles (${W.kpi.kpis})`);
-  check(W.risk.present && W.risk.canvas && !W.risk.empty, `dz-risk-bands donut drawn (canvas=${W.risk.canvas})`);
+  check(W.riskGone, 'dz-risk-bands removed (no widget card)');
   check(W.map.present && W.map.canvas && !W.map.empty, `dz-region-map choropleth drawn (canvas=${W.map.canvas})`);
   check(W.woreda.present && W.woreda.rows > 0 && !W.woreda.empty, `dz-woreda-table real rows (${W.woreda.rows})`);
   check(W.signal.present && W.signal.canvas && !W.signal.empty, `dz-signal-chart band drawn (canvas=${W.signal.canvas})`);

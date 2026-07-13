@@ -18,7 +18,6 @@
     - dz-kpi-strip
     - dz-outbreaks-table
     - dz-region-map
-    - dz-risk-bands
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
@@ -93,7 +92,6 @@
     - dz-kpi-strip
     - dz-outbreaks-table
     - dz-region-map
-    - dz-risk-bands
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
@@ -178,7 +176,6 @@
     - dz-kpi-strip
     - dz-outbreaks-table
     - dz-region-map
-    - dz-risk-bands
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
@@ -367,7 +364,6 @@
     - dz-kpi-strip
     - dz-outbreaks-table
     - dz-region-map
-    - dz-risk-bands
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table
@@ -468,7 +464,6 @@
     - dz-kpi-strip
     - dz-outbreaks-table
     - dz-region-map
-    - dz-risk-bands
     - dz-signal-chart
     - dz-malaria-kpi
     - dz-woreda-table

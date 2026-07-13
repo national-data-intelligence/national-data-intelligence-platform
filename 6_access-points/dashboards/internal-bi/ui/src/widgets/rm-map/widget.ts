@@ -29,7 +29,12 @@ const def: WidgetDef = {
   // the renderer scales the card height with the width growth (owner rule 2).
   reflow: 'ratio',
   render(ctx: WidgetCtx) {
-    if (ctx.filters.geography !== 'all') { ctx.empty('Map hidden. A single region is selected in the global filter.'); return; }
+    // Region adaptation (Task 1, symmetric with dz-region-map): the map ALWAYS
+    // loads the national dataset (geography:'all'; OPA still row-filters to the
+    // caller's scope). The global region filter drives the map ZOOM + selection
+    // instead of hiding the card.
+    const focusId = ctx.filters.geography;
+    const focusName = focusId && focusId !== 'all' ? regionName(String(focusId)) : null;
     let metric: Metric = 'composite_score';
     let chartCleanup: (() => void) | undefined;
     let rowsByRegion: Record<string, any> = {};
@@ -55,7 +60,7 @@ const def: WidgetDef = {
       if (chartCleanup) { chartCleanup(); chartCleanup = undefined; }
       mount.innerHTML = '<p class="muted" style="padding:1rem">Loading…</p>';
       try {
-        const rows = await ctx.fetchData();
+        const rows = await ctx.fetchData({ geography: 'all' });
         mount.innerHTML = '';
         if (!rows || !rows.length) { mount.innerHTML = '<div class="widget-empty">No supply stress geography for the selected filters.</div>'; return; }
         rowsByRegion = {}; const valuesByRegion: Record<string, number> = {};
@@ -71,7 +76,7 @@ const def: WidgetDef = {
           if (!r) return `<b>${name}</b><br/>No data`;
           return `<b>${name}</b><br/>Composite ${Number(r.composite_score ?? 0).toFixed(1)}<br/>Drug ${Number(r.drug_stress ?? 0).toFixed(1)} · Facility ${Number(r.facility_gap ?? 0).toFixed(1)} · Readiness ${Number(r.readiness_gap ?? 0).toFixed(1)}`;
         };
-        chartCleanup = choropleth(mount, { valuesByRegion, fmt: (v: number) => v.toFixed(1), onSelect: updateInfo, ramp, tooltip }, ctx.theme, geo);
+        chartCleanup = choropleth(mount, { valuesByRegion, fmt: (v: number) => v.toFixed(1), onSelect: updateInfo, ramp, tooltip, focusRegion: focusName || undefined, selected: focusName || undefined }, ctx.theme, geo);
       } catch {
         // Never leave the "Loading…" placeholder stuck if the map/geo render throws.
         mount.innerHTML = '<div class="widget-empty">Could not load the supply stress map. Please try again.</div>';
