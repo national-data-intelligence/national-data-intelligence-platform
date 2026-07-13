@@ -441,6 +441,7 @@ async def derive_graph(*, api: str, token: str, ca: str | bool,
             "traffic": None,
         }
 
+    fayda_referenced = False
     for nid, meta in wl_meta.items():
         texts = _scan_texts(meta["spec"], configmaps)
         blob = "\n".join(texts)
@@ -455,15 +456,33 @@ async def derive_graph(*, api: str, token: str, ca: str | bool,
             if port is None:
                 port = alias_default_port.get(alias)
             _add_edge(nid, target, port)
-        # External off-cluster dependencies (fayda-replica identity replica,
-        # nhdw-ollama LLM — both reached via host.k3d.internal) are DELIBERATELY
-        # NOT surfaced as topology nodes: the topology represents the Kubernetes
-        # cluster, and a node for something that isn't a k8s workload reads as a
-        # phantom (owner directive 2026-07-13 — "should not have a node for the
-        # ollama if it's not in the Kubernetes cluster"). No edge is drawn to them.
+        # external fayda-replica (KEPT — a real external identity integration the
+        # owner wants surfaced; reached via host.k3d.internal:8096).
+        if _FAYDA_HOST in blob and str(_FAYDA_PORT) in blob:
+            fayda_referenced = True
+            _add_edge(nid, _FAYDA_NODE, _FAYDA_PORT)
+        # nhdw-ollama LLM: deliberately NOT a node — it isn't a k8s workload
+        # (moved to 0_external/llm on 2026-07-06), and a node for it read as a
+        # phantom (owner directive 2026-07-13). No edge drawn to it.
 
-    # (external nhdw-ollama / fayda-replica node synthesis REMOVED 2026-07-13 —
-    #  the graph is a pure in-cluster view; external deps are not nodes.)
+    # synthesize the fayda-replica external node for the edge we drew (external ≠
+    # a scanned k8s workload, so it never appears in the node scan above). The
+    # nhdw-ollama node synthesis was removed 2026-07-13 per owner directive.
+    if fayda_referenced and _FAYDA_NODE not in nodes:
+        nodes[_FAYDA_NODE] = {
+            "id": _FAYDA_NODE,
+            "label": "fayda-replica",
+            "subtitle": None,
+            "tier": "external",
+            "zone": zone_for(_FAYDA_NODE, "external"),
+            "kind": "external",
+            "declared": True,
+            "observed": False,     # external, not a scanned k8s workload
+            "ephemeral": False,
+            "health": "unknown",
+            "phantom": False,       # external ≠ a missing internal workload
+            "k8s": None,
+        }
 
     # (SMTP → Mailpit edge RETIRED 2026-07-06 — app email now goes to an
     # EXTERNAL Google SMTP relay, like fayda/ollama; there's no in-cluster mail
