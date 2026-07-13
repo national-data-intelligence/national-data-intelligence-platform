@@ -123,7 +123,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
       <div className="modal" style={{ maxWidth: 640 }}>
 
         {!submitted && (
-          <div>
+          <>
             <div className="modal-hdr">
               <h2>Request NHDW access</h2>
               <p>Tell us who you are and what you need · response within 2 business days</p>
@@ -230,11 +230,11 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                 {busy ? 'Submitting…' : 'Submit request'}
               </button>
             </div>
-          </div>
+          </>
         )}
 
         {submitted && (
-          <div>
+          <>
             <div className="modal-hdr">
               <h2><svg className="ico"><use href="#i-check-circle" /></svg> Request submitted</h2>
               <p>Your request has been queued for FMoH IT review.</p>
@@ -289,7 +289,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                 <svg className="ico"><use href="#i-shield" /></svg> View in admin queue (demo) <svg className="ico"><use href="#i-arrow-right" /></svg>
               </a>
             </div>
-          </div>
+          </>
         )}
 
       </div>
