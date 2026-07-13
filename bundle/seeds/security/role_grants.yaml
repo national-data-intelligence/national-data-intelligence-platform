@@ -442,44 +442,19 @@
     - adm-sso-cards
     - adm-topology
     - adm-users-access
+    # R-OPS-ADM is data-plane-empty by DESIGN (same 2026-07-03 SoD carve-out as
+    # R-STEW: DC.QLT only, which OPA denies live) — so every mart-bound internal-BI
+    # widget granted here rendered as an empty husk. Its real home is the ADMIN
+    # dashboard above (topology / DQ / users / SSO). Aligned Plane-1 to Plane-2
+    # (same fix as R-STEW / the #69 donor husk): keep only the non-mart widgets
+    # that render (governance audit trail + settings); the operational data pages
+    # elide. See the R-STEW block for the docs line-445 owner note.
     internal-bi:
-    - dz-kpi-strip
-    - dz-outbreaks-table
-    - dz-region-map
-    - dz-signal-chart
-    - dz-malaria-kpi
-    - dz-woreda-table
     - ex-audit-trail
-    - ex-saved-queries
-    - ex-sql-editor
-    - ex-templates
-    - ov-national-kpis
-    - ov-disease-pulse
-    - ov-disease-outbreaks
-    - ov-resource-status
-    - ov-resource-facilities
-    - ov-service-attainment
-    - ov-service-cascade
-    - rm-equipment
-    - rm-events
-    - rm-forecast
-    - rm-hero
-    - rm-act-week
-    - rm-hotspots
-    - rm-map
-    - rm-statboard
-    - rm-stock-heatmap
-    - rm-workforce
     - st-alert-subs
     - st-display
     - st-profile
     - st-security
-    - sv-cascade-hiv
-    - sv-cascade-mnch
-    - sv-zero-dose
-    - sv-cascade-tb
-    - sv-compliance
-    - sv-flagship-table
     workshop:
     - ws-running-labs
     - ws-stats
