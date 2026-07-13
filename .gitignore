@@ -120,6 +120,11 @@ _tools/reactivity-harness/report*.json
 bundle/seeds/sources/**/*.csv
 bundle/seeds/sources/*.csv
 
+# --- Design reference mockups dropped into the tree while iterating on the
+#     dashboards — never part of the shipped repo. ---
+ChatGPT Image*.png
+*Redesign*.png
+
 # --- excluded from the published repo (dev archive, dev tooling, dbt build
 #     artifacts, and the bulk entity-model seed data) ---
 _archive/
