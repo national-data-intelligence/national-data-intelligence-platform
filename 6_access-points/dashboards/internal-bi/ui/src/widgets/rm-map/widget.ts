@@ -40,6 +40,7 @@ const def: WidgetDef = {
     let rowsByRegion: Record<string, any> = {};
 
     ctx.el.innerHTML = `
+      <p class="widget-lead" style="margin:0 0 .6rem;font-size:.8rem;line-height:1.35;color:var(--ink-3)">Regions shaded by composite supply stress, darkest where supply is tightest. Click a region to inspect its drivers.</p>
       <div class="local-controls"><span class="lc-label">View</span><div class="seg">
         ${OPTS.map((o, i) => `<button data-metric="${o.id}"${i === 0 ? ' class="active"' : ''}>${o.label}</button>`).join('')}
       </div></div>
@@ -52,7 +53,7 @@ const def: WidgetDef = {
       infoName.textContent = region;
       const r = rowsByRegion[region];
       infoStats.innerHTML = r
-        ? `Composite <b>${Number(r.composite_score ?? 0).toFixed(1)}</b><span class="ri-divider">·</span>Drug <b>${Number(r.drug_stress ?? 0).toFixed(1)}</b><span class="ri-divider">·</span>Facility <b>${Number(r.facility_gap ?? 0).toFixed(1)}</b><span class="ri-divider">·</span>Readiness <b>${Number(r.readiness_gap ?? 0).toFixed(1)}</b>`
+        ? `Composite <b>${Number(r.composite_score ?? 0).toFixed(1)}</b><span class="sep"></span>Drug <b>${Number(r.drug_stress ?? 0).toFixed(1)}</b><span class="sep"></span>Facility <b>${Number(r.facility_gap ?? 0).toFixed(1)}</b><span class="sep"></span>Readiness <b>${Number(r.readiness_gap ?? 0).toFixed(1)}</b>`
         : 'No supply data for this region.';
     };
 
@@ -74,7 +75,7 @@ const def: WidgetDef = {
         const tooltip = (name: string) => {
           const r = rowsByRegion[name];
           if (!r) return `<b>${name}</b><br/>No data`;
-          return `<b>${name}</b><br/>Composite ${Number(r.composite_score ?? 0).toFixed(1)}<br/>Drug ${Number(r.drug_stress ?? 0).toFixed(1)} · Facility ${Number(r.facility_gap ?? 0).toFixed(1)} · Readiness ${Number(r.readiness_gap ?? 0).toFixed(1)}`;
+          return `<b>${name}</b><br/>Composite ${Number(r.composite_score ?? 0).toFixed(1)}<br/>Drug ${Number(r.drug_stress ?? 0).toFixed(1)}, Facility ${Number(r.facility_gap ?? 0).toFixed(1)}, Readiness ${Number(r.readiness_gap ?? 0).toFixed(1)}`;
         };
         chartCleanup = choropleth(mount, { valuesByRegion, fmt: (v: number) => v.toFixed(1), onSelect: updateInfo, ramp, tooltip, focusRegion: focusName || undefined, selected: focusName || undefined }, ctx.theme, geo);
       } catch {

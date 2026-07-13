@@ -15,12 +15,11 @@ const def: WidgetDef = {
     const r = (await ctx.fetchData())?.[0];
     if (!r) { ctx.empty('No facility mapping coverage for the selected filters.'); return; }
     return statCard(ctx.el, {
-      subtitle: 'Share of DHIS2, EMR and supply locations resolving to an MFR id',
+      subtitle: 'Locations resolved to an MFR id',
       value: `${Number(r.value ?? 0)}${r.suffix ?? ''}`,
       note: r.note ?? '',
       delta: r.delta_text ?? '',
       deltaGood: r.delta_good !== false,
-      spark: Array.isArray(r.spark) ? r.spark.map(Number) : undefined,
     }, ctx.theme);
   },
 };

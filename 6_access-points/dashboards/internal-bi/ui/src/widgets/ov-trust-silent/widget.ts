@@ -17,12 +17,11 @@ const def: WidgetDef = {
     const r = (await ctx.fetchData())?.[0];
     if (!r) { ctx.empty('No active-but-silent facility data for the selected filters.'); return; }
     return statCard(ctx.el, {
-      subtitle: 'Active in registry, no recent reporting or stock signal',
+      subtitle: 'Facilities silent 30+ days',
       value: Number(r.value ?? 0).toLocaleString(),
       note: r.note ?? '',
       delta: r.delta_text ?? '',
       deltaGood: r.delta_good !== false,
-      spark: Array.isArray(r.spark) ? r.spark.map(Number) : undefined,
     }, ctx.theme);
   },
 };

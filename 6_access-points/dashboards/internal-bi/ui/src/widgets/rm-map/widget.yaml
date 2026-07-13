@@ -1,5 +1,5 @@
 id: rm-map
-title: Supply Stress Map
+title: Regional Stress Map
 kind: map
 requires:
   subject: PRG
