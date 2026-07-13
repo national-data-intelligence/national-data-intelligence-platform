@@ -10,6 +10,13 @@
   /* ─── Accent token · drives globe particle colour ─── */
   :root {
     --accent: #c9d3e6;        /* cool pale blue · reads on dark mountain */
+    /* The ONE thematic accent — deep, muted TEAL (clinical / trustworthy).
+       Promoted to :root so EVERY surface (home · open-data · articles · article)
+       shares one token — primary action / active / selected only. */
+    --pub-accent:      #0f766e;
+    --pub-accent-600:  #0b5e57;
+    --pub-accent-fill: #e7f2f0;
+    --pub-accent-line: rgba(15,118,110,0.26);
   }
 
   /* ─── Skip link ─── */
@@ -254,11 +261,12 @@
   .btn-cta-primary:active { transform: translateY(1px); }
   .btn-cta-primary .ico { width: 17px; height: 17px; }
 
-  /* Secondary CTA · ghost on the dark hero · one filled primary only, slate system */
+  /* Secondary CTA · ghost outline on the dark hero — ONE filled primary only,
+     no second accent colour (the gold gradient was retired 2026-07-13). */
   .btn-cta-secondary {
-    background: linear-gradient(180deg, #f2c14e, #e0a72e);
-    color: #3a2c07;
-    border: 1px solid #e6b23e;
+    background: transparent;
+    color: rgba(255,255,255,0.92);
+    border: 1px solid rgba(255,255,255,0.34);
     padding: 0.85rem 1.7rem;
     border-radius: 999px;
     font: inherit; font-size: 1rem; font-weight: 600;
@@ -267,7 +275,7 @@
     transition: background 0.18s, transform 0.1s, border-color 0.18s;
     text-decoration: none;
   }
-  .btn-cta-secondary:hover { background: linear-gradient(180deg, #f6cb5e, #e8b038); border-color: #f0bf50; }
+  .btn-cta-secondary:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.6); }
   .btn-cta-secondary:active { transform: translateY(1px); }
   .btn-cta-secondary .ico { width: 17px; height: 17px; }
   .btn-cta-link {
@@ -414,95 +422,12 @@
   .btn-seeall:active { transform: translateY(1px); }
   .btn-seeall svg { width: 12px; height: 12px; }
 
-  /* ═══════════════════════════════════════════════════════════════
-     NEWS · 3-column grid of white cards · institutional shadow-lift
-  ═══════════════════════════════════════════════════════════════ */
-  .news-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.2rem;
-  }
-  .news-item {
-    position: relative;
-    background: #fff;
-    border: 1px solid transparent;
-    border-radius: var(--radius-lg);
-    padding: 1.25rem 1.35rem;
-    text-align: left;
-    cursor: pointer;
-    font: inherit; color: inherit;
-    display: flex; flex-direction: column; gap: 0.7rem;
-    box-shadow: var(--shadow-1);
-    transition: box-shadow .22s ease, transform .22s ease, border-color .15s;
-  }
-  .news-item:hover {
-    box-shadow: var(--shadow-hover);
-    transform: translateY(-3px);
-  }
-  .news-item:hover .news-title { color: var(--navy-700); }
-  .news-item:hover .news-read  { gap: 0.55rem; }
-  .news-num {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    color: var(--ink-4);
-    letter-spacing: 0.1em;
-    font-feature-settings: 'tnum';
-  }
-  .news-meta {
-    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
-    font-size: 0.68rem;
-    color: var(--ink-3);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    line-height: 1;
-  }
-  .news-cat   { color: var(--navy-700); font-weight: 600; }
-  .news-date  { color: var(--ink-3); position: relative; padding-left: 0.55rem; }
-  .news-date::before   { content: '·'; position: absolute; left: 0; color: var(--ink-4); }
-  .news-author { color: var(--ink-4); padding-left: 0.55rem; position: relative; }
-  .news-author::before { content: '·'; position: absolute; left: 0; color: var(--ink-4); }
-  .news-title {
-    font-family: var(--font-sans);
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--ink);
-    line-height: 1.3;
-    letter-spacing: -0.012em;
-    margin: 0;
-    transition: color .15s;
-  }
-  /* Newsletter icon badge · adds a little depth to each news card */
-  .news-ico {
-    display: inline-grid; place-items: center;
-    width: 26px; height: 26px; border-radius: 7px;
-    background: var(--navy-50); color: var(--navy-700);
-    flex-shrink: 0;
-  }
-  .news-ico svg { width: 14px; height: 14px; }
-  .news-excerpt {
-    font-size: 0.92rem;
-    line-height: 1.55;
-    color: var(--ink-2);
-    margin: 0;
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .news-read {
-    margin-top: auto;
-    padding-top: 0.2rem;
-    color: var(--navy-700);
-    font-size: 0.85rem; font-weight: 600;
-    display: inline-flex; align-items: center; gap: 0.4rem;
-    text-transform: none;
-    letter-spacing: 0;
-    transition: gap .15s;
-  }
-  .news-read svg { width: 12px; height: 12px; }
+  /* NEWS · the home "What's happening" cards now reuse the Articles card
+     language (.nw-grid / .nw-card — see the OPEN DATA + ARTICLES section below),
+     so a bulletin looks identical on Home and on the Articles page. The former
+     .news-* card styles were retired here 2026-07-13. */
 
   @media (max-width: 900px) {
-    .news-grid { grid-template-columns: 1fr; gap: 1.4rem; }
     .ins-titlebar { flex-direction: column; align-items: flex-start; gap: 0.7rem; }
   }
 
@@ -573,10 +498,16 @@
   .trust-tile-lbl { font-size: 0.82rem; color: var(--ink-2); }
   .trust-tile-tgt { font-size: 0.72rem; color: var(--ink-3); }
   .trust-strip-note { font-size: 0.72rem; color: var(--ink-3); flex: 1 1 14rem; min-width: 0; }
-  /* Service-readiness variant — green accent (supply, not data-quality). */
-  .readiness-strip { margin-top: 0.7rem; background: var(--good-50, #e5f4ed); border-color: rgba(13,125,90,0.18); }
-  .readiness-strip .trust-strip-lbl,
-  .readiness-strip .trust-tile-val { color: var(--good, #1f7a4f); }
+  /* Service-readiness summary strip — a calm highlight band in the ONE teal
+     accent family (not a second saturated green accent, retired 2026-07-13).
+     Label carries the accent; the figures stay ink for a quiet, elegant read. */
+  .readiness-strip {
+    margin-top: 0.9rem;
+    background: var(--pub-accent-fill);
+    border: 1px solid var(--pub-accent-line);
+  }
+  .readiness-strip .trust-strip-lbl { color: var(--pub-accent-600); }
+  .readiness-strip .trust-tile-val { color: var(--ink); }
 
   /* ═══════════════════════════════════════════════════════════════
      OPEN DATA + ARTICLES · shared page shell (2026-07-13 elegance pass)
@@ -600,10 +531,17 @@
 
   /* ── Page header · eyebrow + confident serif title + one quiet line ── */
   .od-head { margin-bottom: 2rem; }
+  /* Eyebrow — matches the home section eyebrows + the Articles hero eyebrow:
+     a short leading rule, navy-700, so every page kicks off the same way. */
   .od-eyebrow {
     font-family: var(--font-sans);
-    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
-    color: var(--navy-500); margin: 0 0 0.75rem;
+    display: inline-flex; align-items: center; gap: 0.7rem;
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--navy-700); margin: 0 0 0.75rem;
+  }
+  .od-eyebrow::before {
+    content: ''; display: inline-block;
+    width: 28px; height: 1.5px; background: var(--navy-700); opacity: 0.55;
   }
   .od-title {
     font-family: var(--font-serif);
@@ -1007,8 +945,8 @@
     max-width: 760px; margin: 2.6rem auto;
     padding: 3.2rem clamp(1.6rem, 4vw, 3.6rem) 3rem;
     background: var(--paper);
-    border: 1px solid var(--border); border-radius: 16px;
-    box-shadow: var(--shadow-2);
+    border-radius: 16px;
+    box-shadow: var(--shadow-2);   /* borderless soft card — shadow only, like every other surface */
   }
   @media (max-width: 720px) { .rd-shell { margin: 1.4rem 1rem; } }
   .rd-back {
