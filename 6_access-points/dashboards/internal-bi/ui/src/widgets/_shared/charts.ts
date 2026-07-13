@@ -427,7 +427,7 @@ export function heatmap(
   const ramp = opts.ramp ?? ALARM_RAMP;
   const fmt = opts.fmt ?? ((v: number) => `${Math.round(v * 100)}%`);
   const label = opts.label ?? 'P(alarm)';
-  const ROW_H = opts.cellH ?? 34;          // per-row (and header-row) height
+  const ROW_H = opts.cellH ?? 38;          // per-row (and header-row) height — airy soft-card rows
   const HEAD_W = opts.gridLeft ?? 200;     // sticky row-header column width
   const CELL_W = opts.cellW ?? 78;         // min cell width → columns scroll when many, stretch (1fr) when few
   const rowTitle = opts.rowTitle ?? 'Resource';
@@ -458,7 +458,7 @@ export function heatmap(
     .rmhm{display:flex;flex-direction:column;gap:.55rem;font-family:${theme.fontSans};color:${theme.ink[1]}}
     .rmhm-top{display:flex;align-items:center;gap:1rem}
     .rmhm-search{max-width:260px}
-    .rmhm-axisttl{margin-left:auto;margin-right:.2rem;font-size:.78rem;font-weight:700;letter-spacing:.02em;color:${theme.navy['700']};display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap}
+    .rmhm-axisttl{margin-left:1.25rem;font-size:.78rem;font-weight:700;letter-spacing:.02em;color:${theme.navy['700']};display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap}
     .rmhm-body{display:flex;gap:.7rem;align-items:stretch;min-height:0}
     .rmhm-scroll{flex:1 1 auto;overflow:auto;border:1px solid ${theme.line};border-radius:10px;background:${theme.paper}}
     .rmhm-grid{display:grid;grid-auto-rows:${ROW_H}px}
@@ -468,8 +468,8 @@ export function heatmap(
     .rmhm-col .t{font-size:.73rem;font-weight:600;color:${theme.ink[1]};text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .rmhm-row{position:sticky;left:0;z-index:2;display:flex;align-items:center;padding:0 .75rem;border-right:1px solid ${theme.line};transition:background .12s ease}
     .rmhm-row .t{font-size:.79rem;color:${theme.ink[0]};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .rmhm-cell{padding:2.5px;transition:opacity .12s ease}
-    .rmhm-fill{width:100%;height:100%;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;font-variant-numeric:tabular-nums}
+    .rmhm-cell{padding:3px;transition:opacity .12s ease}
+    .rmhm-fill{width:100%;height:100%;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;font-variant-numeric:tabular-nums}
     .rmhm-na .rmhm-fill{color:${theme.ink[3]};background:transparent}
     .rmhm-cell.cr .rmhm-fill{box-shadow:inset 0 0 0 2px ${theme.navy['700']}}
     .rmhm-col.cr,.rmhm-row.cr{background:${theme.navy['700']}}
@@ -484,10 +484,13 @@ export function heatmap(
     .rmhm-foot .sp{flex:1}
     .rmhm-foot .rpp{display:inline-flex;align-items:center;gap:.4rem;margin-right:.3rem}
     .rmhm-foot select{padding:.22rem .4rem;border:1px solid ${theme.line};border-radius:6px;font-size:.76rem;background:${theme.paper};color:${theme.ink[1]};font-family:${theme.fontSans}}
-    .rmhm-pg{min-width:26px;height:26px;padding:0 .3rem;display:inline-grid;place-items:center;border:1px solid ${theme.line};border-radius:6px;background:${theme.paper};color:${theme.ink[2]};cursor:pointer;font-size:.76rem;font-family:${theme.fontSans}}
+    .rmhm-pg{min-width:28px;height:28px;padding:0 .3rem;display:inline-grid;place-items:center;border:1px solid ${theme.line};border-radius:50%;background:${theme.paper};color:${theme.ink[2]};cursor:pointer;font-size:.76rem;font-family:${theme.fontSans}}
     .rmhm-pg:hover:not(:disabled){border-color:${theme.navy['500']};color:${theme.navy['700']}}
     .rmhm-pg:disabled{opacity:.4;cursor:not-allowed}
-    .rmhm-pg.on{background:${theme.navy['700']};color:#fff;border-color:${theme.navy['700']}}
+    /* numbered pages read as bare figures (reference); only the active one is a filled navy chip */
+    .rmhm-pg[data-p]{border-color:transparent;background:transparent;color:${theme.ink[2]};font-weight:600}
+    .rmhm-pg[data-p]:hover{color:${theme.navy['700']};background:transparent}
+    .rmhm-pg.on{background:${theme.navy['700']};color:#fff;border-color:${theme.navy['700']};font-weight:700}
     .rmhm-none{padding:2rem;text-align:center;color:${theme.ink[3]};font-size:.85rem}
   </style>
   <div class="rmhm-top">
