@@ -20,10 +20,10 @@ async function draw(ctx: WidgetCtx): Promise<void> {
       You're not in any groups yet — request to join one from <strong>Discover</strong>, or accept an invitation.</div>`;
     return;
   }
-  ctx.el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:.55rem">
+  ctx.el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:.7rem">
     ${mine.map(g => `
       <div class="grp-card" data-gid="${esc(g.id)}">
-        <div class="grp-row1"><span class="grp-badge member">Member</span><span class="grp-name">${esc(g.name)}</span></div>
+        <div class="grp-row1"><span class="grp-chip"><svg class="ico"><use href="#i-users"/></svg></span><span class="grp-name">${esc(g.name)}</span><span class="grp-badge member">Member</span></div>
         <p class="grp-desc">${esc(g.description || '')}</p>
         <div class="grp-stats"><span>${g.member_count} member${g.member_count === 1 ? '' : 's'}</span>${g.artifact_count > 0 ? `<span>${g.artifact_count} shared</span>` : ''}</div>
         <button class="btn btn-sm btn-ghost mt-sm" data-act="leave" data-gid="${esc(g.id)}"><svg class="ico ico-sm"><use href="#i-x"/></svg> Leave</button>

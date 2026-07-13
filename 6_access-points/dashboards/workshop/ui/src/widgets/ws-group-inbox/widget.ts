@@ -24,7 +24,7 @@ async function draw(ctx: WidgetCtx): Promise<void> {
     return;
   }
   const row = (icon: string, title: string, sub: string, meta: string, actions: string) => `
-    <div style="display:flex;align-items:center;gap:.7rem;padding:.6rem .2rem;border-bottom:1px solid var(--line)">
+    <div class="ws-cm-row" style="display:flex;align-items:center;gap:.7rem;padding:.6rem .2rem">
       <svg class="ico ico-sm" style="opacity:.6"><use href="#${icon}"/></svg>
       <div style="flex:1;min-width:0">
         <div style="font-size:.88rem;color:${theme.ink[0]}">${title}</div>

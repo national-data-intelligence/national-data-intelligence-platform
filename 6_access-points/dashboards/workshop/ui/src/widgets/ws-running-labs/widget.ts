@@ -54,11 +54,10 @@ async function draw(ctx: WidgetCtx): Promise<void> {
       ? ''
       : 'Open a lab from a project (Projects → a project → “Open in JupyterLab”); it will appear here.';
     ctx.el.innerHTML = `
-      <div class="ws-runlabs-empty" style="display:flex;flex-direction:column;align-items:center;gap:.5rem;
-           padding:1.6rem 1rem;text-align:center">
-        <svg class="ico" style="width:26px;height:26px;opacity:.4"><use href="#i-server"/></svg>
-        <div style="font-size:.9rem;font-weight:600;color:${theme.ink[1]}">${esc(msg)}</div>
-        ${hint ? `<div style="font-size:.8rem;color:${theme.ink[2]};max-width:34rem">${esc(hint)}</div>` : ''}
+      <div class="ws-labs-empty">
+        <span class="ws-labs-empty-chip"><svg class="ico"><use href="#i-server"/></svg></span>
+        <div class="ws-labs-empty-msg">${esc(msg)}</div>
+        ${hint ? `<div class="ws-labs-empty-hint">${esc(hint)}</div>` : ''}
       </div>`;
     return;
   }

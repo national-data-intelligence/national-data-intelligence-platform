@@ -26,8 +26,6 @@ async function jsonOf(path: string): Promise<any | null> {
 }
 
 async function draw(ctx: WidgetCtx): Promise<void> {
-  const { theme } = ctx;
-
   const [me, projJ, dsJ, mlJ, grpJ, labJ] = await Promise.all([
     jsonOf('/auth/me'),
     jsonOf('/gw/projects'),
@@ -58,32 +56,31 @@ async function draw(ctx: WidgetCtx): Promise<void> {
     { label: 'My groups',          value: myGroups,          icon: 'i-users',    hint: 'groups you belong to',        group: 'you' },
     { label: 'Public projects',    value: publicProjects,    icon: 'i-globe',    hint: 'shared across the community',  group: 'warehouse' },
     { label: 'Datasets',           value: datasets ? datasets.length : null, icon: 'i-database', hint: 'in the catalogue',    group: 'warehouse' },
-    { label: 'Models',             value: models ? models.length : null,     icon: 'i-activity', hint: 'served in the registry', group: 'warehouse' },
+    { label: 'Models',             value: models ? models.length : null,     icon: 'i-pulse',    hint: 'served in the registry', group: 'warehouse' },
   ];
 
-  const card = (s: Stat) => {
-    const accent = s.group === 'you' ? theme.ink[0] : theme.ink[2];
-    return `
+  const card = (s: Stat) => `
     <div class="ws-stat" title="${esc(s.hint)}">
-      <div class="ws-stat-top">
-        <svg class="ico ico-sm" style="color:${accent};opacity:.75"><use href="#${s.icon}"/></svg>
-        <span class="ws-stat-tag">${s.group === 'you' ? 'You' : 'Warehouse'}</span>
-      </div>
-      <div class="ws-stat-num" style="color:${theme.ink[0]}">${s.value == null ? '—' : s.value}</div>
-      <div class="ws-stat-label" style="color:${theme.ink[2]}">${esc(s.label)}</div>
+      <svg class="ico ws-stat-ico"><use href="#${s.icon}"/></svg>
+      <div class="ws-stat-num">${s.value == null ? '—' : s.value}</div>
+      <div class="ws-stat-label">${esc(s.label)}</div>
     </div>`;
-  };
+
+  const cluster = (label: string, group: 'you' | 'warehouse') => `
+    <div class="ws-stat-cluster">
+      <div class="ws-stat-cluster-hd">${label}</div>
+      <div class="ws-stats-grid">${stats.filter(s => s.group === group).map(card).join('')}</div>
+    </div>`;
 
   ctx.el.innerHTML = `
     <div class="ws-stats-wrap">
       <div class="ws-greeting">
-        <div>
-          <div class="ws-greeting-hi" style="color:${theme.ink[0]}">Welcome back, ${esc(firstName)}.</div>
-          <div class="ws-greeting-sub" style="color:${theme.ink[2]}">Pick up a project, open a lab, or explore the catalogue.</div>
-        </div>
+        <div class="ws-greeting-hi">Welcome back, ${esc(firstName)}.</div>
+        <div class="ws-greeting-sub">Pick up a project, open a lab, or explore the catalogue.</div>
       </div>
-      <div class="ws-stats-grid">
-        ${stats.map(card).join('')}
+      <div class="ws-stat-clusters">
+        ${cluster('Your work', 'you')}
+        ${cluster('In the warehouse', 'warehouse')}
       </div>
     </div>`;
 }

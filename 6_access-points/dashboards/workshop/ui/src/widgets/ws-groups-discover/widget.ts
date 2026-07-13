@@ -31,11 +31,11 @@ async function draw(ctx: WidgetCtx): Promise<void> {
       <div class="grp-create-err"></div>
       <div style="display:flex;gap:.5rem;justify-content:flex-end"><button type="button" class="btn btn-sm btn-ghost" data-act="cancel">Cancel</button><button type="submit" class="btn btn-sm btn-primary">Create</button></div>
     </form>
-    ${discover.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:.55rem">
+    ${discover.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:.7rem">
       ${discover.map(g => {
         const pending = sentIds.has(g.id);
         return `<div class="grp-card discover" data-gid="${esc(g.id)}">
-          <div class="grp-row1"><span class="grp-name">${esc(g.name)}</span></div>
+          <div class="grp-row1"><span class="grp-chip"><svg class="ico"><use href="#i-users"/></svg></span><span class="grp-name">${esc(g.name)}</span></div>
           <p class="grp-desc">${esc(g.description || '')}</p>
           <div class="grp-stats"><span>${g.member_count} member${g.member_count === 1 ? '' : 's'}</span></div>
           ${pending

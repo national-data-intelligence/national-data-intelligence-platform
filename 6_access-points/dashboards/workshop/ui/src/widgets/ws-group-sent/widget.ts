@@ -19,7 +19,7 @@ async function draw(ctx: WidgetCtx): Promise<void> {
     return;
   }
   const line = (title: string, sub: string, status: string, actions = '') => `
-    <div style="display:flex;align-items:center;gap:.7rem;padding:.55rem .2rem;border-bottom:1px solid var(--line)">
+    <div class="ws-cm-row" style="display:flex;align-items:center;gap:.7rem;padding:.55rem .2rem">
       <div style="flex:1;min-width:0"><div style="font-size:.87rem;color:${theme.ink[0]}">${title}</div><div style="font-size:.74rem;color:${theme.ink[2]}">${sub}</div></div>
       <span class="pill ${STATUS_TONE[status] || 'neutral'}">${esc(status)}</span>${actions}
     </div>`;
