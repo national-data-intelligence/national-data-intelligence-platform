@@ -21,7 +21,7 @@ const PAGE_DESC: Record<string, string> = {
   Models:    'Browse the model catalogue, inspect performance and run predictions.',
   Projects:  'Create, manage, and collaborate on data science projects.',
   Community: 'Groups share artifacts at the shared tier — manage invitations, requests and memberships.',
-  Help:      'Guides, references and analysis tools for the workshop.',
+  Help:      'How-to guides and reference for working in the workshop.',
   Settings:  'Your profile and personal preferences.',
 };
 

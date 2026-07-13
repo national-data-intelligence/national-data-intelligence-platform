@@ -263,7 +263,6 @@
     - ws-project-files
     - ws-project-artifacts
     - ws-help-guides
-    - ws-help-reference
     - ws-settings-profile
 - role: R-CONS-SCI
   dashboards:
@@ -297,7 +296,6 @@
     - ws-project-files
     - ws-project-artifacts
     - ws-help-guides
-    - ws-help-reference
     - ws-settings-profile
 - role: R-CONS-RES
   dashboards:
@@ -331,7 +329,6 @@
     - ws-project-files
     - ws-project-artifacts
     - ws-help-guides
-    - ws-help-reference
     - ws-settings-profile
 - role: R-CONS-PRT
   dashboards:
@@ -396,7 +393,6 @@
     - ws-model-monitoring
     - ws-model-results
     - ws-help-guides
-    - ws-help-reference
     - ws-settings-profile
 - role: R-OPS-ENG
   dashboards:
@@ -472,7 +468,6 @@
     - ws-project-files
     - ws-project-artifacts
     - ws-help-guides
-    - ws-help-reference
     - ws-settings-profile
 - role: R-OPS-SEC
   dashboards:
