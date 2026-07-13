@@ -1058,6 +1058,17 @@
     border: 1px solid #e8eaee;
   }
 
+  /* ═══ Earth/water backdrop for the burden map (choropleth worldContext) ·
+     faint neighbouring land renders on a soft-water gradient — NO grid ═══ */
+  .map-earth {
+    background-color: #e9f0f5;
+    background-image: linear-gradient(158deg, #eef4f8 0%, #e3edf3 52%, #d9e6ee 100%);
+    background-size: auto;
+    background-position: 0 0;
+    border: none;
+    border-radius: 14px;
+  }
+
   /* ═══ Cross-disease anomaly grid · widget header ═══ */
   .zg-head {
     display: flex; align-items: flex-start; justify-content: space-between;

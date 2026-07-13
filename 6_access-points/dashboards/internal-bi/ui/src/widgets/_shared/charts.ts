@@ -773,10 +773,24 @@ export function choropleth(
      *  draws its own legend, e.g. the redesigned dz-region-map sidebar). Default
      *  true keeps the legend for existing callers. */
     showScale?: boolean;
+    /** ADDITIVE — render the merged 'eth-ctx' map (Ethiopia regions ON a faint
+     *  band of real neighbouring land, over a soft-water backdrop). The view is
+     *  framed deterministically via `boundingCoords` (Ethiopia's bbox, or the
+     *  focus region's bbox, expanded by a margin) so surrounding land fills the
+     *  wide/short host. Unset → the plain 'ethiopia' map, unchanged for rm-map. */
+    worldContext?: boolean;
+    /** ADDITIVE — fixed pixel height for the map host. Default 440 preserves the
+     *  prior (aspect-driven) behaviour for existing callers; a small value gives
+     *  a genuinely short card (used with worldContext). */
+    height?: number;
   },
   theme: Theme, geo: any,
 ): () => void {
-  const host = document.createElement('div'); host.className = 'map-graticule'; host.style.width = '100%'; host.style.height = '440px'; host.style.position = 'relative'; el.appendChild(host);
+  const H = opts.height ?? 440;
+  // worldContext: fill the mount (the grid stretches the map cell to the sidebar's
+  // height → the map is exactly as short as the compact sidebar, no letterbox gap).
+  // Otherwise a fixed pixel height (bindAspect grows it from width, prior behaviour).
+  const host = document.createElement('div'); host.className = opts.worldContext ? 'map-earth' : 'map-graticule'; host.style.width = '100%'; host.style.height = opts.worldContext ? '100%' : `${H}px`; host.style.position = 'relative'; el.appendChild(host);
   const chart = echarts.init(host);
   const vals = opts.valuesByRegion;
   // A custom ramp (e.g. diseaseBurden, supplyStress) overrides the default amber scale.
@@ -786,30 +800,70 @@ export function choropleth(
     const key = Object.keys(vals).find(r => normRegion(r) === normRegion(spaOrGeoName));
     return key != null ? vals[key] : 0;
   };
-  // Region focus (Task 1): zoom to the selected region's bbox + de-emphasize the
-  // rest. Additive — focusName null ⇒ national view, unchanged.
+  // The interactive/colourable features are the Ethiopia regions only; in the
+  // worldContext merged map the `__ctx` land features are backdrop, never data.
+  const isCtx = (n: any): boolean => !!opts.worldContext && typeof n === 'string' && n.indexOf('ctx-') === 0;
+  const ethFeatures = geo.features.filter((f: any) => !f.properties.__ctx);
+
+  // National bbox over the Ethiopia features (drives both the focus-zoom clamp
+  // and the worldContext framing). Over ethFeatures only, so the surrounding
+  // world land never inflates the "national" extent.
+  let na = Infinity, nb = Infinity, nc = -Infinity, nd = -Infinity;
+  for (const f of ethFeatures) { const bb = featureBBox(f); if (bb) { na = Math.min(na, bb[0]); nb = Math.min(nb, bb[1]); nc = Math.max(nc, bb[2]); nd = Math.max(nd, bb[3]); } }
+
+  // Region focus (Task 1): frame the selected region's bbox + de-emphasize the rest.
   const focusName = opts.focusRegion ? geoNameFor(geo, opts.focusRegion) : null;
+  const focusFeat = focusName ? ethFeatures.find((f: any) => normRegion(f.properties.name) === normRegion(focusName)) : null;
+  const rb = focusFeat ? featureBBox(focusFeat) : null;
+
+  // Non-worldContext path: center + zoom (byte-for-byte the prior behaviour).
   let focusCenter: [number, number] | undefined;
   let focusZoom: number | undefined;
-  if (focusName) {
-    const feat = geo.features.find((f: any) => normRegion(f.properties.name) === normRegion(focusName));
-    const rb = feat ? featureBBox(feat) : null;
-    let na = Infinity, nb = Infinity, nc = -Infinity, nd = -Infinity;
-    for (const f of geo.features) { const bb = featureBBox(f); if (bb) { na = Math.min(na, bb[0]); nb = Math.min(nb, bb[1]); nc = Math.max(nc, bb[2]); nd = Math.max(nd, bb[3]); } }
-    if (rb && isFinite(na)) {
-      focusCenter = [(rb[0] + rb[2]) / 2, (rb[1] + rb[3]) / 2];
-      const rw = Math.max(1e-6, rb[2] - rb[0]), rh = Math.max(1e-6, rb[3] - rb[1]);
-      // 0.82 leaves a little breathing room; clamp so a tiny region (Dire Dawa/
-      // Harari) doesn't over-zoom past the map's detail.
-      focusZoom = Math.max(1.4, Math.min(11, 0.82 * Math.min((nc - na) / rw, (nd - nb) / rh)));
-    }
+  if (focusName && rb && isFinite(na)) {
+    focusCenter = [(rb[0] + rb[2]) / 2, (rb[1] + rb[3]) / 2];
+    const rw = Math.max(1e-6, rb[2] - rb[0]), rh = Math.max(1e-6, rb[3] - rb[1]);
+    // 0.82 leaves a little breathing room; clamp so a tiny region (Dire Dawa/
+    // Harari) doesn't over-zoom past the map's detail.
+    focusZoom = Math.max(1.4, Math.min(11, 0.82 * Math.min((nc - na) / rw, (nd - nb) / rh)));
   }
   const zMax = focusZoom ? 12 : 6;
+
+  // worldContext path: deterministic framing via boundingCoords ([[left,top],
+  // [right,bottom]] = [[minLng,maxLat],[maxLng,minLat]]). The surrounding land
+  // beyond this box is still drawn — it fills whatever letterbox the wide/short
+  // host leaves — so the box only needs a comfortable margin around Ethiopia.
+  let boundingCoords: number[][] | undefined;
+  if (opts.worldContext) {
+    if (rb) {
+      // Focus a region — a small margin keeps the region-adaptive zoom, still on land.
+      const mx = Math.max(0.7, (rb[2] - rb[0]) * 0.4), my = Math.max(0.7, (rb[3] - rb[1]) * 0.4);
+      boundingCoords = [[rb[0] - mx, rb[3] + my], [rb[2] + mx, rb[1] - my]];
+    } else if (isFinite(na)) {
+      // National — a compact box around Ethiopia so the country stays prominent
+      // (the wide/short host is fit by height → Ethiopia ~70% tall). The LON
+      // letterbox the wide host leaves is filled automatically by neighbouring
+      // land; the modest LAT margin gives a band of sea/land above and below.
+      const mx = (nc - na) * 0.15 + 1.0, my = (nd - nb) * 0.12 + 1.2;
+      boundingCoords = [[na - mx, nd + my], [nc + mx, nb - my]];
+    }
+  }
   // Soften fills ~30% (alpha over the off-white host) so the map reads gentler; full colour on hover.
   const soft = (c: string) => c.replace('rgb(', 'rgba(').replace(')', ',0.72)');
   const faded = (c: string) => c.replace('rgb(', 'rgba(').replace(')', ',0.16)');
+  // Faint surrounding land (parchment on water) — backdrop only: no data, no
+  // label, no hover/select, and silent so it never intercepts a region's events.
+  const CTX_FILL = 'rgba(223, 213, 190, 0.55)';
+  const CTX_LINE = 'rgba(180, 167, 138, 0.5)';
   const seriesData = geo.features.map((f: any) => {
-    const name = f.properties.name; const value = valFor(name);
+    const name = f.properties.name;
+    if (f.properties.__ctx) {
+      return {
+        name, value: 0, silent: true,
+        itemStyle: { areaColor: CTX_FILL, borderColor: CTX_LINE, borderWidth: 0.5 },
+        emphasis: { disabled: true }, select: { disabled: true }, label: { show: false },
+      };
+    }
+    const value = valFor(name);
     const col = interp(max > 0 ? value / max : 0);
     const isFocus = !focusName || normRegion(name) === normRegion(focusName);
     return {
@@ -822,16 +876,23 @@ export function choropleth(
   chart.setOption({
     textStyle: { fontFamily: theme.fontSans },
     tooltip: opts.tooltip
-      ? { trigger: 'item', backgroundColor: '#fff', borderColor: theme.line, textStyle: { color: theme.ink[1], fontSize: 11 }, formatter: (p: any) => opts.tooltip!(p.name) }
+      ? { trigger: 'item', backgroundColor: '#fff', borderColor: theme.line, textStyle: { color: theme.ink[1], fontSize: 11 }, formatter: (p: any) => (isCtx(p.name) ? '' : opts.tooltip!(p.name)) }
       : { show: false },
     visualMap: { show: opts.showScale !== false, type: 'continuous', min: 0, max: Math.max(1, max), calculable: false, orient: 'vertical', right: 8, bottom: 18, itemWidth: 9, itemHeight: 110, textStyle: { fontSize: 10, color: theme.ink[2] }, inRange: { color: [interp(0), interp(0.5), interp(1)] }, seriesIndex: -1, text: [opts.fmt(Math.max(1, max)), opts.fmt(0)] },
     series: [{
       // roam:'move' = drag-to-pan only. Scroll-wheel zoom is intentionally OFF so scrolling the
       // PAGE over the map never hijacks into a zoom; deliberate zoom is via the +/− buttons below.
-      type: 'map', map: 'ethiopia', roam: 'move', zoom: focusZoom ?? 1, aspectScale: 0.85,
-      ...(focusCenter ? { center: focusCenter } : {}),
-      layoutCenter: ['50%', '50%'], layoutSize: '100%', scaleLimit: { min: 1, max: zMax },
+      type: 'map', map: opts.worldContext ? 'eth-ctx' : 'ethiopia', roam: 'move', aspectScale: 0.85,
+      // worldContext frames deterministically via boundingCoords; otherwise center+zoom.
+      ...(opts.worldContext
+        ? { zoom: 1, ...(boundingCoords ? { boundingCoords } : {}), scaleLimit: { min: 1, max: 8 } }
+        : { zoom: focusZoom ?? 1, ...(focusCenter ? { center: focusCenter } : {}), scaleLimit: { min: 1, max: zMax } }),
+      layoutCenter: ['50%', '50%'], layoutSize: '100%',
       label: { show: true, fontSize: 9, color: theme.ink[1], textBorderColor: '#fff', textBorderWidth: 2.5 },
+      // worldContext packs Ethiopia into a compact host — drop colliding labels so
+      // the map reads cleanly (labels still appear on hover/select). rm-map keeps
+      // its always-on labels (no labelLayout) so its look is unchanged.
+      ...(opts.worldContext ? { labelLayout: { hideOverlap: true } } : {}),
       selectedMode: 'single', data: seriesData,
     }],
   });
@@ -852,7 +913,7 @@ export function choropleth(
   zin.onclick = () => applyZoom(zoom * 1.4);
   zout.onclick = () => applyZoom(zoom / 1.4);
   zc.appendChild(zin); zc.appendChild(zout); host.appendChild(zc);
-  const allNames = geo.features.map((f: any) => f.properties.name);
+  const allNames = ethFeatures.map((f: any) => f.properties.name);
   const selectByName = (region: string) => {
     chart.dispatchAction({ type: 'unselect', seriesIndex: 0, name: allNames });
     chart.dispatchAction({ type: 'select', seriesIndex: 0, name: geoNameFor(geo, region) });
@@ -862,15 +923,26 @@ export function choropleth(
   const initSel = opts.selected || top;
   if (initSel) { selectByName(initSel); opts.onSelect(initSel); }
   chart.on('click', (p: any) => {
-    if (!p || !p.name) return;
+    if (!p || !p.name || isCtx(p.name)) return;              // context land is not selectable
     const reg = Object.keys(vals).find(r => normRegion(r) === normRegion(p.name)) || p.name;
     selectByName(reg); opts.onSelect(reg);
   });
-  // Grow the map to fill its (tall) card: height driven from measured width.
-  // Max clamp is generous (was 560) so a reflow='ratio' card that absorbed a
-  // scope-hidden neighbour's tracks gets a map that follows the card's growth
-  // instead of stranding blank space (choropleth's only consumers are the two
-  // reflow='ratio' map widgets: dz-region-map, rm-map).
+  // worldContext: the host fills the map cell (100%), which the grid stretches to
+  // the compact sidebar's height — just keep the chart sized to its host on resize.
+  if (opts.worldContext) {
+    const onResize = () => chart.resize();
+    // The grid stretches the map cell to the sidebar height a frame after mount —
+    // resize once that geometry has settled so the map fills without a gap.
+    requestAnimationFrame(() => { chart.resize(); requestAnimationFrame(onResize); });
+    window.addEventListener('resize', onResize);
+    let ro: ResizeObserver | undefined;
+    try { ro = new ResizeObserver(() => chart.resize()); ro.observe(el); } catch { /* window resize covers it */ }
+    return () => { window.removeEventListener('resize', onResize); ro?.disconnect(); chart.dispose(); };
+  }
+  // Otherwise grow the map to fill its (tall) card: height driven from measured
+  // width. Max clamp is generous (was 560) so a reflow='ratio' card that absorbed
+  // a scope-hidden neighbour's tracks gets a map that follows the card's growth
+  // instead of stranding blank space (rm-map is the remaining reflow='ratio' map).
   return bindAspect(el, host, chart, 0.72, 380, 920);
 }
 

@@ -27,7 +27,7 @@
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { choropleth, sparklineSvg } from '../_shared/charts';
-import { loadEthGeo } from '../_shared/geo';
+import { loadEthContextGeo } from '../_shared/geo';
 import { regionName } from '../_shared/reference';
 
 type Metric = 'burden' | 'readiness' | 'reliability';
@@ -59,9 +59,10 @@ const fmtDate = (v: any, short = false): string => {
 const def: WidgetDef = {
   id: 'dz-region-map',
   reactsTo: ['geography', 'programme'],
-  // Map-like: when a scope reflow grows this card, preserve its aspect —
-  // the renderer scales the card height with the width growth (owner rule 2).
-  reflow: 'ratio',
+  // NOTE: intentionally NOT reflow:'ratio'. The map host is a FIXED short height
+  // (worldContext) so a scope reflow must not scale the card taller — the card
+  // stays compact regardless of span. Region adaptation is via boundingCoords,
+  // independent of reflow.
   render(ctx: WidgetCtx) {
     const t = ctx.theme;
     let metric: Metric = 'burden';
@@ -98,47 +99,50 @@ const def: WidgetDef = {
 
     ctx.el.innerHTML = `
       <style>
-        .dzm{display:flex;flex-direction:column;height:100%;gap:.7rem;font-family:${t.fontSans}}
+        .dzm{display:flex;flex-direction:column;height:100%;gap:.45rem;font-family:${t.fontSans}}
         .dzm-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
-        .dzm-sub{font-size:.82rem;color:${t.ink[2]};line-height:1.35;max-width:60ch}
+        .dzm-sub{font-size:.78rem;color:${t.ink[2]};line-height:1.28;max-width:56ch}
         .dzm-seg .ico{margin-right:.32rem}
-        .dzm-main{display:grid;grid-template-columns:minmax(0,1fr) 306px;gap:1rem;flex:1;min-height:0}
-        .dzm-mapwrap{position:relative;min-width:0;border:1px solid ${t.line};border-radius:14px;overflow:hidden;background:${t.paper}}
-        .dz-map-mount{width:100%;height:100%;min-height:360px}
-        .dzm-side{display:flex;flex-direction:column;gap:.7rem;min-width:0}
-        .dzm-side-lbl{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${t.ink[3]}}
-        .dzm-card{border:1px solid ${t.line};border-radius:14px;background:${t.paper};padding:.85rem .95rem;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+        .dzm-main{display:grid;grid-template-columns:minmax(0,1fr) 296px;gap:.7rem;flex:1;min-height:0}
+        .dzm-mapwrap{position:relative;min-width:0;border-radius:16px;overflow:hidden;background:${t.paper};box-shadow:0 2px 10px rgba(15,23,42,.07),0 0 0 1px rgba(15,23,42,.04)}
+        .dz-map-mount{width:100%;height:100%;min-height:210px}
+        .dzm-side{display:flex;flex-direction:column;gap:.42rem;min-width:0}
+        .dzm-card{border-radius:13px;background:${t.paper};padding:.44rem .58rem;box-shadow:0 1px 4px rgba(15,23,42,.06),0 0 0 1px rgba(15,23,42,.035)}
+        .dzm-eyebrow{font-size:.59rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${t.ink[3]};margin-bottom:.22rem}
         .dzm-sel-top{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
-        .dzm-sel-name{display:flex;align-items:center;gap:.45rem;font-size:1.06rem;font-weight:700;color:${t.ink[0]};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .dzm-sel-name{display:flex;align-items:center;gap:.36rem;font-size:.9rem;font-weight:700;color:${t.ink[0]};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .dzm-sel-name .ico{color:${t.status.alert}}
-        .dzm-badge{flex-shrink:0;font-size:.7rem;font-weight:600;padding:.2rem .55rem;border-radius:999px;white-space:nowrap}
-        .dzm-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.3rem;margin-top:.8rem;text-align:center}
-        .dzm-stat .k{font-size:.66rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:${t.ink[3]}}
-        .dzm-stat .v{font-size:1.12rem;font-weight:700;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1.4}
-        .dzm-spark{margin-top:.7rem;padding-top:.65rem;border-top:1px solid ${t.line}}
-        .dzm-spark-cap{display:flex;align-items:center;justify-content:space-between;font-size:.66rem;color:${t.ink[3]};margin-top:.2rem}
-        .dzm-top5-hd{font-size:.78rem;font-weight:600;color:${t.ink[1]};margin-bottom:.55rem;display:flex;align-items:center;justify-content:space-between;gap:.4rem}
-        .dzm-top5-hd .u{font-size:.66rem;font-weight:500;color:${t.ink[3]}}
-        .dzm-row{display:grid;grid-template-columns:74px 1fr 38px;align-items:center;gap:.5rem;padding:.2rem .35rem;border-radius:7px;font-size:.76rem}
+        .dzm-badge{flex-shrink:0;font-size:.64rem;font-weight:600;padding:.14rem .46rem;border-radius:999px;white-space:nowrap}
+        .dzm-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.3rem;margin-top:.34rem;text-align:center}
+        .dzm-stat .k{font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:${t.ink[3]}}
+        .dzm-stat .v{font-size:.92rem;font-weight:700;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1.2}
+        .dzm-spark{margin-top:.26rem;padding-top:.24rem;border-top:1px solid ${tint(t.ink[4], 0.18)}}
+        .dzm-spark-svg{line-height:0}
+        .dzm-spark-cap{display:flex;align-items:center;justify-content:space-between;font-size:.6rem;color:${t.ink[3]};margin-top:.04rem}
+        .dzm-top5-hd{font-size:.73rem;font-weight:600;color:${t.ink[1]};margin-bottom:.24rem;display:flex;align-items:center;justify-content:space-between;gap:.4rem}
+        .dzm-top5-hd .u{font-size:.6rem;font-weight:500;color:${t.ink[3]}}
+        .dzm-row{display:grid;grid-template-columns:68px 1fr 34px;align-items:center;gap:.45rem;padding:.02rem .26rem;border-radius:6px;font-size:.72rem;line-height:1.15}
         .dzm-row.sel{background:${tint(t.status.alert, 0.08)}}
         .dzm-row .n{color:${t.ink[1]};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
         .dzm-row.sel .n{color:${t.status.alert};font-weight:600}
-        .dzm-row .track{height:9px;border-radius:5px;background:${t.navy['50']};overflow:hidden}
+        .dzm-row .track{height:7px;border-radius:5px;background:${t.navy['50']};overflow:hidden}
         .dzm-row .track > span{display:block;height:100%;border-radius:5px}
         .dzm-row .val{text-align:right;font-weight:700;color:${t.ink[0]};font-variant-numeric:tabular-nums}
-        .dzm-legend-ttl{font-size:.74rem;font-weight:600;color:${t.ink[1]};margin-bottom:.5rem}
-        .dzm-legbar{height:11px;border-radius:6px}
-        .dzm-legends{display:flex;justify-content:space-between;font-size:.68rem;color:${t.ink[3]};margin-top:.35rem}
-        .dzm-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid ${t.line};border-radius:14px;background:${t.paper};box-shadow:0 1px 2px rgba(15,23,42,.04)}
-        .dzm-sumcell{display:flex;align-items:center;gap:.7rem;padding:.75rem .95rem}
-        .dzm-sumcell + .dzm-sumcell{border-left:1px solid ${t.line}}
-        .dzm-sumchip{width:38px;height:38px;border-radius:10px;display:inline-grid;place-items:center;flex-shrink:0}
-        .dzm-sumchip .ico{width:1.15rem;height:1.15rem}
-        .dzm-sumcell .l{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:${t.ink[3]}}
-        .dzm-sumcell .m{font-size:1.02rem;font-weight:700;color:${t.ink[0]};display:flex;align-items:center;gap:.4rem}
-        .dzm-sumcell .s{font-size:.68rem;color:${t.ink[3]}}
-        .dzm-sumbadge{font-size:.66rem;font-weight:600;padding:.1rem .45rem;border-radius:999px}
-        @media (max-width:960px){.dzm-main{grid-template-columns:1fr}.dzm-summary{grid-template-columns:1fr}.dzm-sumcell + .dzm-sumcell{border-left:none;border-top:1px solid ${t.line}}}
+        .dzm-legfoot{margin-top:.34rem;padding-top:.3rem;border-top:1px solid ${tint(t.ink[4], 0.18)}}
+        .dzm-legfoot-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:.22rem}
+        .dzm-legend-lbl{font-size:.68rem;font-weight:600;color:${t.ink[1]}}
+        .dzm-legmini{font-size:.6rem;color:${t.ink[3]};font-weight:500}
+        .dzm-legbar{height:7px;border-radius:6px}
+        .dzm-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-radius:13px;background:${t.paper};box-shadow:0 1px 4px rgba(15,23,42,.06),0 0 0 1px rgba(15,23,42,.035)}
+        .dzm-sumcell{display:flex;align-items:center;gap:.5rem;padding:.34rem .68rem}
+        .dzm-sumcell + .dzm-sumcell{box-shadow:inset 1px 0 0 ${tint(t.ink[4], 0.16)}}
+        .dzm-sumchip{width:28px;height:28px;border-radius:8px;display:inline-grid;place-items:center;flex-shrink:0}
+        .dzm-sumchip .ico{width:.95rem;height:.95rem}
+        .dzm-sumcell .l{font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:${t.ink[3]}}
+        .dzm-sumcell .m{font-size:.88rem;font-weight:700;color:${t.ink[0]};display:flex;align-items:center;gap:.36rem}
+        .dzm-sumcell .s{font-size:.6rem;color:${t.ink[3]}}
+        .dzm-sumbadge{font-size:.6rem;font-weight:600;padding:.06rem .4rem;border-radius:999px}
+        @media (max-width:960px){.dzm-main{grid-template-columns:1fr}.dzm-summary{grid-template-columns:1fr}.dzm-sumcell + .dzm-sumcell{box-shadow:inset 0 1px 0 ${tint(t.ink[4], 0.16)}}}
       </style>
       <div class="dzm">
         <div class="dzm-head">
@@ -152,29 +156,26 @@ const def: WidgetDef = {
         <div class="dzm-main">
           <div class="dzm-mapwrap"><div class="dz-map-mount"></div></div>
           <div class="dzm-side">
-            <div>
-              <div class="dzm-side-lbl">Selected region</div>
-              <div class="dzm-card dzm-sel" style="margin-top:.4rem">
-                <div class="dzm-sel-top">
-                  <span class="dzm-sel-name"><svg class="ico ico-sm"><use href="#i-pin"/></svg><span class="dzm-sel-nm">—</span></span>
-                  <span class="dzm-badge dzm-sel-badge"></span>
-                </div>
-                <div class="dzm-stats">
-                  <div class="dzm-stat"><div class="k">P(alarm)</div><div class="v dzm-s-alarm">—</div></div>
-                  <div class="dzm-stat"><div class="k">Cases 7d</div><div class="v dzm-s-cases">—</div></div>
-                  <div class="dzm-stat"><div class="k">CFR</div><div class="v dzm-s-cfr">—</div></div>
-                </div>
-                <div class="dzm-spark"><div class="dzm-spark-svg"></div><div class="dzm-spark-cap"></div></div>
+            <div class="dzm-card dzm-sel">
+              <div class="dzm-eyebrow">Selected region</div>
+              <div class="dzm-sel-top">
+                <span class="dzm-sel-name"><svg class="ico ico-sm"><use href="#i-pin"/></svg><span class="dzm-sel-nm">—</span></span>
+                <span class="dzm-badge dzm-sel-badge"></span>
               </div>
+              <div class="dzm-stats">
+                <div class="dzm-stat"><div class="k">P(alarm)</div><div class="v dzm-s-alarm">—</div></div>
+                <div class="dzm-stat"><div class="k">Cases 7d</div><div class="v dzm-s-cases">—</div></div>
+                <div class="dzm-stat"><div class="k">CFR</div><div class="v dzm-s-cfr">—</div></div>
+              </div>
+              <div class="dzm-spark"><div class="dzm-spark-svg"></div><div class="dzm-spark-cap"></div></div>
             </div>
             <div class="dzm-card dzm-top5">
               <div class="dzm-top5-hd"><span class="dzm-top5-lbl">Top 5</span><span class="u dzm-top5-unit"></span></div>
               <div class="dzm-top5-list"></div>
-            </div>
-            <div class="dzm-card dzm-legend">
-              <div class="dzm-legend-ttl dzm-legend-lbl">Burden level</div>
-              <div class="dzm-legbar"></div>
-              <div class="dzm-legends"><span>Low</span><span>High</span></div>
+              <div class="dzm-legfoot">
+                <div class="dzm-legfoot-hd"><span class="dzm-legend-lbl">Burden level</span><span class="dzm-legmini">Low → High</span></div>
+                <div class="dzm-legbar"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -227,7 +228,7 @@ const def: WidgetDef = {
       const pts = (series || []).slice(-10);
       const nums = pts.map((p: any) => Number(p.cases ?? 0));
       if (nums.length < 2) { svgHost.innerHTML = ''; cap.innerHTML = `<span style="color:${t.ink[4]}">Weekly series unavailable</span>`; return; }
-      svgHost.innerHTML = sparklineSvg(nums, t, { color: t.status.alert, w: 274, h: 44 });
+      svgHost.innerHTML = sparklineSvg(nums, t, { color: t.status.alert, w: 252, h: 24 });
       const peak = Math.max(...nums);
       cap.innerHTML = `<span>${esc(fmtDate((pts[0] as any).week, true))} – ${esc(fmtDate((pts[pts.length - 1] as any).week, true))}</span><span>peak ${peak.toLocaleString()} cases/wk</span>`;
     };
@@ -261,6 +262,8 @@ const def: WidgetDef = {
       chartCleanup = choropleth(mapMount, {
         valuesByRegion, fmt: m.fmt, onSelect: selectRegion, ramp, tooltip,
         showScale: false,                                     // we draw our own sidebar legend
+        worldContext: true,                                   // real surrounding land on water
+        height: 258,                                          // short card (ask #1)
         focusRegion: focusName || undefined,
         selected: selectedName || focusName || undefined,
       }, t, geo);
@@ -336,7 +339,7 @@ const def: WidgetDef = {
           rowsByName[name] = r; idByName[name] = String(r.region);
         }
         dataThrough = rows[0]?.data_through ?? null;
-        geo = await loadEthGeo();
+        geo = await loadEthContextGeo();          // Ethiopia regions + faint surrounding land
         mapMount.innerHTML = '';
 
         // Initial selection: the globally-focused region, else the top-burden region.
