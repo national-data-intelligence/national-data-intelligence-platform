@@ -135,22 +135,33 @@ sys.exit(1 if bad else 0)' 2>/dev/null; then
     done
   fi
 
-  # Launch all ingestors, then wait on each (parallel — wall clock ≈ the slowest
-  # single source, EthioEMR's observation scan, instead of the sum of all).
-  echo "▸ [ingest] launching ${#INGEST_JOBS[@]} source ingestors (parallel)"
-  for job in "${INGEST_JOBS[@]}"; do
-    extract_job "$job" || { echo "FAILED extracting $job"; exit 1; }
-    kubectl -n "$NS" delete job "$job" --ignore-not-found --wait=true >/dev/null 2>&1
-    kubectl -n "$NS" apply -f /tmp/nhdw-job-$job.yaml >/dev/null || { echo "FAILED applying $job"; exit 1; }
-  done
+  # Bounded-concurrency launch (INGEST_BATCH, default 3): run the memory-heavy
+  # ingestors a few at a time instead of firing all N at once, so the parallel
+  # fan-out can't OOM-kill one (e.g. EthioEMR's observation scan) on a RAM-tight
+  # host. Wall clock ≈ the sum over batches of each batch's slowest source; the
+  # serial-retry pass below still catches any straggler. Set INGEST_BATCH=99 to
+  # restore the old all-at-once behaviour on a host with ample RAM.
+  BATCH="${INGEST_BATCH:-3}"
+  echo "▸ [ingest] launching ${#INGEST_JOBS[@]} source ingestors, ${BATCH} at a time"
   retry=()
-  for job in "${INGEST_JOBS[@]}"; do
-    if wait_job "$job" 1500; then
-      echo "  ✓ $job"
-    else
-      echo "  ! $job did not complete in the parallel batch — queuing solo retry"
-      retry+=("$job")
-    fi
+  i=0
+  while [ "$i" -lt "${#INGEST_JOBS[@]}" ]; do
+    batch=("${INGEST_JOBS[@]:i:BATCH}")
+    for job in "${batch[@]}"; do
+      extract_job "$job" || { echo "FAILED extracting $job"; exit 1; }
+      kubectl -n "$NS" delete job "$job" --ignore-not-found --wait=true >/dev/null 2>&1
+      kubectl -n "$NS" apply -f /tmp/nhdw-job-$job.yaml >/dev/null || { echo "FAILED applying $job"; exit 1; }
+    done
+    echo "  ▸ batch launched: ${batch[*]}"
+    for job in "${batch[@]}"; do
+      if wait_job "$job" 1500; then
+        echo "  ✓ $job"
+      else
+        echo "  ! $job did not complete in its batch — queuing solo retry"
+        retry+=("$job")
+      fi
+    done
+    i=$((i + BATCH))
   done
   # Serial-retry pass: launching all N memory-heavy ingestors at once can OOM-kill
   # one (e.g. EthioEMR's observation scan) on a RAM-constrained host, yet the same

@@ -403,6 +403,24 @@ bash "$SCRIPTS/seed-graduation.sh" || { echo; echo "✗ graduation seed FAILED �
 # system was removed platform-wide; every dashboard widget is now a foldered
 # build-time module. Archived to _archive/2026-07-06/runtime-plugin-system/.)
 
+# ─── 7.9 · verification gate ─────────────────────────────────────────────────
+# Fail LOUDLY, not silently. Every prior step exiting 0 does NOT prove the demo
+# is actually usable (a mart can be empty, a contract unmet) — so run the fast
+# regression check as a hard gate. On a clean boot it passes in seconds; on a
+# bad one it prints the exact failing contracts here instead of surfacing later
+# as a mysteriously-broken demo. SKIP_VERIFY=1 bypasses (deliberate partial boot).
+if [ "${SKIP_VERIFY:-0}" != "1" ]; then
+  step "7.9 · verify-system (fast regression gate)"
+  if ! bash "$SCRIPTS/verify-system.sh"; then
+    echo
+    echo "✗ verify-system found problems — the boot ran to completion but one or"
+    echo "  more contracts are NOT satisfied (see the ✗ lines above). The demo may"
+    echo "  be partially broken; investigate before relying on it. Re-run"
+    echo "  '$SCRIPTS/verify-system.sh' after any fix. (SKIP_VERIFY=1 to bypass.)"
+    exit 1
+  fi
+fi
+
 # ─── 8. done ────────────────────────────────────────────────────────────────
 step "8 · DONE — NHDW demo is up"
 cat <<EOF
