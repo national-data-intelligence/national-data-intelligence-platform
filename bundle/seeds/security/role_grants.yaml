@@ -371,57 +371,25 @@
     - pub-newsroom
     - pub-region
     - pub-supply
+    # Steward = data-plane-empty by DESIGN (separation of duties, r-stew.yaml
+    # 2026-07-03): OPA denies every mart read for R-STEW, so ANY mart-bound
+    # widget renders as an empty husk. Granting them all (~41) produced a
+    # dashboard of "No data" panels. Aligned Plane-1 to Plane-2 (same fix as
+    # the R-CONS-PRT donor husk, #69): keep ONLY the non-mart widgets that
+    # actually render — the assistant, the governance audit trail, and the
+    # user settings. The operational data pages (Overview/Disease/Resource/
+    # Service) now elide (no granted widgets). The steward's real home is the
+    # workshop (catalog/lineage/model governance) below + admin governance.
+    # If stewards should instead see AGGREGATE health (docs/user-roles.md §Group E
+    # line 445), that is an OPA change (widen r-stew.yaml to aggregate reads),
+    # NOT a grant change — flagged for owner.
     internal-bi:
     - bi-assistant
-    - dz-climate-corr
-    - dz-climate-ts
-    - dz-kpi-strip
-    - dz-outbreaks-table
-    - dz-region-map
-    - dz-signal-chart
-    - dz-malaria-kpi
-    - dz-woreda-table
     - ex-audit-trail
-    - ex-saved-queries
-    - ex-sql-editor
-    - ex-templates
-    - ov-act-first-woredas
-    - ov-benchmarks
-    - ov-brief
-    - ov-disease-snapshot
-    - ov-reliability-table
-    - ov-trust-completeness
-    - ov-source-pulse
-    - ov-trust-mapping
-    - ov-trust-silent
-    - rm-cold-chain
-    - rm-forecast
-    - rm-hero
-    - rm-act-week
-    - rm-hotspots
-    - rm-map
-    - rm-statboard
-    - rm-stockout-impact
-    - rm-wastage
     - st-alert-subs
     - st-display
     - st-profile
     - st-security
-    - sv-agreement-donut
-    - sv-attainment-summary
-    - sv-cascade-hiv
-    - sv-cascade-mnch
-    - sv-zero-dose
-    - sv-cascade-ncd
-    - sv-cascade-tb
-    - sv-compliance
-    - sv-continuity-mnch
-    - sv-data-trust-table
-    - sv-dropoff-region
-    - sv-facility-outliers
-    - sv-flagship-table
-    - sv-risk-woredas
-    - sv-topline-kpis
     workshop:
     - ws-datasets-table
     - ws-models-table
