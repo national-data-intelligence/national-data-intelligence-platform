@@ -64,6 +64,46 @@ DATASETS = [
         "desc": "Aggregate commodity availability / stockout summary across EPSS "
                 "supply hubs. Aggregate + k-anonymity >= 5.",
     },
+    {
+        "id": "D-005", "title": "Notifiable disease surveillance (weekly) by region",
+        "topic": "Disease surveillance · IDSR", "schema": "bi_public",
+        "table": "mart_public_disease_surveillance", "source": "DHIS2 (IDSR / EWARS)",
+        "grain": "region × disease × epi-week", "period_col": "iso_week",
+        "desc": "Weekly confirmed cases and deaths for priority notifiable diseases "
+                "(malaria, measles, cholera, meningitis, dengue, yellow fever, TB and "
+                "more) by region and epidemiological week, from Ethiopia's IDSR "
+                "reporting through DHIS2. Rolled up across woredas; any cell with "
+                "fewer than 5 combined events is suppressed (k-anonymity >= 5).",
+    },
+    {
+        "id": "D-006", "title": "Health workforce density by region",
+        "topic": "Human resources for health", "schema": "bi_public",
+        "table": "mart_public_workforce", "source": "MFR · DHIS2 population",
+        "grain": "region", "period_col": None,
+        "desc": "Health-worker counts by cadre (physicians, nurses, health extension "
+                "workers) and WHO-comparable density per 10,000 population, per region, "
+                "from the Master Facility Registry joined to population. Aggregate only.",
+    },
+    {
+        "id": "D-007", "title": "Data quality & reporting completeness scorecard",
+        "topic": "Data governance", "schema": "bi_public",
+        "table": "mart_public_data_quality", "source": "All six ingested sources",
+        "grain": "source × period × region", "period_col": "period_id",
+        "desc": "Reporting completeness, timeliness and validity by source system, "
+                "period and region across all six data feeds (DHIS2, HCMIS, mBrana, "
+                "EthioEMR, MFR, IDSR). A transparency view of how complete the "
+                "warehouse's own inputs are. Aggregate; small cells suppressed (k >= 5).",
+    },
+    {
+        "id": "D-008", "title": "Immunization: zero-dose reach index by region",
+        "topic": "EPI · Immunization", "schema": "bi_public",
+        "table": "mart_public_zero_dose", "source": "DHIS2 · mBrana",
+        "grain": "region × year", "period_col": "year_id",
+        "desc": "Where are the unreached children? Penta-1 immunization reach index "
+                "(annualized doses per 1,000 expected infants), expected-infant "
+                "estimates and last-mile cold-chain stress by region and year, with "
+                "equity hotspots flagged. Aggregate only.",
+    },
 ]
 
 

@@ -98,6 +98,8 @@ models:
       +schema: bi_idsr
       +tags: ["mart:idsr"]
       +materialized: table
+      public:
+        +schema: bi_public
 
     service_performance:
       +schema: bi_service
@@ -108,6 +110,8 @@ models:
       +schema: bi_quality
       +tags: ["mart:quality"]
       +materialized: table
+      public:
+        +schema: bi_public
 
     governance:
       +schema: bi_governance
