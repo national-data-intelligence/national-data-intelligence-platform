@@ -19,7 +19,6 @@
     - dz-outbreaks-table
     - dz-region-map
     - dz-signal-chart
-    - dz-malaria-kpi
     - dz-woreda-table
     - ex-audit-trail
     - ex-saved-queries
@@ -60,7 +59,6 @@
     - st-profile
     - st-security
     - sv-agreement-donut
-    - sv-attainment-summary
     - sv-cascade-hiv
     - sv-cascade-mnch
     - sv-zero-dose
@@ -93,7 +91,6 @@
     - dz-outbreaks-table
     - dz-region-map
     - dz-signal-chart
-    - dz-malaria-kpi
     - dz-woreda-table
     - ov-brief
     - ov-benchmarks
@@ -144,7 +141,6 @@
     - dz-kpi-strip
     - dz-outbreaks-table
     - dz-signal-chart
-    - dz-malaria-kpi
     - dz-woreda-table
     - ov-brief
     - ov-benchmarks
@@ -189,7 +185,6 @@
     - dz-outbreaks-table
     - dz-region-map
     - dz-signal-chart
-    - dz-malaria-kpi
     - dz-woreda-table
     - ex-audit-trail
     - ex-saved-queries
@@ -230,7 +225,6 @@
     - st-profile
     - st-security
     - sv-agreement-donut
-    - sv-attainment-summary
     - sv-cascade-hiv
     - sv-cascade-mnch
     - sv-zero-dose
@@ -346,7 +340,6 @@
     internal-bi:
     - dz-kpi-strip
     - dz-signal-chart
-    - dz-malaria-kpi
     - ov-brief
     - ov-disease-snapshot
     - ex-audit-trail

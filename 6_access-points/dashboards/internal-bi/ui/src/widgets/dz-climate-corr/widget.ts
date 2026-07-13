@@ -42,10 +42,6 @@ const def: WidgetDef = {
     if (!data.length) { ctx.empty('No lag-correlation data for the current scope.'); return; }
     const t = ctx.theme;
     ctx.el.innerHTML = `
-      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;font-size:.74rem;font-weight:600;
-        color:${t.status.watch};background:var(--watch-50);border-radius:8px;padding:.35rem .6rem">
-        <svg class="ico ico-sm"><use href="#i-alert"/></svg> Preview · not yet validated
-      </div>
       <div class="cl-mount"></div>`;
     const mount = ctx.el.querySelector('.cl-mount') as HTMLElement;
     return divergingBar(mount, data, t, { height: 300, barWidth: 20 });

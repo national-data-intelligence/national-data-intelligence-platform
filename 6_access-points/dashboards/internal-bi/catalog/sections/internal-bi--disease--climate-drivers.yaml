@@ -13,7 +13,3 @@ widgets:
   col_span: 5
   row_span: 2
   ordering: 1
-- id: dz-malaria-kpi
-  col_span: 12
-  row_span: 3
-  ordering: 2

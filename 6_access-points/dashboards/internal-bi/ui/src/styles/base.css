@@ -140,10 +140,12 @@
   /* charcoal nav + slate emphasis (names kept for cascade compatibility) */
   --navy-900:#050b20; --navy-800:#0a1734; --navy-700:#334155;
   --navy-600:#475569; --navy-500:#64748B; --navy-50:#EEF2F7;
-  /* status — red reserved for alert/escalation/negative only */
-  --good:#22A06B; --good-50:#EAF7F0;
-  --watch:#F59E0B; --watch-50:#FFF4D6;
-  --alert:#EF4444; --alert-50:#FDE8E8;
+  /* status — red reserved for alert/escalation/negative only. Overhaul §1:
+   * muted, executive-suitable semantic colours (softer green / red) so trend
+   * indicators read as subtle direction cues, not aggressive signals. */
+  --good:#3f9d70; --good-50:#EAF7F0;
+  --watch:#C6893F; --watch-50:#FFF4D6;
+  --alert:#CB5B62; --alert-50:#FDE8E8;
   --info:#3B82F6;  --info-50:#E8F1FF;
   /* amber sequential interpolator → repointed to a cool slate ramp so funnels/
      lollipops/heatmaps read cool with the new palette */
@@ -480,6 +482,9 @@ table.dash {
   width: 100%; border-collapse: collapse; font-size: 0.84rem;
 }
 table.dash th, table.dash td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); }
+/* Overhaul §4: numeric columns right-align in BOTH header and body so digits
+ * line up under their label. `.num` on a th or td opts a column in. */
+table.dash th.num, table.dash td.num { text-align: right; font-variant-numeric: tabular-nums; }
 table.dash th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-3); font-weight: 600; background: var(--paper-2); }
 table.dash tr:hover { background: var(--navy-50); }
 

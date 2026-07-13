@@ -258,7 +258,10 @@ function renderSection(section: ResolvedSection, page: ResolvedPage, mount: HTML
   // scroll box, KPI tiles), so nothing collapses; ragged bottoms read as a natural
   // masonry rather than empty stretched cards. Per-section row_span tuning is a
   // separate follow-up for the remaining grid-track whitespace.
-  grid.style.alignItems = 'start';
+  // Equal-height rule (overhaul §1): stretch grid items so cards sharing a row
+  // are the same height. Cards are flex-column with a flex:1 body, so they fill
+  // the cell cleanly; row height is set by the tallest card in the row.
+  grid.style.alignItems = 'stretch';
   band.appendChild(grid);
 
   // ── Cards + managed mounts ────────────────────────────────────────────────
@@ -295,7 +298,24 @@ function renderSection(section: ResolvedSection, page: ResolvedPage, mount: HTML
     // the friend's design leaves these KPI-strip widgets untitled, so a raw id like
     // "ov-benchmarks" must never render as a user-facing heading. Frameless
     // widgets are self-labelling — never draw card chrome above them.
-    const showTitle = !frameless && !!w.title && w.title.trim().toLowerCase() !== String(w.id).toLowerCase();
+    // Clean the user-facing title (overhaul §1): drop the "Domain · " catalog
+    // prefix, convert machine-looking punctuation (middot, em/en dash, ×) into
+    // plain words, and drop a trailing "(...)" note. The full catalog title is
+    // kept in the title attribute for the assistant's DOM reader.
+    const rawTitle = (w.title || '').trim();
+    const cleanTitle = rawTitle
+      .replace(/^[A-Za-z][A-Za-z ]*?\s*·\s*/, '')   // leading "Overview · " style prefix
+      .replace(/\s*·\s*/g, ', ')                     // any remaining middot separator
+      .replace(/\s*[—–]\s*/g, ': ')                  // em/en dash to a colon
+      .replace(/\s*×\s*/g, ' by ')                   // multiplication sign to "by"
+      .replace(/\s*\([^)]*\)\s*$/, '')               // trailing parenthetical note
+      .trim();
+    const secTitleLc = (section.title || '').trim().toLowerCase();
+    // Suppress a title that is just the widget id, or that repeats the section
+    // name (overhaul §1: an inner title must not restate its section).
+    const showTitle = !frameless && !!cleanTitle
+      && cleanTitle.toLowerCase() !== String(w.id).toLowerCase()
+      && cleanTitle.toLowerCase() !== secTitleLc;
     if (showTitle) {
       const h = document.createElement('div');
       h.className = 'widget-hd';
@@ -303,7 +323,7 @@ function renderSection(section: ResolvedSection, page: ResolvedPage, mount: HTML
       // widgets have no in-tree def) declares reacts_to dimensions.
       const reacts = (wdef?.reactsTo && wdef.reactsTo.length) ||
                      (w.reacts_to && w.reacts_to.length);
-      h.innerHTML = `<h4 class="widget-title" title="${String(w.title).replace(/"/g, '&quot;')}">${w.title}</h4>` +
+      h.innerHTML = `<h4 class="widget-title" title="${String(rawTitle).replace(/"/g, '&quot;')}">${cleanTitle}</h4>` +
         (reacts ? '' : '<span class="widget-badge" title="This widget is not affected by the current filters">unfiltered</span>');
       card.appendChild(h);
     }

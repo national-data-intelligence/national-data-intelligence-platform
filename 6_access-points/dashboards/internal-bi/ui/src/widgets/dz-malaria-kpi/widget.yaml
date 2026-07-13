@@ -1,8 +1,0 @@
-id: dz-malaria-kpi
-title: Disease · Malaria KPIs (HLR Table 7)
-kind: chart
-requires:
-  subject: PRG
-  verb: read
-  granularity: aggregate
-  sensitivity: default

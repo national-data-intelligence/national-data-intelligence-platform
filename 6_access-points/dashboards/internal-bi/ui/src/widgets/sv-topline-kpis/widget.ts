@@ -22,7 +22,7 @@ const def: WidgetDef = {
     const t = ctx.theme;
     // Colored icon chips (matching the Overview Headline cards). Normalise the mock's icon names
     // to valid sprite ids; assign a distinct on-palette accent per tile.
-    const ICON: Record<string, string> = { 'shield-check': 'i-shield-check', 'package-x': 'i-package', 'target': 'i-check-circle', 'users': 'i-users' };
+    const ICON: Record<string, string> = { 'shield-check': 'i-shield-check', 'package-x': 'i-package', 'target': 'i-check-circle', 'users': 'i-users', 'activity': 'i-check-circle' };
     const accents = [t.status.info, t.status.alert, t.status.watch, t.status.good];
     const cells: KpiCell[] = rows.map((r, i) => {
       const unit = String(r.unit ?? 'count');

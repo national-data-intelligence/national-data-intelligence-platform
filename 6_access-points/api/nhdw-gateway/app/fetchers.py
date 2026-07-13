@@ -573,25 +573,6 @@ FETCHERS: dict[str, Fetcher] = {
             f"LEFT JOIN rel ON rel.woreda_uid = recent.woreda_uid "
             f"LEFT JOIN rdy ON rdy.region_id = recent.region "
             f"ORDER BY rank LIMIT 12")),
-    # dz-malaria-kpi: the HLR Table 7 malaria MVP KPIs as a monthly series —
-    # test-positivity (microscopy+RDT split), confirmed per 1,000, ITN/IRS
-    # coverage, inpatient deaths. The multi-line monthly chart Table 7 asks
-    # for; geography row-filters apply, period windows the series.
-    "dz-malaria-kpi": Fetcher(
-        schema="bi_hmis", table="mart_malaria_kpi",
-        subject="PRG", data_class="DC.PRO",
-        geo_col="region_id", period_col="month_id", period_kind="month",
-        sql=lambda t, w: (
-            f"SELECT month_id, "
-            f"CAST(sum(suspected) AS bigint) AS suspected, "
-            f"CAST(sum(micro_tests) AS bigint) AS micro_tests, "
-            f"CAST(sum(rdt_tests) AS bigint) AS rdt_tests, "
-            f"CAST(sum(confirmed) AS bigint) AS confirmed, "
-            f"CAST(sum(inpatient_deaths) AS bigint) AS inpatient_deaths, "
-            f"round(100.0 * sum(confirmed) / nullif(sum(micro_tests) + sum(rdt_tests), 0), 1) AS test_positivity_pct, "
-            f"round(avg(itn_coverage_pct), 1) AS itn_coverage_pct, "
-            f"round(avg(irs_coverage_pct), 1) AS irs_coverage_pct "
-            f"FROM {t}{w} GROUP BY month_id ORDER BY month_id")),
 
     # ── internal-bi · disease climate — bi_idsr.mart_idsr_climate_drivers ────
     "dz-climate-ts": Fetcher(
@@ -767,7 +748,6 @@ FETCHERS: dict[str, Fetcher] = {
             f"UNION ALL SELECT 2, 'mos', 'Avg Months of Stock', CAST(CAST((SELECT mos FROM a) AS decimal(8,1)) AS varchar), 'months', NULL, NULL, true, NULL "
             f"UNION ALL SELECT 3, 'stockout', 'Commodities Stocked Out', CAST((SELECT stockouts FROM a) AS varchar), 'count', NULL, NULL, false, NULL "
             f"UNION ALL SELECT 4, 'wastage', 'Wastage Units', CAST((SELECT wastage FROM a) AS varchar), 'count', NULL, NULL, false, NULL "
-            f"UNION ALL SELECT 5, 'received', 'Units Received', CAST((SELECT received FROM a) AS varchar), 'count', NULL, NULL, true, NULL "
             f") x ORDER BY ord")),
     # rm-forecast: days-to-stockout timeline (commodity, days_left, floor_days,
     # horizon_days) straight from the supply forecast mart. floor/horizon are the
@@ -1176,22 +1156,6 @@ FETCHERS["sv-topline-kpis"] = Fetcher(
         f"UNION ALL SELECT 3, 'Facilities Reporting', CAST((SELECT fac FROM a) AS varchar), 'count', 'Monthly average', CAST(NULL AS varchar), CAST(NULL AS varchar), 'building' "
         f"UNION ALL SELECT 4, 'Indicators Tracked', CAST((SELECT inds FROM a) AS varchar), 'count', 'HMIS indicators', CAST(NULL AS varchar), CAST(NULL AS varchar), 'list' "
         f") x ORDER BY ord"))
-
-# sv-attainment-summary: indicator attainment band counts + composite (bands from
-# coverage: on-track ≥80, watch 60–80, at-risk <80). No invented targets.
-FETCHERS["sv-attainment-summary"] = Fetcher(
-    schema="bi_hmis", table="mart_hmis_indicator_coverage",
-    subject="PRG", data_class="DC.PRO", geo_col="region_id", prog_col="programme_id",
-    period_col="month_id", period_kind="month",
-    # GENUINELY WINDOWED: per-indicator average over ALL months in the window
-    # (was latest-month → identical across every window → harness lie).
-    sql=lambda t, w: (
-        f"WITH b AS (SELECT * FROM {t}{w}), "
-        f"ind AS (SELECT indicator_id, avg(coverage_pct) AS c FROM b GROUP BY 1) "
-        f"SELECT CAST(count(*) FILTER (WHERE c >= 80) AS bigint) AS on_track_count, "
-        f"CAST(count(*) FILTER (WHERE c >= 60 AND c < 80) AS bigint) AS watch_count, "
-        f"CAST(count(*) FILTER (WHERE c < 60) AS bigint) AS at_risk_count, "
-        f"CAST(count(*) AS bigint) AS total_count, round(avg(c), 1) AS composite_score FROM ind"))
 
 # sv-continuity-mnch: MNCH continuum retention funnel (stage, retention_pct, scope)
 # from the programme coverage view. scope 'EMR-active' per the widget's own framing.

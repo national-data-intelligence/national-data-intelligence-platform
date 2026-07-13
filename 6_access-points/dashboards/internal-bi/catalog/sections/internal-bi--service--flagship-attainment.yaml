@@ -9,7 +9,3 @@ widgets:
   col_span: 8
   row_span: 3
   ordering: 0
-- id: sv-attainment-summary
-  col_span: 4
-  row_span: 3
-  ordering: 1

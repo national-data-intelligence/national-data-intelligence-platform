@@ -32,10 +32,6 @@ const def: WidgetDef = {
     ctx.el.style.display = 'flex';
     ctx.el.style.flexDirection = 'column';
     ctx.el.innerHTML = `
-      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;font-size:.74rem;font-weight:600;
-        color:${t.status.watch};background:var(--watch-50);border-radius:8px;padding:.35rem .6rem">
-        <svg class="ico ico-sm"><use href="#i-alert"/></svg> Preview · feed not fully seeded
-      </div>
       <div class="cl-mount" style="flex:1;min-height:280px"></div>`;
     const mount = ctx.el.querySelector('.cl-mount') as HTMLElement;
     return dualAxisBarLine(mount, {
