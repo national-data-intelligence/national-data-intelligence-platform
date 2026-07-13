@@ -1,4 +1,9 @@
-/** ws-project-detail — metadata + the visibility control + open-in-lab.
+/** ws-project-detail — the RIGHT (wide) column of the Projects master-detail
+ *  page (redesigned 2026-07-13 to the side-by-side reference): status pills, a
+ *  large serif name, description, a meta row (owner · ID+copy · created · role),
+ *  the action toolbar, then a divider and TWO sub-columns — the Visibility
+ *  radio-card control and the Project-files tree (ws-project-files composed
+ *  in-place, since the catalog grid can't nest a detail column).
  *  reactsTo `ws_project` (published by ws-projects-table).
  *
  *   GET   /gw/projects/{id}        ACL-checked detail
@@ -9,7 +14,7 @@
  *                                  honestly disabled when the hub isn't
  *                                  configured (GET /gw/workspace/status)
  *
- * Ported from the bespoke ProjectDetail.tsx header + VisibilityControl. */
+ * Every action + its gating is unchanged — only presentation/layout changed. */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { authFetch } from '../../api/useAuth';
 import {
@@ -20,15 +25,25 @@ import {
   type ProjectRow, type ProjectVisibility,
 } from '../../api/projects';
 import { listGroups, type GroupRow } from '../../api/groups';
-import { esc, errText, toast, relTime } from '../_shared/helpers';
+import { esc, errText, toast } from '../_shared/helpers';
+import { emptyState } from '../../runtime/PageRenderer';
+import wsProjectFiles from '../ws-project-files/widget';
 
 const VISIBILITIES: ProjectVisibility[] = ['private', 'group', 'public'];
+
+/** Two-letter monogram from an owner name (first + last word initials). */
+function initials(name: string): string {
+  const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return '·';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+}
 
 async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   const { theme } = ctx;
   const projectId = ctx.filters.ws_project || '';
   if (!projectId) {
-    ctx.empty('Select a project in the catalogue above to see its detail, files and artifacts.');
+    ctx.empty('Select a project in the catalogue on the left to see its detail, files and visibility.');
     return;
   }
 
@@ -66,7 +81,6 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   const canOpenLab = isOwner || p.visibility === 'group';
 
   // ── public-review state (tasks #42/#43) ──
-  // "Submit for review" is an OWNER action, gated on review_status:
   //   draft / changes_requested / rejected → submittable
   //   in_review                            → disabled "In review"
   //   approved                             → published (a "Public" badge, no button)
@@ -78,46 +92,42 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   // no new fetch): owner, a group member sharing files, or a public viewer.
   const roleLabel = isOwner ? 'Owner' : (p.visibility === 'group' ? 'Member' : 'Viewer');
   const roleIcon  = isOwner ? 'i-user' : (p.visibility === 'group' ? 'i-users' : 'i-eye');
+  const ownerName = p.owner_username || (isOwner ? 'you' : p.owner_kc_sub);
 
   ctx.el.innerHTML = `
-    <div class="prj-detail">
-      <div class="prj-header" style="background:${projectGradient(p.id)}">
-        <div class="prj-header-body">
-          <div class="prj-header-badges">
-            <span class="prj-vis-badge ${esc(visibilityPillClass(p.visibility))}">
-              <svg class="ico ico-sm"><use href="#${esc(visibilityIcon(p.visibility))}"/></svg>
-              ${esc(visibilityLabel(p.visibility))}
-            </span>
-            <span class="pill ${esc(statusPillClass(p.status))}">${esc(statusLabel(p.status))}</span>
-            <span class="pill ${esc(reviewStatusPillClass(rs))}">${esc(reviewStatusLabel(rs))}</span>
-          </div>
-          <h2 class="prj-header-name">${esc(p.name)}</h2>
-          <div class="prj-header-meta">
-            <span>Owner <strong>${esc(p.owner_username || (isOwner ? 'you' : p.owner_kc_sub))}</strong></span>
-            ${p.contributor_count != null
-              ? `<span>·</span><span>${esc(p.contributor_count)} contributor${p.contributor_count === 1 ? '' : 's'}</span>` : ''}
-          </div>
-          ${p.description ? `<p class="prj-header-desc">${esc(p.description)}</p>` : ''}
-        </div>
+    <div class="prj-detail2">
+      <div class="prj-d-pills">
+        <span class="prj-vis-badge ${esc(visibilityPillClass(p.visibility))}">
+          <svg class="ico ico-sm"><use href="#${esc(visibilityIcon(p.visibility))}"/></svg>
+          ${esc(visibilityLabel(p.visibility))}
+        </span>
+        <span class="pill ${esc(statusPillClass(p.status))}">${esc(statusLabel(p.status))}</span>
+        <span class="pill ${esc(reviewStatusPillClass(rs))}">${esc(reviewStatusLabel(rs))}</span>
       </div>
 
-      <div class="prj-statstrip">
-        <div class="prj-stat">
-          <span class="prj-stat-lbl"><svg class="ico"><use href="#${roleIcon}"/></svg> Your role</span>
-          <span class="prj-stat-val">${esc(roleLabel)}</span>
-        </div>
-        <div class="prj-stat">
-          <span class="prj-stat-lbl"><svg class="ico"><use href="#i-link"/></svg> Handle</span>
-          <span class="prj-stat-val"><code>${esc(p.slug)}</code></span>
-        </div>
-        <div class="prj-stat">
-          <span class="prj-stat-lbl"><svg class="ico"><use href="#i-calendar"/></svg> Created</span>
-          <span class="prj-stat-val">${esc(fmtDate(p.created_at))}</span>
-        </div>
-        <div class="prj-stat">
-          <span class="prj-stat-lbl"><svg class="ico"><use href="#i-clock"/></svg> Last activity</span>
-          <span class="prj-stat-val">${esc(relTime(p.updated_at))}</span>
-        </div>
+      <h2 class="prj-d-name">${esc(p.name)}</h2>
+      ${p.description ? `<p class="prj-d-desc">${esc(p.description)}</p>` : ''}
+
+      <div class="prj-d-meta">
+        <span class="prj-d-meta-item">
+          <span class="prj-avatar" style="background:${projectGradient(p.owner_kc_sub || p.id)}">${esc(initials(ownerName))}</span>
+          <strong>${esc(ownerName)}</strong>
+        </span>
+        <span class="prj-d-meta-sep"></span>
+        <span class="prj-d-meta-item">
+          <span class="prj-d-meta-lbl">ID</span>
+          <code class="prj-d-id">${esc(p.slug)}</code>
+          <button class="prj-copy" data-act="copy-id" title="Copy project ID" aria-label="Copy project ID">
+            <svg class="ico ico-sm"><use href="#i-copy"/></svg></button>
+        </span>
+        <span class="prj-d-meta-sep"></span>
+        <span class="prj-d-meta-item">
+          <svg class="ico ico-sm"><use href="#i-calendar"/></svg> Created ${esc(fmtDate(p.created_at))}
+        </span>
+        <span class="prj-d-meta-sep"></span>
+        <span class="prj-d-meta-item prj-d-role" title="Your role on this project">
+          <svg class="ico ico-sm"><use href="#${roleIcon}"/></svg> ${esc(roleLabel)}
+        </span>
       </div>
 
       <div class="prj-actions">
@@ -125,7 +135,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
           ? `<button class="btn btn-sm btn-ghost" disabled aria-disabled="true"
                title="Public project you don't own — clone it to open a lab on your own copy.">
                <svg class="ico ico-sm"><use href="#i-external"/></svg> Open in JupyterLab</button>
-             <button class="btn btn-sm btn-primary" data-act="clone" style="margin-left:.5rem">
+             <button class="btn btn-sm btn-primary" data-act="clone">
                <svg class="ico ico-sm"><use href="#i-plus"/></svg> Clone to my workspace</button>
              <span class="prj-actions-hint muted">A lab writes to the project’s shared files, so a public project can only be opened by its owner. Clone it to work on your own private copy.</span>`
           : hubReason
@@ -137,34 +147,41 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
              <span class="prj-actions-hint muted">${hubRunningUrl
                ? 'Your lab is running — opens it on this project.'
                : 'Spawns your lab pod on this project’s file space.'}</span>`}
-        <button class="btn btn-sm btn-ghost" data-act="link-datasets" style="margin-left:.5rem">
+        <button class="btn btn-sm btn-ghost" data-act="link-datasets">
           <svg class="ico ico-sm"><use href="#i-database"/></svg> Link datasets</button>
-        <button class="btn btn-sm btn-ghost" data-act="download-zip" style="margin-left:.5rem">
+        <button class="btn btn-sm btn-ghost" data-act="download-zip">
           <svg class="ico ico-sm"><use href="#i-download"/></svg> Download ZIP</button>
         ${canSubmitReview
-          ? `<button class="btn btn-sm btn-primary" data-act="submit-review" style="margin-left:.5rem">
+          ? `<button class="btn btn-sm btn-ghost" data-act="submit-review">
                <svg class="ico ico-sm"><use href="#i-graduation"/></svg> ${esc(submitLabel)}</button>`
           : isOwner && rs === 'in_review'
-            ? `<button class="btn btn-sm btn-ghost" disabled aria-disabled="true" style="margin-left:.5rem"
+            ? `<button class="btn btn-sm btn-ghost" disabled aria-disabled="true"
                  title="This project is with a reviewer.">
                  <svg class="ico ico-sm"><use href="#i-clock"/></svg> In review</button>`
             : isOwner && rs === 'approved'
-              ? `<span class="pill good" style="margin-left:.5rem;align-self:center">
+              ? `<span class="pill good" style="align-self:center">
                    <svg class="ico ico-sm"><use href="#i-globe"/></svg> Public</span>`
               : ''}
       </div>
       <div class="ws-prj-msg"></div>
       <div class="ws-link-slot" style="margin:0"></div>
 
-      <div class="prj-panel" style="margin:0">
-        <div class="prj-panel-hdr">
-          <svg class="ico"><use href="#i-shield"/></svg>
-          <h3>Who can see this</h3>
+      <div class="prj-d-divider"></div>
+
+      <div class="prj-d-cols">
+        <div class="prj-d-col prj-d-vis">
+          <div class="prj-panel-hdr">
+            <svg class="ico"><use href="#i-shield"/></svg>
+            <h3>Visibility</h3>
+          </div>
+          <p class="prj-panel-lede muted">
+            Visibility is the single setting that decides who can find and open
+            this project. ${isOwner ? 'Change it any time.' : 'Only the project owner can change it.'}</p>
+          <div class="ws-vis-slot"></div>
         </div>
-        <p class="prj-panel-lede muted">
-          Visibility is the single tag that decides who can find and open this
-          project. ${isOwner ? 'Change it any time.' : 'Only the project owner can change it.'}</p>
-        <div class="ws-vis-slot"></div>
+        <div class="prj-d-col prj-d-files">
+          <div class="ws-files-slot"></div>
+        </div>
       </div>
     </div>`;
 
@@ -172,6 +189,18 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   const showErr = (text: string) => {
     msg.innerHTML = `<div class="alert-banner" style="background:var(--alert-50);color:var(--alert)">${esc(text)}</div>`;
   };
+
+  // ── Copy the project ID (slug handle) to the clipboard ──
+  ctx.el.querySelector<HTMLButtonElement>('button[data-act="copy-id"]')
+    ?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      try {
+        await navigator.clipboard.writeText(p.slug);
+        btn.innerHTML = '<svg class="ico ico-sm"><use href="#i-check"/></svg>';
+        toast('Project ID copied');
+        window.setTimeout(() => { btn.innerHTML = '<svg class="ico ico-sm"><use href="#i-copy"/></svg>'; }, 1400);
+      } catch { toast('Copy failed — select and copy the ID manually'); }
+    });
 
   // ── Download the project as a role-protected ZIP ──
   ctx.el.querySelector<HTMLButtonElement>('button[data-act="download-zip"]')
@@ -196,7 +225,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   // ── Link datasets (inline panel; POST /gw/datasets/{id}/projects) ──
   const linkSlot = ctx.el.querySelector<HTMLElement>('.ws-link-slot')!;
   const drawLinkPanel = async () => {
-    linkSlot.innerHTML = `<div class="prj-panel" style="margin:0"><p class="muted" style="margin:0">Loading datasets…</p></div>`;
+    linkSlot.innerHTML = `<div class="prj-panel" style="margin:.6rem 0 0"><p class="muted" style="margin:0">Loading datasets…</p></div>`;
     let mine: any[] = [], linkedIds = new Set<string>();
     try {
       const [rMine, rLinked] = await Promise.all([
@@ -208,7 +237,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
     } catch { /* empty */ }
     const rows = mine.length ? mine.map((d: any) => {
       const linked = linkedIds.has(d.id);
-      return `<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem .2rem;border-bottom:1px solid var(--line)">
+      return `<div style="display:flex;align-items:center;gap:.6rem;padding:.4rem .2rem;border-bottom:1px solid var(--border)">
         <svg class="ico ico-sm" style="opacity:.6"><use href="#i-database"/></svg>
         <span style="flex:1;font-size:.85rem;color:${theme.ink[0]}">${esc(d.title || d.name || d.id)}</span>
         ${linked
@@ -217,7 +246,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
       </div>`;
     }).join('') : `<p class="muted" style="margin:.4rem 0">You have no datasets yet — generate one on the Datasets page.</p>`;
     linkSlot.innerHTML = `
-      <div class="prj-panel" style="margin:0">
+      <div class="prj-panel" style="margin:.6rem 0 0">
         <div class="prj-panel-hdr"><svg class="ico"><use href="#i-database"/></svg><h3>Link datasets to this project</h3>
           <span style="flex:1"></span>
           <button class="btn btn-sm btn-ghost" data-act="link-close">Close</button></div>
@@ -284,9 +313,9 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
       }
     });
 
-  // ── Submit for review (owner-only) — opens the project-submit modal,
-  //    which runs the essential-files check and POSTs the submit. On success
-  //    it re-draws THIS detail (now in_review) via onDone. ──
+  // ── Submit for review (owner-only) — opens the project-submit modal, which
+  //    runs the essential-files check and POSTs the submit. On success it
+  //    re-draws THIS detail (now in_review) via onDone. ──
   ctx.el.querySelector<HTMLButtonElement>('button[data-act="submit-review"]')
     ?.addEventListener('click', () => {
       ctx.host.openModal('project-submit', {
@@ -354,6 +383,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
               <span class="prj-vis-opt-name">${esc(visibilityLabel(v))}</span>
               <span class="prj-vis-opt-hint">${esc(visibilityHint(v))}</span>
             </span>
+            <span class="prj-vis-radio" aria-hidden="true"></span>
           </button>`).join('')}
       </div>
       ${groupHtml ? `<div class="prj-vis-group">${groupHtml}</div>` : ''}
@@ -418,6 +448,19 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   };
 
   paintVis();
+
+  // ── Project files tree — compose ws-project-files INSIDE this detail column.
+  //    It reads ctx.filters.ws_project (same as us) and owns its own heading +
+  //    "New" menu + send/upload actions; we just hand it a slot + scoped empty. ──
+  const filesSlot = ctx.el.querySelector<HTMLElement>('.ws-files-slot');
+  if (filesSlot) {
+    const filesCtx: WidgetCtx = {
+      ...ctx, el: filesSlot, empty: (m?: string) => emptyState(filesSlot, m),
+    };
+    try { await wsProjectFiles.render(filesCtx); }
+    catch { emptyState(filesSlot, 'Could not load the project files.'); }
+  }
+
   void theme;
 }
 

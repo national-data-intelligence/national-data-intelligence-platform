@@ -1,23 +1,28 @@
-/** ws-projects-table — the projects catalogue (My / Group / Public grouping).
+/** ws-projects-table — the LEFT "Project catalogue" master list of the Projects
+ *  master-detail page (redesigned 2026-07-13 to the side-by-side reference).
  *
  *   GET /gw/projects?scope=all — projects VISIBLE to the caller (own ∪ public
  *   ∪ group-shared); the gateway's visibility clause scopes the payload, so
  *   another user's private project never reaches this widget.
  *
- * Ported from the bespoke Projects.tsx (same .prj-card / .prj-group classes).
- * "New project" opens the project-create modal; clicking a card publishes the
- * `ws_project` bus dimension — the detail/files/artifacts widgets react. */
+ * A narrow card: header + "New project", a search box, a segmented All / My
+ * projects / Public tab row with a visibility filter + sort dropdown, a vertical
+ * list of compact project ROWS (visibility icon · name · one-line description ·
+ * owner avatar · updated date · chevron), and a "Showing X–Y of N" footer with a
+ * numbered pager. Clicking a row publishes the `ws_project` bus dimension — the
+ * detail (with its Visibility control + Project files) reacts. "New project"
+ * opens the project-create modal. Data fetches are unchanged from the grid era. */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { authFetch } from '../../api/useAuth';
 import {
-  listProjects, visibilityLabel, visibilityIcon, visibilityPillClass,
-  statusLabel, statusPillClass, reviewStatusLabel, reviewStatusPillClass,
+  listProjects, visibilityIcon, visibilityPillClass,
   projectGradient, fmtDate, type ProjectRow,
 } from '../../api/projects';
-import { esc, relTime } from '../_shared/helpers';
+import { esc } from '../_shared/helpers';
 
-/** Two-letter monogram from a project name (first + last word initials) — the
- *  card's offline "cover art", tinted by the same stable projectGradient. */
+const PER_PAGE = 5;
+
+/** Two-letter monogram from an owner name / project name (first + last word). */
 function initials(name: string): string {
   const words = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (!words.length) return '·';
@@ -25,41 +30,25 @@ function initials(name: string): string {
   return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
 
-function card(p: ProjectRow, selected: boolean): string {
-  const rs = (p.review_status as string) || 'draft';
-  // Review pill only when it says something beyond the default "draft".
-  const reviewPill = rs && rs !== 'draft'
-    ? `<span class="pill ${esc(reviewStatusPillClass(rs))}">${esc(reviewStatusLabel(rs))}</span>` : '';
-  const statusPill = p.status !== 'active'
-    ? `<span class="pill ${esc(statusPillClass(p.status))}">${esc(statusLabel(p.status))}</span>` : '';
+function row(p: ProjectRow, selected: boolean): string {
+  const owner = p.owner_username || 'you';
   return `
-    <button class="prj-card${selected ? ' active' : ''}" data-pid="${esc(p.id)}"
-            title="Open this project's detail below">
-      <div class="prj-card-head">
-        <span class="prj-monogram" style="background:${projectGradient(p.id)}" aria-hidden="true">${esc(initials(p.name))}</span>
-        <div class="prj-card-heading">
-          <h4 class="prj-card-name">${esc(p.name)}</h4>
-          <span class="prj-card-owner">
-            <svg class="ico ico-sm"><use href="#i-user"/></svg>
-            <span>${esc(p.owner_username || 'you')}</span>
-          </span>
-        </div>
-        <span class="prj-vis-badge ${esc(visibilityPillClass(p.visibility))}">
-          <svg class="ico ico-sm"><use href="#${esc(visibilityIcon(p.visibility))}"/></svg>
-          ${esc(visibilityLabel(p.visibility))}
+    <button class="prj-row${selected ? ' active' : ''}" data-pid="${esc(p.id)}"
+            title="Open this project">
+      <span class="prj-row-vis ${esc(visibilityPillClass(p.visibility))}" aria-hidden="true">
+        <svg class="ico"><use href="#${esc(visibilityIcon(p.visibility))}"/></svg>
+      </span>
+      <span class="prj-row-body">
+        <span class="prj-row-name">${esc(p.name)}</span>
+        <span class="prj-row-desc">${esc(p.description || 'No description yet.')}</span>
+        <span class="prj-row-meta">
+          <span class="prj-avatar" style="background:${projectGradient(p.owner_kc_sub || p.id)}">${esc(initials(owner))}</span>
+          <span class="prj-row-owner">${esc(owner)}</span>
+          <span class="prj-row-dot">·</span>
+          <span class="prj-row-updated">Updated ${esc(fmtDate(p.updated_at))}</span>
         </span>
-      </div>
-      <p class="prj-card-desc">${esc(p.description || 'No description yet.')}</p>
-      <div class="prj-card-foot">
-        <div class="prj-card-metas">
-          <span class="prj-meta-chip" title="Last updated ${esc(fmtDate(p.updated_at))}">
-            <svg class="ico ico-sm"><use href="#i-clock"/></svg>
-            ${esc(relTime(p.updated_at))}
-          </span>
-          ${statusPill}${reviewPill}
-        </div>
-        <span class="prj-card-open">Open <svg class="ico ico-sm"><use href="#i-arrow-right"/></svg></span>
-      </div>
+      </span>
+      <svg class="ico prj-row-chev"><use href="#i-chevron-right"/></svg>
     </button>`;
 }
 
@@ -77,29 +66,90 @@ async function draw(ctx: WidgetCtx) {
 
   if (projects === null) { ctx.empty(`Could not load projects — ${loadErr}`); return; }
 
-  const state = { q: '' };
+  // "My" = anything I own; a private project is only ever returned to its owner,
+  // so it's mine even if /auth/me hasn't resolved a sub.
+  const isMine = (p: ProjectRow) =>
+    (!!myKcSub && p.owner_kc_sub === myKcSub) || p.visibility === 'private';
+
+  const state = { q: '', tab: 'all', vis: 'all', sort: 'updated', page: 1 };
+
+  ctx.el.innerHTML = `
+    <div class="prj-cat">
+      <div class="prj-cat-hd">
+        <h3 class="prj-cat-title">Project catalogue</h3>
+        <button class="btn btn-sm btn-primary" data-act="new">
+          <svg class="ico ico-sm"><use href="#i-plus"/></svg> New project</button>
+      </div>
+      <span class="art-search prj-cat-search">
+        <svg class="ico"><use href="#i-search"/></svg>
+        <input class="ws-flt-q" placeholder="Search projects" aria-label="Search projects">
+      </span>
+      <div class="prj-cat-filters">
+        <div class="prj-seg" role="tablist">
+          <button type="button" class="active" data-tab="all">All</button>
+          <button type="button" data-tab="mine">My projects</button>
+          <button type="button" data-tab="public">Public</button>
+        </div>
+        <span class="prj-cat-selwrap">
+          <svg class="ico"><use href="#i-shield"/></svg>
+          <select class="ws-flt-vis" aria-label="Filter by visibility">
+            <option value="all">All visibility</option>
+            <option value="private">Private</option>
+            <option value="group">Group</option>
+            <option value="public">Public</option>
+          </select>
+        </span>
+        <span class="prj-cat-selwrap">
+          <select class="ws-flt-sort" aria-label="Sort projects">
+            <option value="updated">Last updated</option>
+            <option value="created">Recently created</option>
+            <option value="name">Name A–Z</option>
+          </select>
+        </span>
+      </div>
+      <div class="prj-cat-list ws-prj-list"></div>
+      <div class="prj-cat-foot">
+        <span class="prj-cat-count"></span>
+        <div class="prj-pager"></div>
+      </div>
+    </div>`;
+
+  const listEl = ctx.el.querySelector<HTMLElement>('.ws-prj-list')!;
+  const countEl = ctx.el.querySelector<HTMLElement>('.prj-cat-count')!;
+  const pagerEl = ctx.el.querySelector<HTMLElement>('.prj-pager')!;
+
+  const compute = (): ProjectRow[] => {
+    const term = state.q.trim().toLowerCase();
+    let rows = projects!.filter(p => {
+      if (term && !(`${p.name} ${p.description || ''} ${p.owner_username || ''}`
+        .toLowerCase().includes(term))) return false;
+      if (state.tab === 'mine' && !isMine(p)) return false;
+      if (state.tab === 'public' && p.visibility !== 'public') return false;
+      if (state.vis !== 'all' && p.visibility !== state.vis) return false;
+      return true;
+    });
+    rows = rows.slice().sort((a, b) => {
+      if (state.sort === 'name') return a.name.localeCompare(b.name);
+      const key = state.sort === 'created' ? 'created_at' : 'updated_at';
+      return String(b[key] || '').localeCompare(String(a[key] || ''));
+    });
+    return rows;
+  };
 
   const paint = () => {
-    const all = projects!;
-    const term = state.q.trim().toLowerCase();
-    const filtered = term
-      ? all.filter(p =>
-          (p.name + ' ' + (p.description || '') + ' ' + (p.owner_username || ''))
-            .toLowerCase().includes(term))
-      : all;
-    // "My" = anything I own; a private project is only ever returned to its
-    // owner, so it's mine even if /auth/me hasn't resolved a sub.
-    const isMine = (p: ProjectRow) =>
-      (!!myKcSub && p.owner_kc_sub === myKcSub) || p.visibility === 'private';
-    const sections = [
-      { key: 'mine', label: 'My projects', icon: 'i-user', items: filtered.filter(isMine) },
-      { key: 'group', label: 'Shared with your groups', icon: 'i-users', items: filtered.filter(p => !isMine(p) && p.visibility === 'group') },
-      { key: 'public', label: 'Public projects', icon: 'i-globe', items: filtered.filter(p => !isMine(p) && p.visibility === 'public') },
-    ].filter(s => s.items.length > 0);
+    const rows = compute();
+    const total = rows.length;
+    const pages = Math.max(1, Math.ceil(total / PER_PAGE));
+    if (state.page > pages) state.page = pages;
+    const start = (state.page - 1) * PER_PAGE;
+    const pageRows = rows.slice(start, start + PER_PAGE);
     const selected = ctx.bus.get().ws_project || '';
 
-    const listEl = ctx.el.querySelector<HTMLElement>('.ws-prj-list')!;
-    if (all.length === 0) {
+    // Keep the segmented tabs / selects in sync with state (survive re-paints).
+    ctx.el.querySelectorAll<HTMLButtonElement>('.prj-seg button').forEach(b =>
+      b.classList.toggle('active', b.dataset.tab === state.tab));
+
+    if (projects!.length === 0) {
       listEl.innerHTML = `
         <div class="art-empty">
           <svg class="ico"><use href="#i-folder"/></svg>
@@ -107,56 +157,64 @@ async function draw(ctx: WidgetCtx) {
           <p>Create one to get a private file space in the warehouse and an
           experiment for its model runs.</p>
         </div>`;
-    } else if (sections.length === 0) {
+    } else if (total === 0) {
       listEl.innerHTML = `
         <div class="art-empty">
           <svg class="ico"><use href="#i-search"/></svg>
           <h4>No projects match</h4>
-          <p>Nothing matches “${esc(state.q.trim())}”.</p>
+          <p>Nothing matches the current search and filters.</p>
         </div>`;
     } else {
-      listEl.innerHTML = sections.map(s => `
-        <div class="prj-group">
-          <div class="prj-group-hdr">
-            <span class="prj-group-ico"><svg class="ico"><use href="#${esc(s.icon)}"/></svg></span>
-            <h3>${esc(s.label)}</h3>
-            <span class="prj-group-count">${s.items.length}</span>
-          </div>
-          <div class="prj-grid">
-            ${s.items.map(p => card(p, p.id === selected)).join('')}
-          </div>
-        </div>`).join('');
+      listEl.innerHTML = pageRows.map(p => row(p, p.id === selected)).join('');
+      listEl.querySelectorAll<HTMLButtonElement>('button.prj-row').forEach(btn => {
+        btn.addEventListener('click', () => {
+          ctx.bus.set('ws_project', btn.dataset.pid!);
+          listEl.querySelectorAll('button.prj-row').forEach(x =>
+            x.classList.toggle('active', x === btn));
+          ctx.host.focusWidget('ws-project-detail');
+        });
+      });
     }
 
-    listEl.querySelectorAll<HTMLButtonElement>('button.prj-card').forEach(btn => {
-      btn.addEventListener('click', () => {
-        ctx.bus.set('ws_project', btn.dataset.pid!);
-        listEl.querySelectorAll('button.prj-card').forEach(x =>
-          x.classList.toggle('active', x === btn));
-        ctx.host.focusWidget('ws-project-detail');
-      });
-    });
+    // Footer count + numbered pager.
+    if (total === 0) { countEl.textContent = 'No projects'; pagerEl.innerHTML = ''; return; }
+    const from = start + 1, to = Math.min(start + PER_PAGE, total);
+    countEl.textContent = `Showing ${from}–${to} of ${total} project${total === 1 ? '' : 's'}`;
+    if (pages <= 1) { pagerEl.innerHTML = ''; return; }
+    // Windowed page numbers (max 5) around the current page.
+    let lo = Math.max(1, state.page - 2), hi = Math.min(pages, lo + 4);
+    lo = Math.max(1, hi - 4);
+    let btns = `<button class="prj-pg" data-pg="${state.page - 1}" ${state.page === 1 ? 'disabled' : ''} aria-label="Previous"><svg class="ico"><use href="#i-arrow-right"/></svg></button>`;
+    for (let i = lo; i <= hi; i++) {
+      btns += `<button class="prj-pg${i === state.page ? ' active' : ''}" data-pg="${i}">${i}</button>`;
+    }
+    btns += `<button class="prj-pg" data-pg="${state.page + 1}" ${state.page === pages ? 'disabled' : ''} aria-label="Next"><svg class="ico"><use href="#i-arrow-right"/></svg></button>`;
+    pagerEl.innerHTML = btns;
+    pagerEl.querySelectorAll<HTMLButtonElement>('button.prj-pg').forEach(b =>
+      b.addEventListener('click', () => {
+        const pg = Number(b.dataset.pg);
+        if (pg >= 1 && pg <= pages && pg !== state.page) { state.page = pg; paint(); }
+      }));
   };
 
-  ctx.el.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:.7rem">
-      <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
-        <span class="art-search" style="flex:1;min-width:220px;margin:0">
-          <svg class="ico"><use href="#i-search"/></svg>
-          <input class="ws-flt-q" placeholder="Search projects by name, description or owner" aria-label="Search projects">
-        </span>
-        <button class="btn btn-sm btn-primary" data-act="new">
-          <svg class="ico ico-sm"><use href="#i-plus"/></svg> New project</button>
-      </div>
-      <div class="ws-prj-list"></div>
-    </div>`;
+  // Auto-select a project so the detail pane is populated on arrival (matches
+  // the reference — a row is selected and its detail shown). Prefer the user's
+  // OWN first project so they land on their own work with the lab enabled,
+  // falling back to the first visible project otherwise.
+  if (!ctx.bus.get().ws_project) {
+    const sorted = compute();
+    const pick = sorted.find(isMine) || sorted[0];
+    if (pick) ctx.bus.set('ws_project', pick.id);
+  }
 
+  // ── wire the toolbar ──
   ctx.el.querySelector<HTMLButtonElement>('button[data-act="new"]')!
     .addEventListener('click', () => {
       ctx.host.openModal('project-create', {
         onDone: async (created?: { id?: string }) => {
           try { projects = await listProjects({ scope: 'all' }); } catch { /* keep old list */ }
           if (created?.id) ctx.bus.set('ws_project', created.id);   // open the fresh project
+          state.page = 1;
           paint();
         },
       });
@@ -164,7 +222,19 @@ async function draw(ctx: WidgetCtx) {
   ctx.el.querySelector<HTMLInputElement>('.ws-flt-q')!
     .addEventListener('input', (e) => {
       state.q = (e.currentTarget as HTMLInputElement).value;
-      paint();
+      state.page = 1; paint();
+    });
+  ctx.el.querySelectorAll<HTMLButtonElement>('.prj-seg button').forEach(b =>
+    b.addEventListener('click', () => {
+      state.tab = b.dataset.tab!; state.page = 1; paint();
+    }));
+  ctx.el.querySelector<HTMLSelectElement>('.ws-flt-vis')!
+    .addEventListener('change', (e) => {
+      state.vis = (e.currentTarget as HTMLSelectElement).value; state.page = 1; paint();
+    });
+  ctx.el.querySelector<HTMLSelectElement>('.ws-flt-sort')!
+    .addEventListener('change', (e) => {
+      state.sort = (e.currentTarget as HTMLSelectElement).value; state.page = 1; paint();
     });
 
   paint();

@@ -19,7 +19,7 @@ const PAGE_DESC: Record<string, string> = {
   Workspace: 'Your projects, compute and community at a glance — open a lab, build a dataset, or pick up where you left off.',
   Datasets:  'Build governed datasets from the marts and manage the ones you have generated.',
   Models:    'Browse the model catalogue, inspect performance and run predictions.',
-  Projects:  'The unit of work — every dataset, model and notebook belongs to a project.',
+  Projects:  'Create, manage, and collaborate on data science projects.',
   Community: 'Groups share artifacts at the shared tier — manage invitations, requests and memberships.',
   Help:      'Guides, references and analysis tools for the workshop.',
   Settings:  'Your profile and personal preferences.',
