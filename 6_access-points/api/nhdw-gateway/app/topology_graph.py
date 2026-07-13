@@ -32,16 +32,15 @@ Host tokens are matched against a lookup of every Service's
 form → the workload that Service selects. Edge ``kind`` (http|db|s3|smtp|native|
 oidc) is inferred from the target service + a small port→protocol map.
 
-Two honoured EXTERNAL exceptions are synthesized (neither is a deployed k8s
-workload, but each is a real declared connection to a 0_external/ system reached
-via the k3d host route):
-  * fayda-replica — public-dashboard's
-    ``FAYDA_INTERNAL_BASE=http://host.k3d.internal:8096`` auth connection;
-  * nhdw-ollama — the gateway's ``OLLAMA_URL=http://host.k3d.internal:11434`` LLM
-    connection (the assistant model runtime moved out of k8s to 0_external/llm/
-    on 2026-07-06 — on WSL2 the GPU only works in an external container).
-All *other* ``host.k3d.internal`` refs live only inside the excluded ingestor
-Jobs, so they never surface here.
+Off-cluster dependencies reached via the k3d host route are DELIBERATELY NOT
+surfaced as topology nodes (owner directive 2026-07-13) — the map is a pure
+in-cluster view, and a node for something that isn't a k8s workload reads as a
+phantom. This covers the gateway's ``OLLAMA_URL=host.k3d.internal:11434`` LLM
+(the assistant model runtime lives in 0_external/llm/ since 2026-07-06) and the
+public-dashboard's ``FAYDA_INTERNAL_BASE=host.k3d.internal:8096`` auth replica
+(0_external/fayda). Their real backends are untouched — only their boxes are
+omitted from this diagram. All ``host.k3d.internal`` refs otherwise live inside
+the excluded ingestor Jobs, so they never surface here either.
 
 The live k8s scan (same LIST the /orchestration layer uses) reconciles every
 node: declared × observed, health from ready-replica counts, phantom when a
