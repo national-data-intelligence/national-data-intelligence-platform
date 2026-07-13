@@ -19,7 +19,6 @@
  */
 export const FALLBACK_PAGE_WIDGETS: Record<string, string[]> = {
   infra:               ['adm-topology'],
-  audit:               ['adm-audit-events'],
   alerts:              ['adm-alerts-routing'],
   dq:                  ['adm-dq'],
   'models-datasets':   ['adm-models-datasets'],

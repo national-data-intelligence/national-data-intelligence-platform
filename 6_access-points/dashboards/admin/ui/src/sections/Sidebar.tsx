@@ -26,7 +26,6 @@ type NavItem = { id: string; ico: string; title: string; badge?: boolean };
 const ITEMS: Array<{ group: string; items: NavItem[] }> = [
   { group: 'Infrastructure', items: [
     { id: 'infra',   ico: 'i-tools',         title: 'Health & topology' },
-    { id: 'audit',   ico: 'i-list',          title: 'Audit logs' },
     { id: 'alerts',  ico: 'i-bell',          title: 'Alert routing' },
   ]},
   { group: 'Data', items: [

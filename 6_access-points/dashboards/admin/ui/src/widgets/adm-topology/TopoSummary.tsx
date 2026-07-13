@@ -19,7 +19,7 @@
  */
 import { useEffect, useMemo, useRef } from 'react';
 import * as echarts from 'echarts';
-import type { TopoGraph } from '../../topology/renderTopology';
+import type { TopoGraph, TopoEdge } from '../../topology/renderTopology';
 import type { InfraResp, ClusterResp } from '../../api/topology';
 
 // ── small formatters for the live cluster-capacity card ──
@@ -56,7 +56,7 @@ const PHASE_ORDER = ['Running', 'Pending', 'Succeeded', 'Failed', 'Unknown'];
 
 export interface HealthSummary {
   healthy: number; degraded: number; down: number;
-  notDeployed: number; unknown: number; external: number;
+  notDeployed: number; unknown: number;
 }
 
 interface Tokens {
@@ -120,8 +120,18 @@ export default function TopoSummary({ graph, infra, health, cluster }:
     return [...m.entries()].map(([tier, count]) => ({ tier, count })).sort((a, b) => b.count - a.count);
   }, [graph]);
 
+  // INBOUND user traffic only (owner 2026-07-13): count solely the browser/user
+  // requests entering the cluster through the gateway — the SPA→nhdw-gateway
+  // edges (admin/internal-bi/public/workshop → nhdw-gateway). Internal
+  // gateway→backend hops (→trino/→minio/→mlflow) are pod-to-pod and are excluded.
   const traffic = useMemo(() => {
-    const edges = graph?.edges ?? [];
+    const GATEWAY_ID = 'nhdw-gateway';
+    const SPA_IDS = new Set(['admin', 'internal-bi', 'public', 'workshop']);
+    const spaNodeIds = new Set(
+      (graph?.nodes ?? []).filter(n => n.tier === 'dashboard' || SPA_IDS.has(n.id)).map(n => n.id),
+    );
+    const isInbound = (e: TopoEdge) => e.target === GATEWAY_ID && spaNodeIds.has(e.source);
+    const edges = (graph?.edges ?? []).filter(isInbound);
     const active = edges.filter(e => e.traffic && (e.traffic.reqRate ?? 0) > 0);
     const aggReq = active.reduce((s, e) => s + (e.traffic!.reqRate ?? 0), 0);
     const top = [...active].sort((a, b) => (b.traffic!.reqRate ?? 0) - (a.traffic!.reqRate ?? 0)).slice(0, 6);
@@ -158,7 +168,6 @@ export default function TopoSummary({ graph, infra, health, cluster }:
       { name: 'Degraded',      value: health.degraded,    color: tk.watch },
       { name: 'Down',          value: health.down,        color: tk.alert },
       { name: 'Not deployed',  value: health.notDeployed, color: tk.border2 },
-      { name: 'External',      value: health.external,    color: tk.info },
       { name: 'Unknown',       value: health.unknown,     color: tk.ink4 },
     ].filter(d => d.value > 0);
     return {
@@ -179,7 +188,7 @@ export default function TopoSummary({ graph, infra, health, cluster }:
         data: raw.map(d => ({ name: d.name, value: d.value, itemStyle: { color: d.color } })),
       }],
     };
-  }, [graph, tk, health.healthy, health.degraded, health.down, health.notDeployed, health.external, health.unknown]);
+  }, [graph, tk, health.healthy, health.degraded, health.down, health.notDeployed, health.unknown]);
 
   const gauge = (value: number | null, max: number, label: string, sub: string, color: string): echarts.EChartsOption => ({
     textStyle: { fontFamily: tk.fontSans },
@@ -249,14 +258,16 @@ export default function TopoSummary({ graph, infra, health, cluster }:
   return (
     <div className="topo-summary">
       <div className="topo-sum-card sp2">
-        <div className="topo-sum-hd"><span>Cluster health</span><span className="topo-sum-meta">{deployed || nodeTotal} workloads</span></div>
+        <div className="topo-sum-hd" title="In-cluster Kubernetes workloads only — external dependencies are not nodes.">
+          <span>Cluster health</span><span className="topo-sum-meta">{deployed || nodeTotal} in-cluster workloads</span>
+        </div>
         <div ref={healthRef} className="topo-sum-chart" style={{ height: 150 }} />
         <div className="topo-sum-foot">
           <span className="topo-sum-leg"><i style={{ background: tk.good }} />{health.healthy} up</span>
           {health.degraded > 0 && <span className="topo-sum-leg"><i style={{ background: tk.watch }} />{health.degraded} deg</span>}
           {health.down > 0 && <span className="topo-sum-leg"><i style={{ background: tk.alert }} />{health.down} down</span>}
           {health.notDeployed > 0 && <span className="topo-sum-leg"><i style={{ background: tk.border2 }} />{health.notDeployed} n/d</span>}
-          {health.external > 0 && <span className="topo-sum-leg"><i style={{ background: tk.info }} />{health.external} ext</span>}
+          {health.unknown > 0 && <span className="topo-sum-leg"><i style={{ background: tk.ink4 }} />{health.unknown} unk</span>}
         </div>
       </div>
 
@@ -282,20 +293,31 @@ export default function TopoSummary({ graph, infra, health, cluster }:
       </div>
 
       <div className="topo-sum-card sp2">
-        <div className="topo-sum-hd"><span>Traffic <span className="topo-sum-meta" style={{ fontWeight: 500 }}>· req/s</span></span><span className="topo-sum-meta">{graph?.meta?.window ? `window ${graph.meta.window}` : 'live'}</span></div>
+        <div className="topo-sum-hd" title="User/browser requests entering the cluster through the gateway — internal pod-to-pod hops are excluded.">
+          <span>Inbound traffic <span className="topo-sum-meta" style={{ fontWeight: 500 }}>· req/s</span></span>
+          <span className="topo-sum-meta">{graph?.meta?.window ? `window ${graph.meta.window}` : 'live'}</span>
+        </div>
+        <div className="topo-sum-subcap" style={{ fontSize: '0.64rem', color: 'var(--ink-4)', margin: '-0.15rem 0 0.5rem', lineHeight: 1.4 }}>
+          User → cluster requests entering via the gateway (external → cluster). Internal pod-to-pod hops excluded.
+        </div>
         <div className="topo-sum-kpis">
-          <div className="topo-sum-kpi"><div className="v" style={{ color: traffic.active ? tk.good : tk.ink3 }}>{traffic.active}</div><div className="l">active edges</div></div>
+          <div className="topo-sum-kpi"><div className="v" style={{ color: traffic.active ? tk.good : tk.ink3 }}>{traffic.active}</div><div className="l">inbound edges</div></div>
           <div className="topo-sum-kpi"><div className="v">{traffic.aggReq ? traffic.aggReq.toFixed(2) : '0'}</div><div className="l">req/s now</div></div>
           <div className="topo-sum-kpi"><div className="v" style={{ color: traffic.errEdges ? tk.watch : tk.ink3 }}>{traffic.errEdges}</div><div className="l">edges w/ err</div></div>
         </div>
         {traffic.hasSeries ? <div ref={trafficRef} className="topo-sum-chart" style={{ height: 96 }} />
-          : <p className="topo-sum-empty">No measured per-request traffic in this window — the gateway audit log
-            (<code>ops_audit.gateway_log</code>) is the only real source on this mesh-less cluster. Drive a dashboard to see it move.</p>}
+          : <p className="topo-sum-empty">No inbound user traffic in this window — the gateway audit log
+            (<code>ops_audit.gateway_log</code>) is the only real source on this mesh-less cluster. Open a dashboard to see it move.</p>}
       </div>
 
       <div className="topo-sum-card sp2">
-        <div className="topo-sum-hd"><span>Workloads by tier</span><span className="topo-sum-meta">{nodeTotal} nodes</span></div>
-        {tiers.length ? <div ref={tierRef} className="topo-sum-chart" style={{ height: 178 }} />
+        <div className="topo-sum-hd" title="Running Kubernetes workloads grouped by their tier label.">
+          <span>Workloads by tier</span><span className="topo-sum-meta">{nodeTotal} nodes</span>
+        </div>
+        <div className="topo-sum-subcap" style={{ fontSize: '0.64rem', color: 'var(--ink-4)', margin: '-0.15rem 0 0.35rem', lineHeight: 1.4 }}>
+          Running k8s workloads grouped by their <code>tier</code> label (data · platform · gateway · access …).
+        </div>
+        {tiers.length ? <div ref={tierRef} className="topo-sum-chart" style={{ height: 168 }} />
           : <p className="topo-sum-empty">No nodes.</p>}
       </div>
 

@@ -84,7 +84,6 @@ function adminApp() {
     // ops_perm page catalog (bundle/seeds/security/pages.yaml).
     pageInfo: {
       infra:               { group: 'Infrastructure',   title: 'Health & topology' },
-      audit:               { group: 'Infrastructure',   title: 'Audit logs' },
       alerts:              { group: 'Infrastructure',   title: 'Alert routing' },
       dq:                  { group: 'Data',             title: 'Quality & lineage' },
       'models-datasets':   { group: 'Data',             title: 'Models and datasets' }, // catalog page admin/models-datasets (Models + Review merged)
@@ -264,7 +263,6 @@ function adminApp() {
       this.$nextTick(() => {
         ({
           infra:               () => {},
-          audit:               ()=>{},
           alerts:              ()=>{},
           dq:                  ()=>{},
           'models-datasets':   ()=>{},

@@ -16,11 +16,13 @@
  * metrics-server + recent k8s events + connections). ALL renderer logic lives
  * in src/topology/renderTopology.ts so it lifts unchanged into a #80 widget.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import * as topo from '../../api/topology';
+import { fetchAuditEvents, type AuditEvent } from '../../api/audit';
 import { renderTopology } from '../../topology/renderTopology';
 import type { TopoTheme, TopologyHandle, TopoNode, TopoEdge, TopoGraph } from '../../topology/renderTopology';
 import TopoSummary from './TopoSummary';
+import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKit';
 
 type RefreshInterval = 10 | 30 | 60 | 0;
 const REFRESH_LABEL: Record<RefreshInterval, string> = { 10: '10s', 30: '30s', 60: '60s', 0: 'off' };
@@ -65,26 +67,6 @@ function fmtMem(b: number | null | undefined): string {
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return `${Math.round(n * 10) / 10} ${u[i]}`;
 }
-function fmtEvtAgo(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const ms = Date.now() - new Date(iso).getTime();
-  if (isNaN(ms)) return '';
-  if (ms < 60_000) return `${Math.max(0, Math.round(ms / 1000))}s`;
-  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
-  if (ms < 86_400_000) return `${Math.round(ms / 3_600_000)}h`;
-  return `${Math.round(ms / 86_400_000)}d`;
-}
-
-// level-tint for a raw log line (best-effort keyword scan → colour class)
-function logLevelClass(line: string): string {
-  const s = line.toUpperCase();
-  if (/\b(ERROR|ERR|FATAL|CRITICAL|EXCEPTION|TRACEBACK|PANIC)\b/.test(s)) return 'lv-error';
-  if (/\bWARN(?:ING)?\b/.test(s)) return 'lv-warn';
-  if (/\bINFO\b/.test(s)) return 'lv-info';
-  if (/\b(DEBUG|TRACE)\b/.test(s)) return 'lv-debug';
-  return '';
-}
-
 // small inline SVG icon from the app's offline sprite (#i-*, fetched into
 // #icon-sprite at boot — NO CDN / icon-font). Used to key the node-detail rows.
 function Ico({ n, className = 'ico ico-sm topo-dl-ico' }: { n: string; className?: string }) {
@@ -113,8 +95,272 @@ function Sparkline({ data, color = 'var(--good)', w = 132, h = 30 }:
 
 // the node-detail tabs (owner request #83.5 — group the sections instead of one
 // long vertical dump). Which tabs actually show is decided per-node below.
-type TabId = 'overview' | 'resources' | 'storage' | 'logs' | 'config' | 'connections';
+// Storage folded INTO Resources 2026-07-13 (owner) → no separate storage tab.
+type TabId = 'overview' | 'resources' | 'logs' | 'config' | 'connections' | 'audit';
 interface TabDef { id: TabId; label: string; icon: string; }
+
+// coarse log-level classification for the searchable/filterable Logs tab.
+type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'other';
+function logLevel(line: string): LogLevel {
+  const s = (line || '').toUpperCase();
+  if (/\b(ERROR|ERR|FATAL|CRITICAL|EXCEPTION|TRACEBACK|PANIC)\b/.test(s)) return 'error';
+  if (/\bWARN(?:ING)?\b/.test(s)) return 'warn';
+  if (/\bINFO\b/.test(s)) return 'info';
+  if (/\b(DEBUG|TRACE)\b/.test(s)) return 'debug';
+  return 'other';
+}
+const LOG_LEVEL_OPTS: LogLevel[] = ['error', 'warn', 'info', 'debug', 'other'];
+
+// ── Logs tab (#83.6): searchable + level-filterable + paginated, fixed-height
+//    scroll, and every row is an accordion that expands to the full line. Its own
+//    component so the tableKit hook is called unconditionally (rules of hooks). ──
+function LogsTab({ logs, loading, logContainer, onPickContainer }: {
+  logs: topo.NodeLogs | null;
+  loading: boolean;
+  logContainer: string | null;
+  onPickContainer: (c: string) => void;
+}) {
+  const [level, setLevel] = useState<LogLevel | 'all'>('all');
+  const [open, setOpen] = useState<number | null>(null);
+
+  const rows = useMemo(
+    () => (logs?.lines ?? []).map((line, i) => ({ i, line, level: logLevel(line) })),
+    [logs]);
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { error: 0, warn: 0, info: 0, debug: 0, other: 0 };
+    for (const r of rows) c[r.level]++;
+    return c;
+  }, [rows]);
+  const leveled = useMemo(
+    () => (level === 'all' ? rows : rows.filter(r => r.level === level)),
+    [rows, level]);
+  const kit = useTableKit(leveled, { pageSize: 14, search: r => r.line });
+
+  if (loading) return <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>Loading log tail…</p>;
+
+  return (
+    <>
+      {logs && logs.containers.length > 1 && (
+        <div className="topo-log-tabs">
+          {logs.containers.map(cn => (
+            <button key={cn} className={`topo-log-tab ${cn === logContainer ? 'on' : ''}`}
+                    onClick={() => onPickContainer(cn)}>{cn}</button>
+          ))}
+        </div>
+      )}
+      {rows.length === 0 ? (
+        <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>{logs?.note ?? 'No recent log lines.'}</p>
+      ) : (<>
+        <TableToolbar kit={kit} placeholder="Search log lines…" unit="lines">
+          <select value={level} aria-label="Filter by log level"
+                  onChange={e => { setLevel(e.target.value as LogLevel | 'all'); setOpen(null); kit.setPage(1); }}>
+            <option value="all">all levels ({rows.length})</option>
+            {LOG_LEVEL_OPTS.map(lv => (
+              <option key={lv} value={lv}>{lv} ({counts[lv] ?? 0})</option>
+            ))}
+          </select>
+        </TableToolbar>
+        {kit.pageRows.length === 0 ? (
+          <p className="muted" style={{ margin: '0.4rem 0', fontSize: '0.8rem' }}>No lines match the current filter.</p>
+        ) : (
+          <div className="tk-scroll topo-lg-scroll">
+            <div className="topo-lg-list">
+              {kit.pageRows.map(r => {
+                const isOpen = open === r.i;
+                return (
+                  <div key={r.i} className={`topo-lg-row lv-${r.level} ${isOpen ? 'open' : ''}`}>
+                    <button className="topo-lg-line" aria-expanded={isOpen}
+                            onClick={() => setOpen(isOpen ? null : r.i)}>
+                      <span className="topo-lg-caret">{isOpen ? '▾' : '▸'}</span>
+                      <span className={`topo-lg-badge lv-${r.level}`}>{r.level}</span>
+                      <span className="topo-lg-text">{r.line || ' '}</span>
+                    </button>
+                    {isOpen && <pre className="topo-lg-detail">{r.line || '(empty line)'}</pre>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <TablePager kit={kit} />
+      </>)}
+    </>
+  );
+}
+
+// ── Connections tab (#83.7): a fixed-height, paginated, sortable TABLE derived
+//    from the graph edges wired to this node (direction · peer · protocol · req/s). ──
+function ConnectionsTab({ conns, onSelect }: {
+  conns: { inc: TopoEdge[]; out: TopoEdge[] };
+  onSelect: (id: string) => void;
+}) {
+  const rows = useMemo(() => {
+    const mk = (e: TopoEdge, dir: 'out' | 'in') => ({
+      key: `${dir}:${e.id}`, dir, edge: e,
+      peer: dir === 'out' ? e.target : e.source,
+      kind: e.kind, status: e.status,
+      req: e.traffic?.reqRate ?? null,
+    });
+    return [...conns.out.map(e => mk(e, 'out')), ...conns.inc.map(e => mk(e, 'in'))];
+  }, [conns]);
+  const kit = useTableKit(rows, {
+    pageSize: 9,
+    search: r => `${r.dir} ${r.peer} ${r.kind} ${r.status}`,
+    sortVals: {
+      dir: r => r.dir, peer: r => r.peer, kind: r => r.kind,
+      req: r => (r.req ?? -1),
+    },
+    initialSort: { key: 'req', dir: 'desc' },
+  });
+
+  if (rows.length === 0) return <p className="muted" style={{ margin: 0 }}>No wired connections.</p>;
+
+  return (
+    <>
+      <TableToolbar kit={kit} placeholder="Search peer, protocol…" unit="links" />
+      <div className="tk-scroll topo-cn-scroll">
+        <table className="dash topo-conn-table">
+          <thead>
+            <tr>
+              <SortTh kit={kit} k="dir">Dir</SortTh>
+              <SortTh kit={kit} k="peer">Peer node</SortTh>
+              <SortTh kit={kit} k="kind">Protocol · port</SortTh>
+              <SortTh kit={kit} k="req">Req/s</SortTh>
+            </tr>
+          </thead>
+          <tbody>
+            {kit.pageRows.map(r => (
+              <tr key={r.key}>
+                <td><span className={`topo-cn-dir ${r.dir}`}>{r.dir === 'out' ? '→ out' : '← in'}</span></td>
+                <td><button className="topo-cn-peer" onClick={() => onSelect(r.peer)}>{r.peer}</button></td>
+                <td><span className="topo-cn-kind">{r.kind}</span></td>
+                <td className="topo-cn-req">{r.req != null ? r.req.toFixed(2) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <TablePager kit={kit} />
+    </>
+  );
+}
+
+// ── Audit tab (#136): the API-gateway request audit (ops_audit.gateway_log),
+// consolidated INTO the gateway node from the retired standalone Audit-logs
+// page. Who accessed what + the policy decision, searchable / paginated, with
+// click-to-expand detail. Only shown for the nhdw-gateway node. ──────────────
+function AuditTab() {
+  const [rows, setRows] = useState<AuditEvent[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchAuditEvents({ pageSize: 100 })
+      .then(p => { if (live) setRows(p.items); })
+      .catch((e: any) => { if (live) setErr(e?.message || String(e)); });
+    return () => { live = false; };
+  }, []);
+  const kit = useTableKit(rows ?? [], {
+    pageSize: 12,
+    search: r => `${r.full_name ?? r.username ?? ''} ${r.role_label ?? ''} ${r.method} ${r.path} ${r.policy_decision}`,
+    sortVals: {
+      ts: r => r.ts, actor: r => (r.full_name ?? r.username ?? ''),
+      status: r => (r.http_status ?? 0), decision: r => r.policy_decision,
+    },
+    initialSort: { key: 'ts', dir: 'desc' },
+  });
+  if (err) return <p className="muted" style={{ margin: 0 }}>Audit unavailable: {err}</p>;
+  if (rows === null) return <p className="muted" style={{ margin: 0 }}>Loading audit…</p>;
+  if (rows.length === 0) return <p className="muted" style={{ margin: 0 }}>No gateway audit events recorded.</p>;
+  const tone = (d: string) => (d === 'allow' ? 'good' : d === 'deny' ? 'alert' : 'watch');
+  return (
+    <>
+      <p className="muted" style={{ marginTop: 0, fontSize: '0.78rem' }}>
+        The API-gateway request audit (<code>ops_audit.gateway_log</code>) — who
+        accessed what, and the OPA policy decision. Consolidated here from the
+        retired standalone Audit-logs page. Latest 100 events.
+      </p>
+      <TableToolbar kit={kit} placeholder="Search actor, path, decision…" unit="events" />
+      <div className="tk-scroll" style={{ maxHeight: 344 }}>
+        <table className="dash">
+          <thead>
+            <tr>
+              <SortTh kit={kit} k="ts">Time</SortTh>
+              <SortTh kit={kit} k="actor">Actor</SortTh>
+              <th>Request</th>
+              <SortTh kit={kit} k="status">Status</SortTh>
+              <SortTh kit={kit} k="decision">Policy</SortTh>
+            </tr>
+          </thead>
+          <tbody>
+            {kit.pageRows.map(r => (
+              <Fragment key={r.id}>
+                <tr onClick={() => setOpen(open === r.id ? null : r.id)} style={{ cursor: 'pointer' }}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{fmtAgo(r.ts)}</td>
+                  <td>{r.full_name ?? r.username ?? '—'}{r.role_label ? <span className="muted"> · {r.role_label}</span> : null}</td>
+                  <td><code style={{ fontSize: '0.72rem' }}>{r.method} {r.path}</code></td>
+                  <td style={{ textAlign: 'right' }}>{r.http_status ?? '—'}</td>
+                  <td><span className={`pill ${tone(r.policy_decision)}`}>{r.policy_decision}</span></td>
+                </tr>
+                {open === r.id && (
+                  <tr className="topo-audit-detail">
+                    <td colSpan={5}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '0.4rem 1rem', padding: '0.5rem 0.4rem', fontSize: '0.74rem' }}>
+                        <div><span className="muted">Realm</span><br />{r.realm ?? '—'}</div>
+                        <div><span className="muted">Client IP</span><br />{r.client_ip ?? '—'}</div>
+                        <div><span className="muted">Latency</span><br />{r.latency_ms != null ? `${r.latency_ms} ms` : '—'}</div>
+                        <div><span className="muted">Rows</span><br />{r.row_count ?? '—'}</div>
+                        {r.mart_scope?.length ? <div style={{ gridColumn: '1 / -1' }}><span className="muted">Mart scope</span><br />{r.mart_scope.join(', ')}</div> : null}
+                        {r.denied_reason ? <div style={{ gridColumn: '1 / -1' }}><span className="muted">Denied reason</span><br /><span style={{ color: 'var(--alert)' }}>{r.denied_reason}</span></div> : null}
+                        {r.user_agent ? <div style={{ gridColumn: '1 / -1' }}><span className="muted">User agent</span><br />{r.user_agent}</div> : null}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <TablePager kit={kit} />
+    </>
+  );
+}
+
+// scoped styling for the redesigned node-detail tabs (kept out of the shared
+// home.css globals — injected once by the widget). Uniquely namespaced.
+const TOPO_FE_CSS = `
+.topo-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 0.7rem; align-items: start; }
+.topo-ov-grid > .topo-nd-sect { margin: 0; padding: 0.7rem 0.85rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--paper-2); }
+.topo-ov-grid > .topo-nd-sect + .topo-nd-sect { margin-top: 0; padding-top: 0.7rem; }
+.topo-ov-grid .topo-dl { font-size: 0.76rem; }
+.topo-lg-scroll { max-height: 344px; }
+.topo-lg-list { display: flex; flex-direction: column; }
+.topo-lg-row { border-bottom: 1px solid var(--border); }
+.topo-lg-row:last-child { border-bottom: none; }
+.topo-lg-line { width: 100%; display: flex; align-items: center; gap: 0.5rem; padding: 0.28rem 0.55rem; background: none; border: none; cursor: pointer; text-align: left; font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-2); }
+.topo-lg-line:hover { background: var(--paper-2); }
+.topo-lg-row.open .topo-lg-line { background: var(--paper-2); }
+.topo-lg-caret { flex: 0 0 auto; color: var(--ink-4); font-size: 0.6rem; width: 0.7rem; }
+.topo-lg-badge { flex: 0 0 auto; min-width: 3.1rem; text-align: center; font-family: var(--font-sans); font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.06rem 0.32rem; border-radius: 4px; background: var(--bg-2); color: var(--ink-4); }
+.topo-lg-badge.lv-error { background: var(--alert-50); color: var(--alert); }
+.topo-lg-badge.lv-warn { background: var(--watch-50); color: var(--watch); }
+.topo-lg-badge.lv-info { background: var(--info-50); color: var(--info); }
+.topo-lg-badge.lv-debug { background: var(--bg-2); color: var(--ink-4); }
+.topo-lg-text { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topo-lg-row.lv-error .topo-lg-text { color: var(--alert); }
+.topo-lg-row.lv-warn .topo-lg-text { color: var(--watch); }
+.topo-lg-detail { margin: 0; padding: 0.5rem 0.7rem 0.6rem 1.75rem; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 0.72rem; line-height: 1.5; color: var(--ink); background: var(--bg); border-top: 1px dashed var(--border-2); }
+.topo-cn-scroll { max-height: 372px; }
+.topo-conn-table td { vertical-align: middle; }
+.topo-cn-dir { display: inline-flex; align-items: center; font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 0.08rem 0.42rem; border-radius: 5px; white-space: nowrap; }
+.topo-cn-dir.out { color: var(--info); background: var(--info-50); }
+.topo-cn-dir.in { color: var(--good); background: var(--good-50); }
+.topo-cn-peer { background: none; border: none; padding: 0.1rem 0.35rem; margin: -0.1rem -0.35rem; border-radius: 5px; color: var(--navy-700); font-weight: 600; cursor: pointer; font-family: var(--font-mono); font-size: 0.78rem; }
+.topo-cn-peer:hover { background: var(--info-50); text-decoration: underline; }
+.topo-cn-kind { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-3); }
+.topo-cn-req { font-variant-numeric: tabular-nums; text-align: right; color: var(--ink); font-weight: 600; }
+`;
 
 type Selection =
   | { type: 'node'; node: TopoNode }
@@ -233,11 +479,13 @@ function Infra() {
   };
 
   // ── derived: health summary + connections ──
+  // The gateway now emits a PURE in-cluster graph (external ollama/fayda nodes
+  // were removed 2026-07-13), so every bucket here is an in-cluster workload —
+  // no "external" bucket.
   const summary = useMemo(() => {
-    const s = { healthy: 0, degraded: 0, down: 0, notDeployed: 0, unknown: 0, external: 0 };
+    const s = { healthy: 0, degraded: 0, down: 0, notDeployed: 0, unknown: 0 };
     for (const n of graph?.nodes ?? []) {
       if (n.phantom) s.notDeployed++;
-      else if (n.tier === 'external' || n.kind === 'external') s.external++;
       else if (n.health === 'up') s.healthy++;
       else if (n.health === 'degraded') s.degraded++;
       else if (n.health === 'down') s.down++;
@@ -259,6 +507,7 @@ function Infra() {
 
   return (
     <section>
+      <style>{TOPO_FE_CSS}</style>
       <p className="page-lede">
         Live <strong>system topology</strong> — every deployed application workload and the wiring
         between them, auto-derived from the cluster. Nodes are coloured by health; edges that carry
@@ -365,11 +614,13 @@ function Infra() {
             // which detail sections apply to THIS node → its tab set
             const tabs: TabDef[] = [{ id: 'overview', label: 'Overview', icon: 'info' }];
             if (isLive) {
-              tabs.push({ id: 'resources', label: 'Resources', icon: 'cpu' });
-              tabs.push({ id: 'storage',   label: 'Storage',   icon: 'disk' });
+              tabs.push({ id: 'resources', label: 'Resources', icon: 'cpu' });  // compute + storage
               tabs.push({ id: 'logs',      label: 'Logs',      icon: 'list' });
             }
             if (hasConfig) tabs.push({ id: 'config', label: 'Config & secrets', icon: 'key' });
+            // #136: the API-gateway node carries the request-audit view that used
+            // to be a standalone Audit-logs page.
+            if (n.id === 'nhdw-gateway') tabs.push({ id: 'audit', label: 'Audit', icon: 'list' });
             tabs.push({ id: 'connections', label: 'Connections', icon: 'link' });
             const ids = tabs.map(t => t.id);
             const activeTab: TabId = ids.includes(tab) ? tab : 'overview';
@@ -415,7 +666,8 @@ function Infra() {
                 <div className="topo-tabpanel" role="tabpanel" id={`topopanel-${activeTab}`}
                      aria-labelledby={`topotab-${activeTab}`} tabIndex={0}>
 
-                  {activeTab === 'overview' && (<>
+                  {activeTab === 'overview' && (
+                    <div className="topo-ov-grid">
                     <div className="topo-nd-sect">
                       <div className="topo-nd-sect-hd"><Ico n="grid" className="ico ico-sm" /> Identity</div>
                       <dl className="topo-dl">
@@ -492,84 +744,70 @@ function Infra() {
                         </div>
                       );
                     })()}
-                    {detail?.events && detail.events.length > 0 && (
-                      <div className="topo-nd-sect">
-                        <div className="topo-nd-sect-hd"><Ico n="clock" className="ico ico-sm" /> Recent events
-                          <span className="topo-nd-meta">k8s Events API</span>
-                        </div>
-                        <div className="topo-events">
-                          {detail.events.map((ev: any, i: number) => (
-                            <div key={i} className={`topo-event ${ev.type === 'Warning' ? 'warn' : ''}`}>
-                              <span className="topo-event-reason">{ev.reason}{ev.count > 1 ? ` ×${ev.count}` : ''}</span>
-                              <span className="topo-event-msg">{ev.message}</span>
-                              <span className="topo-event-ago muted">{fmtEvtAgo(ev.lastTimestamp)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>)}
+                    </div>
+                  )}
 
+                  {/* Resources = compute (metrics-server) + storage (kubelet stats),
+                      folded into one tab 2026-07-13 (owner). */}
                   {activeTab === 'resources' && (() => {
                     const r = detail?.resources;
-                    if (!r) return <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.8rem' }}>{detailLoading ? 'Loading…' : 'No usage data.'}</p>;
-                    const cpu = r.cpu || {}, mem = r.memory || {};
+                    const st = detail?.storage;
+                    if (!r && !st) return <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.8rem' }}>{detailLoading ? 'Loading…' : 'No usage data.'}</p>;
+                    const cpu = r?.cpu || {}, mem = r?.memory || {};
                     const cpuMax = cpu.limitMillicores || cpu.requestMillicores || (cpu.usageMillicores ? cpu.usageMillicores * 2 : 0);
                     const memMax = mem.limitBytes || mem.requestBytes || (mem.usageBytes ? mem.usageBytes * 2 : 0);
                     const cpuPct = cpuMax ? Math.min(100, Math.round((cpu.usageMillicores || 0) / cpuMax * 100)) : 0;
                     const memPct = memMax ? Math.min(100, Math.round((mem.usageBytes || 0) / memMax * 100)) : 0;
-                    return (
-                      <div className="topo-nd-sect">
-                        <div className="topo-nd-sect-hd"><Ico n="cpu" className="ico ico-sm" /> Resource usage
-                          {r.source && <span className="topo-nd-meta">{r.source}</span>}
-                        </div>
-                        <div className="topo-metric">
-                          <div className="topo-metric-hd"><span><Ico n="cpu" className="ico ico-sm topo-metric-ico" />CPU</span><strong>{fmtCpu(cpu.usageMillicores)}</strong></div>
-                          {r.haveMetrics ? bar(cpuPct, cpuPct > 85 ? 'alert' : cpuPct > 60 ? 'watch' : 'good') : <span className="muted" style={{ fontSize: '0.74rem' }}>metrics-server unavailable</span>}
-                          <div className="topo-metric-sub muted">req {fmtCpu(cpu.requestMillicores)} · lim {fmtCpu(cpu.limitMillicores)}</div>
-                        </div>
-                        <div className="topo-metric">
-                          <div className="topo-metric-hd"><span><Ico n="server" className="ico ico-sm topo-metric-ico" />Memory</span><strong>{fmtMem(mem.usageBytes)}</strong></div>
-                          {r.haveMetrics ? bar(memPct, memPct > 85 ? 'alert' : memPct > 60 ? 'watch' : 'good') : <span className="muted" style={{ fontSize: '0.74rem' }}>metrics-server unavailable</span>}
-                          <div className="topo-metric-sub muted">req {fmtMem(mem.requestBytes)} · lim {fmtMem(mem.limitBytes)}</div>
-                        </div>
-                        <div className="topo-red-slot">
-                          <div className="topo-metric-hd"><span>Per-service request rate (RED)</span><span className="pill muted" style={{ fontSize: '0.66rem' }}>pending #26</span></div>
-                          <div className="topo-metric-sub muted">{detail?.redNote ?? 'Per-service request rate needs the gateway /metrics scrape (#26). CPU/memory above are real (metrics-server); gateway-centric edge req/s is real too (see the Traffic card / an edge’s detail).'}</div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {activeTab === 'storage' && (() => {
-                    const st = detail?.storage;
                     const stUsed = st?.volumes?.length
                       ? st.volumes.reduce((a: number, v: any) => a + (v.usedBytes || 0), 0)
                       : st?.ephemeral?.usedBytes ?? null;
                     return (
-                      <div className="topo-nd-sect">
-                        <div className="topo-nd-sect-hd"><Ico n="disk" className="ico ico-sm" /> Storage
-                          {stUsed != null && <span className="topo-nd-meta">{fmtBytes(stUsed)} used</span>}
+                      <>
+                        <div className="topo-nd-sect">
+                          <div className="topo-nd-sect-hd"><Ico n="cpu" className="ico ico-sm" /> Compute
+                            {r?.source && <span className="topo-nd-meta">{r.source}</span>}
+                          </div>
+                          {r ? (<>
+                            <div className="topo-metric">
+                              <div className="topo-metric-hd"><span><Ico n="cpu" className="ico ico-sm topo-metric-ico" />CPU</span><strong>{fmtCpu(cpu.usageMillicores)}</strong></div>
+                              {r.haveMetrics ? bar(cpuPct, cpuPct > 85 ? 'alert' : cpuPct > 60 ? 'watch' : 'good') : <span className="muted" style={{ fontSize: '0.74rem' }}>metrics-server unavailable</span>}
+                              <div className="topo-metric-sub muted">req {fmtCpu(cpu.requestMillicores)} · lim {fmtCpu(cpu.limitMillicores)}</div>
+                            </div>
+                            <div className="topo-metric">
+                              <div className="topo-metric-hd"><span><Ico n="server" className="ico ico-sm topo-metric-ico" />Memory</span><strong>{fmtMem(mem.usageBytes)}</strong></div>
+                              {r.haveMetrics ? bar(memPct, memPct > 85 ? 'alert' : memPct > 60 ? 'watch' : 'good') : <span className="muted" style={{ fontSize: '0.74rem' }}>metrics-server unavailable</span>}
+                              <div className="topo-metric-sub muted">req {fmtMem(mem.requestBytes)} · lim {fmtMem(mem.limitBytes)}</div>
+                            </div>
+                            <div className="topo-red-slot">
+                              <div className="topo-metric-hd"><span>Per-service request rate (RED)</span><span className="pill muted" style={{ fontSize: '0.66rem' }}>pending #26</span></div>
+                              <div className="topo-metric-sub muted">{detail?.redNote ?? 'Per-service request rate needs the gateway /metrics scrape (#26). CPU/memory above are real (metrics-server); gateway-centric edge req/s is real too (see the Traffic card / an edge’s detail).'}</div>
+                            </div>
+                          </>) : <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.8rem' }}>{detailLoading ? 'Loading…' : 'No compute metrics.'}</p>}
                         </div>
-                        {!st || !st.haveStats ? (
-                          <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.8rem' }}>{detailLoading ? 'Loading…' : 'kubelet stats unavailable'}</p>
-                        ) : (st.volumes.length === 0 && !st.ephemeral) ? (
-                          <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.8rem' }}>No persistent volumes on this workload.</p>
-                        ) : (
-                          <>
-                            {st.volumes.map((v: any) => {
-                              const p = v.capacityBytes ? Math.min(100, Math.round((v.usedBytes / v.capacityBytes) * 100)) : 0;
-                              return (
-                                <div key={v.pvc} className="topo-storage-vol">
-                                  <div className="topo-storage-vhd"><span className="topo-storage-name" title={v.pvc}>pvc · {v.pvc}</span><span>{fmtBytes(v.usedBytes)} / {fmtBytes(v.capacityBytes)}</span></div>
-                                  {bar(p, p > 85 ? 'alert' : p > 60 ? 'watch' : 'good')}
-                                </div>
-                              );
-                            })}
-                            {st.ephemeral && <div className="topo-metric-sub muted">ephemeral (writable layer) {fmtBytes(st.ephemeral.usedBytes)}</div>}
-                          </>
-                        )}
-                      </div>
+                        <div className="topo-nd-sect">
+                          <div className="topo-nd-sect-hd"><Ico n="disk" className="ico ico-sm" /> Storage
+                            {stUsed != null && <span className="topo-nd-meta">{fmtBytes(stUsed)} used</span>}
+                          </div>
+                          {!st || !st.haveStats ? (
+                            <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.8rem' }}>{detailLoading ? 'Loading…' : 'kubelet stats unavailable'}</p>
+                          ) : (st.volumes.length === 0 && !st.ephemeral) ? (
+                            <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.8rem' }}>No persistent volumes on this workload.</p>
+                          ) : (
+                            <>
+                              {st.volumes.map((v: any) => {
+                                const p = v.capacityBytes ? Math.min(100, Math.round((v.usedBytes / v.capacityBytes) * 100)) : 0;
+                                return (
+                                  <div key={v.pvc} className="topo-storage-vol">
+                                    <div className="topo-storage-vhd"><span className="topo-storage-name" title={v.pvc}>pvc · {v.pvc}</span><span>{fmtBytes(v.usedBytes)} / {fmtBytes(v.capacityBytes)}</span></div>
+                                    {bar(p, p > 85 ? 'alert' : p > 60 ? 'watch' : 'good')}
+                                  </div>
+                                );
+                              })}
+                              {st.ephemeral && <div className="topo-metric-sub muted">ephemeral (writable layer) {fmtBytes(st.ephemeral.usedBytes)}</div>}
+                            </>
+                          )}
+                        </div>
+                      </>
                     );
                   })()}
 
@@ -578,24 +816,12 @@ function Infra() {
                       <div className="topo-nd-sect-hd"><Ico n="list" className="ico ico-sm" /> Logs
                         <span className="topo-nd-meta">{logs?.pod ? logs.pod : 'kubelet · tail 150'}</span>
                       </div>
-                      {logs && logs.containers.length > 1 && (
-                        <div className="topo-log-tabs">
-                          {logs.containers.map(cn => (
-                            <button key={cn} className={`topo-log-tab ${cn === logContainer ? 'on' : ''}`} onClick={() => pickContainer(n.id, cn)}>{cn}</button>
-                          ))}
-                        </div>
-                      )}
-                      {logsLoading ? (
-                        <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>Loading log tail…</p>
-                      ) : logs && logs.lines.length > 0 ? (
-                        <div className="topo-logs">
-                          {logs.lines.map((ln, i) => (
-                            <div key={i} className={`topo-logline ${logLevelClass(ln)}`}>{ln || ' '}</div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>{logs?.note ?? 'No recent log lines.'}</p>
-                      )}
+                      <LogsTab
+                        logs={logs}
+                        loading={logsLoading}
+                        logContainer={logContainer}
+                        onPickContainer={(c) => pickContainer(n.id, c)}
+                      />
                     </div>
                   )}
 
@@ -629,32 +855,19 @@ function Infra() {
                     </div>
                   )}
 
+                  {activeTab === 'audit' && (
+                    <div className="topo-nd-sect">
+                      <div className="topo-nd-sect-hd"><Ico n="list" className="ico ico-sm" /> Gateway request audit</div>
+                      <AuditTab />
+                    </div>
+                  )}
+
                   {activeTab === 'connections' && (
                     <div className="topo-nd-sect">
                       <div className="topo-nd-sect-hd"><Ico n="link" className="ico ico-sm" /> Connections
                         <span className="topo-nd-meta">{conns.inc.length} in · {conns.out.length} out</span>
                       </div>
-                      <div className="topo-conns">
-                        {conns.out.length > 0 && <>
-                          <div className="topo-conns-lbl">calls →</div>
-                          {conns.out.map(e => (
-                            <button key={e.id} className="topo-conn" onClick={() => selectFromPanel(e.target)}>
-                              <span><Ico n="arrow-right" className="ico ico-sm topo-conn-ico" />{e.target}</span>
-                              <span className="muted">{e.kind}{e.traffic ? ` · ${e.traffic.reqRate.toFixed(2)}/s` : ''}</span>
-                            </button>
-                          ))}
-                        </>}
-                        {conns.inc.length > 0 && <>
-                          <div className="topo-conns-lbl">← called by</div>
-                          {conns.inc.map(e => (
-                            <button key={e.id} className="topo-conn" onClick={() => selectFromPanel(e.source)}>
-                              <span><Ico n="arrow-right" className="ico ico-sm topo-conn-ico" />{e.source}</span>
-                              <span className="muted">{e.kind}{e.traffic ? ` · ${e.traffic.reqRate.toFixed(2)}/s` : ''}</span>
-                            </button>
-                          ))}
-                        </>}
-                        {conns.inc.length === 0 && conns.out.length === 0 && <p className="muted" style={{ margin: 0 }}>No wired connections.</p>}
-                      </div>
+                      <ConnectionsTab conns={conns} onSelect={selectFromPanel} />
                     </div>
                   )}
                 </div>
