@@ -350,6 +350,8 @@
     - dz-kpi-strip
     - dz-signal-chart
     - dz-malaria-kpi
+    - ov-brief
+    - ov-disease-snapshot
     - ex-audit-trail
     - ex-templates
     - sv-cascade-hiv
