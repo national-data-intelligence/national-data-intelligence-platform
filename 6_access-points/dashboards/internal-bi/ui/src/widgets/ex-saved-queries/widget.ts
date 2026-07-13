@@ -37,10 +37,10 @@ function renderResult(ctx: WidgetCtx, resEl: HTMLElement, data: any) {
   const cols: string[] = data.columns || [];
   const rows: any[] = data.rows || [];
   const n = data.row_count ?? rows.length;
-  const meta = `${n} row${n === 1 ? '' : 's'} · ${data.elapsed_ms ?? '-'} ms`
-    + (data.tables_used?.length ? ` · ${esc(data.tables_used.join(', '))}` : '');
+  const meta = `${n} row${n === 1 ? '' : 's'}, ${data.elapsed_ms ?? '-'} ms`
+    + (data.tables_used?.length ? `, ${esc(data.tables_used.join(', '))}` : '');
   if (!rows.length) {
-    resEl.innerHTML = `<div style="font-size:.82rem;color:${theme.ink[2]};padding:.4rem 0">${meta} — no rows.</div>`;
+    resEl.innerHTML = `<div style="font-size:.82rem;color:${theme.ink[2]};padding:.4rem 0">${meta}, no rows.</div>`;
     return;
   }
   const head = cols.map(c => `<th>${esc(c)}</th>`).join('');
@@ -76,7 +76,7 @@ async function runQuery(ctx: WidgetCtx, q: any, btn: HTMLButtonElement, panel: H
   const sql = (q.sql_text ?? '').trim();
   panel.style.display = 'block';
   panel.innerHTML = `
-    <div style="font-size:.82rem;font-weight:600;color:${theme.ink[0]};margin:.6rem 0 .1rem">Results — ${esc(q.title)}</div>
+    <div style="font-size:.82rem;font-weight:600;color:${theme.ink[0]};margin:.6rem 0 .1rem">Results: ${esc(q.title)}</div>
     <div data-run-body></div>`;
   const bodyEl = panel.querySelector<HTMLElement>('[data-run-body]')!;
 
@@ -132,7 +132,7 @@ async function draw(ctx: WidgetCtx) {
     rows = await r.json();
   } catch { ctx.empty('Could not load your saved queries.'); return; }
   if (!Array.isArray(rows) || !rows.length) {
-    ctx.empty('No saved queries yet — save one from the SQL editor to re-run or schedule it.');
+    ctx.empty('No saved queries yet. Save one from the SQL editor to re-run or schedule it.');
     return;
   }
 

@@ -28,8 +28,8 @@ const def: WidgetDef = {
     const tiles = [
       { v: Number(r.temperature_excursions ?? 0), icon: 'i-thermo', col: t.status.watch, label: 'Temperature excursions', sub: 'logged this quarter' },
       { v: Number(r.affected_batches ?? 0), icon: 'i-package', col: t.navy['600'], label: 'Affected batches', sub: String(r.batch_notes ?? '') },
-      { v: Number(r.recipients_exposed ?? 0), icon: 'i-users', col: t.status.info, label: 'Recipients exposed', sub: 'doses · FHIR-linked' },
-      { v: Number(r.linked_aefi_events ?? 0), icon: 'i-syringe', col: t.status.alert, label: 'Linked AEFI events', sub: 'mild · serious' },
+      { v: Number(r.recipients_exposed ?? 0), icon: 'i-users', col: t.status.info, label: 'Recipients exposed', sub: 'doses, FHIR-linked' },
+      { v: Number(r.linked_aefi_events ?? 0), icon: 'i-syringe', col: t.status.alert, label: 'Linked AEFI events', sub: 'mild and serious' },
     ];
     ctx.el.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:1rem;height:100%">

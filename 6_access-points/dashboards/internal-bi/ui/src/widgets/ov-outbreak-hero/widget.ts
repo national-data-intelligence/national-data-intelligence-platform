@@ -13,7 +13,7 @@
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 
 const DEFAULTS = {
-  eyebrow: 'Active outbreaks · Last 30 days',
+  eyebrow: 'Active outbreaks, last 30 days',
   headline: '1',
   metrics: [
     { icon: 'i-users', value: '528', label: 'new cases\nthis week' },

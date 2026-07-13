@@ -54,11 +54,11 @@ const def: WidgetDef = {
         <div class="field-group" style="margin:0;grid-column:span 2">
           ${check('autoRefresh', 'Auto-refresh data every 5 minutes', autoRefresh)}
           ${check('density', 'Compact density (more content per screen)', density,
-            `<span data-density-note style="font-size:.72rem;color:${theme.ink[2]}${density ? '' : ';display:none'}"> · active · click to revert</span>`)}
+            `<span data-density-note style="font-size:.72rem;color:${theme.ink[2]}${density ? '' : ';display:none'}"> (active, click to revert)</span>`)}
           ${check('rememberFilters', 'Remember last filter selections across sessions', remember)}
         </div>
         <p style="grid-column:span 2;margin:.1rem 0 0;font-size:.78rem;color:${theme.ink[2]}">
-          Saved on this device — these preferences don't leave your browser.
+          Saved on this device; these preferences don't leave your browser.
         </p>
       </div>`;
 

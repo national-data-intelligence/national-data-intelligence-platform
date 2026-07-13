@@ -11,8 +11,8 @@ const def: WidgetDef = {
     if (!r) { ctx.empty('No surveillance data for the current scope.'); return; }
     const alarms = Number(r.alarms_now ?? 0);
     return kpiStrip(ctx.el, [
-      { label: 'New cases · 7d', value: Number(r.cases_wk ?? 0).toLocaleString(), note: 'This week' },
-      { label: 'Active alarms', value: String(alarms), status: alarms >= 4 ? 'alert' : alarms >= 1 ? 'watch' : 'good', note: 'Woreda × disease' },
+      { label: 'New cases (7d)', value: Number(r.cases_wk ?? 0).toLocaleString(), note: 'This week' },
+      { label: 'Active alarms', value: String(alarms), status: alarms >= 4 ? 'alert' : alarms >= 1 ? 'watch' : 'good', note: 'By woreda and disease' },
       { label: 'Active diseases', value: String(r.active_diseases ?? 0), note: 'Reporting cases' },
     ], ctx.theme, 3);
   },

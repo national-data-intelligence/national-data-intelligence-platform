@@ -86,7 +86,7 @@ export function funnel(el: HTMLElement, data: { name: string; value: number }[],
     series: [{
       type: 'funnel', sort: 'descending', min: 0, max: base, gap: 2,
       label: {
-        position: 'inside', formatter: '{b} · {c}', fontSize: 10.5, color: '#fff',
+        position: 'inside', formatter: '{b}: {c}', fontSize: 10.5, color: '#fff',
         fontWeight: 600, textShadowColor: 'rgba(0,0,0,0.35)', textShadowBlur: 2,
       },
       data: styled,
@@ -569,7 +569,7 @@ export function heatmap(
         const v = r.probs[ci];
         if (v == null) return `<div class="rmhm-cell rmhm-na${dim}" data-r="${ri}" data-c="${ci}"><span class="rmhm-fill">—</span></div>`;
         const val = +v;
-        return `<div class="rmhm-cell${dim}" data-r="${ri}" data-c="${ci}"><span class="rmhm-fill" style="background:${colorFor(val)};color:${inkFor(val)}" title="${esc(r.name)} · ${esc(c)}: ${esc(fmt(val))}">${esc(fmt(val))}</span></div>`;
+        return `<div class="rmhm-cell${dim}" data-r="${ri}" data-c="${ci}"><span class="rmhm-fill" style="background:${colorFor(val)};color:${inkFor(val)}" title="${esc(r.name)}, ${esc(c)}: ${esc(fmt(val))}">${esc(fmt(val))}</span></div>`;
       }).join('');
       return rh + cells;
     }).join('');
@@ -673,7 +673,7 @@ export function divergingBar(el: HTMLElement, data: { name: string; value: numbe
   chart.setOption({
     textStyle: { fontFamily: theme.fontSans },
     grid: { left: 180, right: 60, top: 10, bottom: 34 },
-    tooltip: { trigger: 'item', formatter: (p: any) => `${p.name}<br/><b>r = ${(+p.value).toFixed(2)}</b>${data[p.dataIndex].note ? ` · ${data[p.dataIndex].note}` : ''}` },
+    tooltip: { trigger: 'item', formatter: (p: any) => `${p.name}<br/><b>r = ${(+p.value).toFixed(2)}</b>${data[p.dataIndex].note ? `, ${data[p.dataIndex].note}` : ''}` },
     xAxis: { type: 'value', min: -1, max: 1, axisLabel: { fontSize: 9, color: theme.ink[3] }, splitLine: { show: false } },
     yAxis: { type: 'category', data: data.map(d => d.name), axisLabel: { fontSize: 10.5, color: theme.ink[1] }, axisLine: { show: false }, axisTick: { show: false } },
     series: [{

@@ -24,6 +24,7 @@ const def: WidgetDef = {
     const delta = latest - prev;   // data-derived, not hard-coded
 
     ctx.el.innerHTML = `
+      <p class="widget-lead" style="color:var(--ink-3);font-size:.8rem;margin:0 0 .6rem">Share of audited encounters that fully followed clinical guidelines, with the monthly trend and a per-programme breakdown.</p>
       <div style="display:flex;gap:1rem;align-items:flex-start">
         <div style="flex:1;min-width:0">
           <div style="font-size:2rem;font-weight:800;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1">${latest}%</div>
@@ -37,7 +38,7 @@ const def: WidgetDef = {
             <span style="width:32px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;color:${t.ink[0]}">${v}%</span></div>`; }).join('')}
         </div>
       </div>
-      <p style="margin:.5rem 0 0;font-size:.7rem;color:${t.ink[3]}">Based on audited encounter sample · confirm clinical-audit source before national use</p>`;
+      <p style="margin:.5rem 0 0;font-size:.7rem;color:${t.ink[3]}">Based on an audited encounter sample; confirm the clinical-audit source before national use.</p>`;
 
     const chart = echarts.init(ctx.el.querySelector('.sv-cmp-line') as HTMLElement);
     chart.setOption({

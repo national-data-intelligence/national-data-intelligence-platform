@@ -34,7 +34,7 @@ const def: WidgetDef = {
         `<span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3,#667085);display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:${color};flex:none"></span>${String(r.source)}</span>` +
         `<span style="font-size:22px;font-weight:650;color:${status === 'no_metric' ? 'var(--ink-3,#667085)' : 'var(--ink)'};">${compl}</span>` +
         `<span style="font-size:11px;color:var(--ink-3,#667085);">${reports}</span>` +
-        `<span style="font-size:11px;color:var(--ink-4,#9ca3af);">latest ${String(r.latest_period ?? '—')} · ` +
+        `<span style="font-size:11px;color:var(--ink-4,#9ca3af);">latest ${String(r.latest_period ?? '—')}, ` +
         `<span style="color:${color};font-weight:600;">${status.replace('_', ' ')}</span></span>`;
       wrap.appendChild(tile);
     }

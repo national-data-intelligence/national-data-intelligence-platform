@@ -179,8 +179,8 @@ function renderResult(ctx: WidgetCtx, resEl: HTMLElement, data: any) {
   const cols: string[] = data.columns || [];
   const rows: any[] = data.rows || [];
   const n = data.row_count ?? rows.length;
-  const meta = `${n} row${n === 1 ? '' : 's'} · ${data.elapsed_ms ?? '-'} ms`
-    + (data.tables_used?.length ? ` · ${esc(data.tables_used.join(', '))}` : '');
+  const meta = `${n} row${n === 1 ? '' : 's'}, ${data.elapsed_ms ?? '-'} ms`
+    + (data.tables_used?.length ? `, ${esc(data.tables_used.join(', '))}` : '');
   const status = `<div class="sqlx-status">${ICON.check.replace('<svg', '<svg class="ok"')}<span>${meta}</span>
       <span style="flex:1"></span>
       ${rows.length ? `<button class="sqlx-csv" data-csv type="button">${ICON.download}Export CSV</button>` : ''}
@@ -241,7 +241,7 @@ const def: WidgetDef = {
           <button class="sqlx-run" data-run type="button">${ICON.play}Run query</button>
           <label class="sqlx-limit">limit <input data-limit type="number" value="500" min="1" max="5000"/></label>
           <button class="sqlx-csv" data-save-tpl type="button">${ICON.save}Save as template</button>
-          <span class="sqlx-help">read-only · OPA-enforced per table · ⌘/Ctrl+Enter to run</span>
+          <span class="sqlx-help">read-only, OPA-enforced per table, ⌘/Ctrl+Enter to run</span>
         </div>
         <div data-result></div>
       </div>`;

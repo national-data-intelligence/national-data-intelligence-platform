@@ -18,9 +18,9 @@ const def: WidgetDef = {
       disease: r.disease_label ?? r.disease_code ?? '-',
       cases: Number(r.cases_4w ?? 0),
       trend: r.trend_ratio == null ? '—'
-        : Number(r.trend_ratio) > 1.05 ? `▲ ${Number(r.trend_ratio).toFixed(2)}×`
-        : Number(r.trend_ratio) < 0.95 ? `▼ ${Number(r.trend_ratio).toFixed(2)}×`
-        : `→ ${Number(r.trend_ratio).toFixed(2)}×`,
+        : Number(r.trend_ratio) > 1.05 ? `up ${Number(r.trend_ratio).toFixed(2)}x`
+        : Number(r.trend_ratio) < 0.95 ? `down ${Number(r.trend_ratio).toFixed(2)}x`
+        : `steady ${Number(r.trend_ratio).toFixed(2)}x`,
       commodity: r.commodity_name ?? 'No tracked countermeasure',
       role: r.commodity_role ?? '—',
       mos: r.mos == null ? '—' : Number(r.mos).toFixed(1),

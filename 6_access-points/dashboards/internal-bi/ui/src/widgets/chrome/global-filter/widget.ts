@@ -97,7 +97,7 @@ const def: WidgetDef = {
         }
         const menu = openId === f.id ? `
           <div class="dropdown-menu" data-menu="${f.id}">
-            ${scoped ? `<div class="dd-section">${f.title || f.id} · scoped</div>` : ''}
+            ${scoped ? `<div class="dd-section">${f.title || f.id} (scoped)</div>` : ''}
             ${opts.map(o => `<div class="dd-item${o.value === shownVal ? ' selected' : ''}" data-key="${key}" data-val="${o.value}">${o.label}</div>`).join('')}
           </div>` : '';
         return `<span class="dropdown">

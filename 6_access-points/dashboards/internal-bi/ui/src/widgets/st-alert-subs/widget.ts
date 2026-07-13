@@ -37,7 +37,7 @@ async function draw(ctx: WidgetCtx) {
       <td>${s.geography === 'all' ? 'All Ethiopia' : esc(s.geography)}</td>
       <td class="num">≥ ${((s.threshold ?? 0) * 100).toFixed(0)}%</td>
       <td>${esc(cadenceLabel(s.cadence))}</td>
-      <td>${s.fire_count ? `<span class="pill info">fired ${s.fire_count}×</span>` : '<span class="pill">—</span>'}</td>
+      <td>${s.fire_count ? `<span class="pill info">fired ${s.fire_count} times</span>` : '<span class="pill">—</span>'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm btn-ghost" data-act="toggle" data-id="${esc(s.id)}" data-st="${esc(s.status)}">${paused ? 'Resume' : 'Pause'}</button>
         <button class="btn btn-sm btn-ghost" data-act="del" data-id="${esc(s.id)}">Remove</button>

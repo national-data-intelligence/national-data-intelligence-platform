@@ -45,7 +45,7 @@ const def: WidgetDef = {
           <div style="display:flex;align-items:center;gap:.55rem">${chip('i-package', t.status.watch)}${label('Commodities at risk of stockout')}</div>
           <div style="display:flex;align-items:baseline;gap:.55rem;margin-top:.1rem">
             <div style="font-size:2.2rem;font-weight:800;letter-spacing:-.03em;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1">${Number(r.commodities_at_risk ?? 0)}</div>
-            <div style="font-size:.72rem;color:${t.ink[3]}">of ${Number(r.commodity_region_pairs ?? 0)} commodity × region pairs</div>
+            <div style="font-size:.72rem;color:${t.ink[3]}">of ${Number(r.commodity_region_pairs ?? 0)} commodity-region pairs</div>
           </div>
           <span style="display:inline-flex;align-items:center;gap:.3rem;align-self:flex-start;padding:.15rem .5rem;border-radius:999px;background:${tint(t.status.alert, 0.10)};color:${t.status.alert};font-size:.7rem;font-weight:700;margin-top:.25rem">
             <span style="width:.4rem;height:.4rem;border-radius:50%;background:currentColor"></span>${Number(r.already_stockout ?? 0)} already in stockout</span>

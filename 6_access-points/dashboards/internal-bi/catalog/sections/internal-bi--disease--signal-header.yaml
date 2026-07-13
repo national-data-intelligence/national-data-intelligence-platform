@@ -1,7 +1,7 @@
 id: internal-bi/disease/signal-header
 page_id: internal-bi/disease
 title: Signal Header
-eyebrow: EWARS · notifiable diseases
+eyebrow: EWARS, notifiable diseases
 ordering: 10
 columns: 12
 dense: true

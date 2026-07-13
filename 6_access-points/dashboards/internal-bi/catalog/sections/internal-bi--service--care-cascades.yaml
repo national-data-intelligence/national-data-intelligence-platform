@@ -1,6 +1,7 @@
 id: internal-bi/service/care-cascades
 page_id: internal-bi/service
 title: Care Cascades & Leakage
+description: "Where patients drop out along each programme's care pathway, and the regions and woredas where that leakage concentrates."
 ordering: 20
 columns: 12
 dense: true

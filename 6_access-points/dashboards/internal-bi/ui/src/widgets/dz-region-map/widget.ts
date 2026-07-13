@@ -304,7 +304,7 @@ const def: WidgetDef = {
         const r = rowsByName[name];
         if (!r) return `<b>${esc(name)}</b><br/>No data`;
         const pa = Number(r.p_alarm ?? 0); const paPct = Math.round(pa <= 1 ? pa * 100 : pa);
-        return `<b>${esc(name)}</b><br/>Burden ${Math.round(Number(r.burden_incidence_100k ?? 0))}/100k · Readiness ${Math.round(Number(r.readiness_pct ?? 0))}%<br/>P(alarm) ${paPct}% · Cases 7d ${Number(r.cases_7d ?? 0).toLocaleString()}`;
+        return `<b>${esc(name)}</b><br/>Burden ${Math.round(Number(r.burden_incidence_100k ?? 0))}/100k, Readiness ${Math.round(Number(r.readiness_pct ?? 0))}%<br/>P(alarm) ${paPct}%, Cases 7d ${Number(r.cases_7d ?? 0).toLocaleString()}`;
       };
       chartCleanup = choropleth(mapMount, {
         valuesByRegion, fmt: m.fmt, onSelect: selectRegion, ramp, tooltip,
@@ -328,7 +328,7 @@ const def: WidgetDef = {
           .sort((a, b) => Number(b.burden_incidence_100k ?? 0) - Number(a.burden_incidence_100k ?? 0))
           .slice(0, 5);
         const wMax = Math.max(1, ...wRanked.map(w => Number(w.burden_incidence_100k ?? 0)));
-        q<HTMLElement>('.dzm-top5-lbl').textContent = `Burden hotspots · ${soleName}`;
+        q<HTMLElement>('.dzm-top5-lbl').textContent = `Burden hotspots: ${soleName}`;
         q<HTMLElement>('.dzm-top5-unit').textContent = 'cases/100k';
         listHost.innerHTML = wRanked.map(w => {
           const name = String(w.woreda_name ?? w.region ?? '—');

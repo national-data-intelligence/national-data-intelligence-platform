@@ -49,7 +49,7 @@ const def: WidgetDef = {
     ];
 
     ctx.el.innerHTML = `
-      <p style="font-size:.82rem;color:${t.ink[2]};margin:0 0 .5rem">DHIS2 vs EMR disagreement · EMR-active only</p>
+      <p class="widget-lead" style="color:var(--ink-3);font-size:.8rem;margin:0 0 .6rem">Facilities where DHIS2 reported counts diverge most from EMR records, a data-trust signal to reconcile rather than an accusation. EMR-active facilities only.</p>
       <div class="sv-dt-tbl"></div>`;
     const mount = ctx.el.querySelector<HTMLElement>('.sv-dt-tbl')!;
     return paginatedTable(mount, shaped, columns, ctx.theme, { search: true, sort: true });
