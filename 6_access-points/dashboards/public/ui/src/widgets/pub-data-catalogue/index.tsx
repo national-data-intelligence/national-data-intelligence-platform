@@ -245,17 +245,20 @@ function DataCatalogue({ host }: { host: PublicHost }) {
                   return (
                     <li key={d.id} className={`od-row${on ? ' is-on' : ''}`}>
                       <button className="od-row-btn" onClick={() => setSelectedId(d.id)} aria-pressed={on}>
-                        <span className="od-row-line">
-                          <span className="od-row-title">{d.title}</span>
-                          <span className={`od-tag od-tag--${d.tier}`}>{tierLabel(d.tier)}</span>
-                        </span>
-                        <span className="od-row-meta">
-                          {meta.map((m, i) => (
-                            <Fragment key={i}>
-                              {i > 0 && <span className="sep">·</span>}
-                              <span>{m}</span>
-                            </Fragment>
-                          ))}
+                        <span className="od-row-ico"><svg className="ico"><use href="#i-database" /></svg></span>
+                        <span className="od-row-body">
+                          <span className="od-row-line">
+                            <span className="od-row-title">{d.title}</span>
+                            <span className={`od-tag od-tag--${d.tier}`}>{tierLabel(d.tier)}</span>
+                          </span>
+                          <span className="od-row-meta">
+                            {meta.map((m, i) => (
+                              <Fragment key={i}>
+                                {i > 0 && <span className="sep">·</span>}
+                                <span>{m}</span>
+                              </Fragment>
+                            ))}
+                          </span>
                         </span>
                       </button>
                     </li>

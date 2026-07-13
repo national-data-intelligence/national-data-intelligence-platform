@@ -646,16 +646,17 @@
   ═══════════════════════════════════════════════════════════════ */
   .od-split {
     display: grid; grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.3fr);
-    gap: 1.8rem; align-items: start;
+    gap: 1.8rem; align-items: stretch;
   }
   @media (max-width: 1040px) { .od-split { grid-template-columns: 1fr; } }
 
-  .od-master { min-width: 0; }
-  /* the list is ONE soft card; each row is a clean clickable line */
+  .od-master { min-width: 0; display: flex; flex-direction: column; }
+  /* the list is ONE soft card; each row is a clean clickable line. flex:1 makes
+     the card fill the (stretched) column so it's never shorter than the detail. */
   .od-list {
     list-style: none; margin: 0; padding: 0.4rem;
     background: var(--paper); border-radius: 16px; box-shadow: var(--shadow-1);
-    display: flex; flex-direction: column;
+    display: flex; flex-direction: column; flex: 1;
   }
   .od-row { position: relative; }
   .od-row + .od-row::before {
@@ -664,18 +665,27 @@
   .od-row.is-on::before, .od-row.is-on + .od-row::before { background: transparent; }
   .od-row-btn {
     width: 100%; text-align: left; background: none; border: none; cursor: pointer;
-    font: inherit; color: inherit; display: flex; flex-direction: column; gap: 0.4rem;
+    font: inherit; color: inherit; display: flex; flex-direction: row; align-items: flex-start; gap: 0.85rem;
     padding: 1.1rem 1rem; border-radius: 11px; transition: background .15s ease;
   }
+  /* one uniform icon per dataset row (same glyph for all — a quiet identity marker) */
+  .od-row-ico {
+    flex: none; width: 34px; height: 34px; border-radius: 9px; margin-top: 0.1rem;
+    background: var(--navy-50); color: var(--navy-600);
+    display: inline-grid; place-items: center;
+  }
+  .od-row-ico .ico { width: 17px; height: 17px; }
+  .od-row-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
   .od-row:hover .od-row-btn { background: var(--paper-2); }
-  .od-row.is-on .od-row-btn { background: var(--pub-accent-fill); box-shadow: inset 3px 0 0 var(--pub-accent); }
+  /* selection: a quiet neutral slate fill — NO green tint, NO left accent bar */
+  .od-row.is-on .od-row-btn { background: var(--navy-50); }
   .od-row-line { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; }
   .od-row-title {
     font-family: var(--font-serif); font-size: 1.08rem; font-weight: 600; line-height: 1.2;
     letter-spacing: -0.01em; color: var(--ink); min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .od-row.is-on .od-row-title { color: var(--pub-accent-600); }
+  .od-row.is-on .od-row-title { color: var(--ink); }
   .od-row-meta {
     display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem;
     font-size: 0.72rem; color: var(--ink-4); font-variant-numeric: tabular-nums;
