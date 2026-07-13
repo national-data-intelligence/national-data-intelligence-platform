@@ -350,6 +350,44 @@ def _dz_region_spark_sql(t: str, w: str) -> str:
         f"FROM {t}{w} GROUP BY week_start ORDER BY week_start")
 
 
+def _dz_region_woreda_sql(t: str, w: str, p: dict) -> str:
+    # Single-region drill-down: one row per WOREDA in the scoped region so the
+    # map's ranked list can PIVOT from "Top regions" to "Top woredas by burden"
+    # when exactly one region is in scope (a regional-bureau role, or a picked
+    # region) — a lone-region Top-5 + "national median across 1 region" is
+    # meaningless. Same grant/mart/shape family as the region + spark shapes, no
+    # new widget id. burden = 12-week cases per 100k on the woreda's REAL DHIS2
+    # population (bi_idsr.mart_ml_disease_input); cases_7d/cfr = latest reported
+    # week; p_alarm = the woreda's peak forecast alarm from the latest model run.
+    return (
+        f"WITH b AS (SELECT * FROM {t}{w}), "
+        f"mx AS (SELECT max(week_start) AS m FROM b), "
+        f"obs AS (SELECT b.woreda_uid, max(b.woreda_name) AS woreda_name, "
+        f"max(b.region_id) AS region_id, "
+        f"sum(b.new_cases) FILTER (WHERE b.week_start = (SELECT m FROM mx)) AS cases_7d, "
+        f"sum(b.deaths) FILTER (WHERE b.week_start = (SELECT m FROM mx)) AS deaths_7d, "
+        f"sum(b.new_cases) FILTER (WHERE b.week_start >= date_add('day', -84, (SELECT m FROM mx))) AS cases_12w "
+        f"FROM b GROUP BY b.woreda_uid), "
+        f"pop AS (SELECT woreda_uid, max(population) AS pop "
+        f"FROM bi_idsr.mart_ml_disease_input WHERE population IS NOT NULL GROUP BY 1), "
+        f"scope AS (SELECT DISTINCT woreda_uid, disease_code FROM b), "
+        f"ml AS ({_ml_latest_run(p['model'])}), "
+        f"mlx AS (SELECT max(year * 100 + week) AS yw FROM ml), "
+        f"pr AS (SELECT s.woreda_uid, max(m.alarm_prob) AS p_alarm "
+        f"FROM ml m CROSS JOIN mlx "
+        f"JOIN scope s ON s.woreda_uid = m.district AND s.disease_code = m.disease "
+        f"WHERE m.year * 100 + m.week = mlx.yw GROUP BY 1) "
+        f"SELECT obs.woreda_uid AS region, obs.woreda_name, obs.region_id, "
+        f"CAST(round(1e5 * obs.cases_12w / NULLIF(pop.pop, 0), 1) AS double) AS burden_incidence_100k, "
+        f"obs.cases_7d, "
+        f"round(100.0 * obs.deaths_7d / NULLIF(obs.cases_7d, 0), 2) AS cfr_pct, "
+        f"round(pr.p_alarm, 3) AS p_alarm, "
+        f"(SELECT m FROM mx) AS data_through "
+        f"FROM obs LEFT JOIN pop ON pop.woreda_uid = obs.woreda_uid "
+        f"LEFT JOIN pr ON pr.woreda_uid = obs.woreda_uid "
+        f"ORDER BY burden_incidence_100k DESC NULLS LAST")
+
+
 # ── the registry ──────────────────────────────────────────────────────────
 # Grows as widgets are bound to marts. Keyed by the canonical widget id
 # (bundle/seeds/security/widgets.yaml).
@@ -461,22 +499,32 @@ FETCHERS: dict[str, Fetcher] = {
             f"FROM obs o FULL JOIN pred pr ON pr.disease = o.disease_code "
             f"AND pr.year = o.year AND pr.week = o.week "
             f"ORDER BY 1, 3, 4")),
-    # Risk map: region grain — latest-week observed totals + peak alarm
-    # probability. ?metric=cases|alarm_prob picks the choropleth value column.
     # Region choropleth (friend contract: region, burden_incidence_100k,
-    # readiness_pct, reliability_pct, p_alarm, cases_7d, cfr_pct). Real: region,
-    # p_alarm (region peak forecast alarm), cases_7d (latest week), cfr_pct.
-    # burden_incidence_100k/readiness_pct/reliability_pct are HONEST NULLS (no
-    # population denominator; no readiness/reliability mart yet — #33/#27 gap).
+    # readiness_pct, reliability_pct, p_alarm, cases_7d, cfr_pct). ALL REAL now:
+    #   region                — region_id
+    #   burden_incidence_100k — 12-week cases per 100k on the region's real
+    #                           population (bi_facility.mart_health_workforce)
+    #   readiness_pct         — share of tracer commodities with >=1 month stock
+    #                           (bi_supply.mart_supply_region_stock)
+    #   reliability_pct       — reporting completeness (bi_quality.mart_data_quality)
+    #   p_alarm               — region peak forecast alarm (latest ml_predictions run)
+    #   cases_7d              — latest reported week observed total
+    #   cfr_pct               — deaths / cases at the latest week
+    # (The old "HONEST NULLS" note is superseded — the readiness/reliability/pop
+    # marts landed; nothing here is fabricated.)
     "dz-region-map": Fetcher(
         schema="bi_idsr", table="mart_idsr_disease_weekly",
         subject="PRG", data_class="DC.PRO",
         geo_col="region_id", prog_col="programme_id", period_col="week_start",
-        # spark=1 switches this fetcher to the scoped region's weekly case series
-        # (the redesigned sidebar sparkline) — same grant/mart, no new widget id.
-        params_spec={"model": Param("ears", DZ_MODELS), "spark": Param("0", ("0", "1"))},
+        # spark=1 → the scoped region's weekly case series (sidebar sparkline);
+        # woreda=1 → one row per WOREDA in the scoped region (single-region
+        # ranked-list pivot). Same grant/mart as the region shape, no new widget id.
+        params_spec={"model": Param("ears", DZ_MODELS),
+                     "spark": Param("0", ("0", "1")),
+                     "woreda": Param("0", ("0", "1"))},
         sql=lambda t, w, p: (
             _dz_region_spark_sql(t, w) if p.get("spark") == "1"
+            else _dz_region_woreda_sql(t, w, p) if p.get("woreda") == "1"
             else _dz_region_map_sql(t, w, p))),
     # High-risk woredas: latest observed week vs the model's latest week,
     # ranked by alarm probability. top_disease = the woreda's peak-risk disease.
