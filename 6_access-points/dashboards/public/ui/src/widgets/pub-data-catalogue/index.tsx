@@ -1,23 +1,23 @@
 /**
  * Widget · pub-data-catalogue — Open Data "public dataset catalog" (page "data").
  *
- * Design (2026-07-13 reimagining, ref 01_21_20): a MASTER–DETAIL register.
- * A top row of summary stat chips → a filter bar (search · tier tabs · topic ·
- * sort) → a two-column split: a scannable dataset LIST on the left, and a rich
- * DETAIL panel on the right for the selected dataset (stat row · Preview/Schema
- * tabs · paginated data preview · Download CSV). Real data via useDatasets
- * (published catalogue) + /api/proxy/datasets/{id}/preview; falls back to the
- * bundled catalogue / a sample preview only when the gateway is unavailable.
- * Reads openModal from host. NHDW navy palette; borderless soft cards.
+ * Design (2026-07-13 elegance pass): a single flush-left column — eyebrow +
+ * serif title + one quiet line, a borderless stat rail, ONE unified control bar
+ * (search · tier tabs · topic · sort), then a MASTER–DETAIL register: a narrow,
+ * tall dataset list (one soft card, clean typographic rows, paginated) beside a
+ * wider, compact detail panel (title · key stats · Preview/Schema · clean table ·
+ * Download CSV). Restrained slate/ink neutrals + one deep-teal accent. Real data
+ * via useDatasets + /api/proxy/datasets/{id}/preview; falls back to the bundled
+ * catalogue / a sample preview only when the gateway is unavailable.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useDatasets, type DatasetLive } from '../../hooks/useDatasets';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
 
 type Tier = 'all' | 'aggregate' | 'facility-level' | 'bulletin';
 type Sort = 'updated' | 'downloads' | 'title';
 type DetailTab = 'preview' | 'schema';
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 7;
 
 type Preview = { columns: string[]; rows: string[][]; total_rows: number };
 
@@ -42,14 +42,14 @@ function samplePreview(d: DatasetLive): Preview {
 
 /** Human tier label. */
 function tierLabel(t: string): string {
-  if (t === 'facility-level') return 'Facility-level';
+  if (t === 'facility-level') return 'Facility';
   if (t === 'bulletin') return 'Bulletin';
   return 'Aggregate';
 }
 
 /** Compact "2024–2026" range from a verbose period string; falls back to the raw value. */
 function compactPeriod(p: string): string {
-  if (!p || p === 'n/a') return '—';
+  if (!p || p === 'n/a') return '';
   const years = p.match(/\d{4}/g);
   if (years && years.length >= 2 && years[0] !== years[years.length - 1]) return `${years[0]}–${years[years.length - 1]}`;
   if (years && years.length >= 1) return years[0];
@@ -58,7 +58,7 @@ function compactPeriod(p: string): string {
 
 /** Short size label — KB under 1 MB, else MB (one decimal under 10). */
 function fmtSize(mb: number): string {
-  if (!mb || mb <= 0) return '—';
+  if (!mb || mb <= 0) return '';
   if (mb < 1) return `${Math.round(mb * 1000)} KB`;
   return `${mb < 10 ? Number(mb.toFixed(1)) : Math.round(mb)} MB`;
 }
@@ -70,17 +70,6 @@ function primaryTopic(topic: string): string { return topic.split('·')[0].trim(
 function monthYear(iso: string): string {
   const m = /^(\d{4})-(\d{2})/.exec(iso);
   return m ? `${MONTHS[+m[2] - 1]} ${m[1]}` : '';
-}
-
-/** A sprite icon per dataset, chosen from its primary topic (falls back to a database glyph). */
-function datasetIcon(d: DatasetLive): string {
-  const k = (primaryTopic(d.topic) + ' ' + d.title).toLowerCase();
-  if (/facilit|registry|infrastructure/.test(k)) return 'i-building';
-  if (/commodit|supply|stock|logisti/.test(k)) return 'i-package';
-  if (/report|surveil|programme|program/.test(k)) return 'i-list';
-  if (/coverage|immuniz|vaccin|epi/.test(k)) return 'i-chart-bar';
-  if (/bulletin|advisor|outbreak/.test(k)) return 'i-megaphone';
-  return 'i-database';
 }
 
 /** Crude column-type inference from a preview column's sampled values (Schema tab). */
@@ -163,15 +152,15 @@ function DataCatalogue({ host }: { host: PublicHost }) {
     { v: 'all',            label: 'All' },
     { v: 'aggregate',      label: 'Aggregate' },
     { v: 'bulletin',       label: 'Bulletins' },
-    { v: 'facility-level', label: 'Facility-level research' },
+    { v: 'facility-level', label: 'Facility' },
   ];
 
   const newest = useMemo(() => DATA.map(d => d.updated).filter(Boolean).sort().pop() || '', [DATA]);
   const chips = [
     { icon: 'i-database', big: String(DATA.length), small: DATA.length === 1 ? 'dataset' : 'datasets' },
-    { icon: 'i-file',     big: 'CSV', small: 'downloads' },
-    { icon: 'i-eye',      big: 'Preview', small: 'available' },
-    { icon: 'i-calendar', big: 'Updated', small: newest ? monthYear(newest) : 'monthly' },
+    { icon: 'i-download', big: 'CSV', small: 'downloads' },
+    { icon: 'i-eye',      big: 'Preview', small: 'in-browser' },
+    { icon: 'i-calendar', big: newest ? monthYear(newest) : 'Monthly', small: 'last updated' },
   ];
 
   // Detail preview pagination.
@@ -182,238 +171,215 @@ function DataCatalogue({ host }: { host: PublicHost }) {
   const maxRowPage = preview ? Math.max(0, Math.ceil(preview.rows.length / rowsPerPage) - 1) : 0;
 
   return (
-    <>
-      <section className="page-banner">
-        <div className="pgh">
-          <p className="pgh-eyebrow">Open Data</p>
-          <h1 className="pgh-title">Public dataset catalog</h1>
-          <p className="pgh-sub">{DATA.length} curated datasets, openly licensed under CC-BY 4.0.</p>
-        </div>
-      </section>
+    <section id="downloads" className="od-page">
+      <div className="od">
+        {/* Page header */}
+        <header className="od-head">
+          <p className="od-eyebrow">Open Data</p>
+          <h1 className="od-title">Public dataset catalog</h1>
+          <p className="od-sub">{DATA.length} curated datasets, openly licensed under CC-BY 4.0 — preview in the browser, download as CSV.</p>
+        </header>
 
-      <section id="downloads" className="page-section">
-        <div className="od">
-          {/* Summary stat chips */}
-          <div className="od-stats">
-            {chips.map((c, i) => (
-              <div className="od-stat" key={i}>
-                <span className="od-stat-ico"><svg className="ico"><use href={`#${c.icon}`} /></svg></span>
-                <span className="od-stat-txt"><b>{c.big}</b>{c.small}</span>
-              </div>
+        {/* Summary stat rail — borderless, flush with the title */}
+        <div className="od-stats">
+          {chips.map((c, i) => (
+            <div className="od-stat" key={i}>
+              <span className="od-stat-ico"><svg className="ico"><use href={`#${c.icon}`} /></svg></span>
+              <span className="od-stat-txt"><b>{c.big}</b><span>{c.small}</span></span>
+            </div>
+          ))}
+        </div>
+
+        {/* Unified control bar */}
+        <div className="od-toolbar">
+          <span className="od-search">
+            <svg className="ico"><use href="#i-search" /></svg>
+            <input type="text" placeholder="Search datasets" aria-label="Search datasets"
+                   value={query} onChange={(e) => { setQuery(e.target.value); setPage(0); }} />
+          </span>
+          <div className="od-seg" role="group" aria-label="Tier">
+            {tiers.map(t => (
+              <button key={t.v} className={tier === t.v ? 'is-on' : ''} onClick={() => { setTier(t.v); onAnyFilter(); }}>
+                {t.label}
+              </button>
             ))}
           </div>
-
-          {/* Filter bar */}
-          <div className="od-bar">
-            <span className="od-search">
-              <svg className="ico"><use href="#i-search" /></svg>
-              <input type="text" placeholder="Search datasets" aria-label="Search datasets"
-                     value={query} onChange={(e) => { setQuery(e.target.value); setPage(0); }} />
+          <div className="od-tools">
+            <span className="od-field">
+              <svg className="ico"><use href="#i-filter" /></svg>
+              <select id="od-topic" aria-label="Topic" value={topic} onChange={(e) => { setTopic(e.target.value); onAnyFilter(); }}>
+                <option value="all">All topics</option>
+                {topics.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </span>
-            <div className="od-seg" role="group" aria-label="Tier">
-              {tiers.map(t => (
-                <button key={t.v} className={tier === t.v ? 'is-on' : ''} onClick={() => { setTier(t.v); onAnyFilter(); }}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <div className="od-controls">
-              <span className="od-field">
-                <svg className="ico"><use href="#i-filter" /></svg>
-                <select id="od-topic" aria-label="Topic" value={topic} onChange={(e) => { setTopic(e.target.value); onAnyFilter(); }}>
-                  <option value="all">Topic</option>
-                  {topics.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </span>
-              <span className="od-field">
-                <svg className="ico"><use href="#i-arrow-down" /></svg>
-                <select id="od-sort" aria-label="Sort" value={sort} onChange={(e) => { setSort(e.target.value as Sort); onAnyFilter(); }}>
-                  <option value="updated">Sort: Recently updated</option>
-                  <option value="downloads">Sort: Most rows</option>
-                  <option value="title">Sort: Title A–Z</option>
-                </select>
-              </span>
-            </div>
-          </div>
-
-          {matches.length === 0 ? (
-            <div className="od-empty">
-              <svg className="ico" style={{ width: 28, height: 28, color: 'var(--ink-4)' }}><use href="#i-search" /></svg>
-              <p>No datasets match the current filters.</p>
-              <button className="od-foot-link" onClick={clearFilters}>Clear filters</button>
-            </div>
-          ) : (
-            <div className="od-split">
-              {/* MASTER — dataset list */}
-              <div className="od-master">
-                <ol className="od-list">
-                  {paged.map((d: DatasetLive) => {
-                    const on = d.id === selectedId;
-                    return (
-                      <li key={d.id} className={`od-row${on ? ' is-on' : ''}`}>
-                        <button className="od-row-btn" onClick={() => setSelectedId(d.id)} aria-pressed={on}>
-                          <span className="od-radio" aria-hidden="true">{on && <svg className="ico"><use href="#i-check" /></svg>}</span>
-                          <span className="od-row-ico"><svg className="ico"><use href={`#${datasetIcon(d)}`} /></svg></span>
-                          <span className="od-row-main">
-                            <span className="od-tags">
-                              <span className={`od-tag od-tag--${d.tier}`}>{tierLabel(d.tier)}</span>
-                              {primaryTopic(d.topic) && <span className="od-tag od-tag--topic">{primaryTopic(d.topic)}</span>}
-                            </span>
-                            <span className="od-row-title">{d.title}</span>
-                            {d.desc && <span className="od-row-desc">{d.desc}</span>}
-                            <span className="od-row-meta">
-                              <span className="od-fmt">{d.formats.join(' · ')}</span>
-                              {d.updated && <><span className="sep">·</span><span>Updated {monthYear(d.updated)}</span></>}
-                              <span className="sep">·</span><span>{compactPeriod(d.period)}</span>
-                              <span className="sep">·</span><span>{fmtSize(d.sizeMb)}</span>
-                            </span>
-                          </span>
-                        </button>
-                        <span className="od-row-actions">
-                          <button className="od-row-preview" onClick={() => setSelectedId(d.id)} aria-label={`Preview ${d.title}`}>Preview</button>
-                          {d.download_url ? (
-                            <a href={d.download_url} className="od-dl" download aria-label={`Download ${d.title}`} title="Download CSV">
-                              <svg className="ico"><use href="#i-download" /></svg>
-                            </a>
-                          ) : (
-                            <a href="#" className="od-dl" onClick={(e) => e.preventDefault()} aria-label={`Download ${d.title}`} title="Download CSV">
-                              <svg className="ico"><use href="#i-download" /></svg>
-                            </a>
-                          )}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ol>
-
-                {totalPages > 1 && (
-                  <div className="od-pager">
-                    <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>‹ Prev</button>
-                    <span>Page {page + 1} of {totalPages}</span>
-                    <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next ›</button>
-                  </div>
-                )}
-              </div>
-
-              {/* DETAIL — selected dataset */}
-              <div className="od-detail">
-                {!selected ? (
-                  <div className="od-detail-empty"><p>Select a dataset to preview it.</p></div>
-                ) : (
-                  <>
-                    <div className="od-detail-hd">
-                      <div className="od-detail-head">
-                        <span className="od-row-ico od-row-ico--lg"><svg className="ico"><use href={`#${datasetIcon(selected)}`} /></svg></span>
-                        <div className="od-detail-titles">
-                          <h2 className="od-detail-title">{selected.title}</h2>
-                          <span className="od-tags">
-                            <span className={`od-tag od-tag--${selected.tier}`}>{tierLabel(selected.tier)}</span>
-                            {primaryTopic(selected.topic) && <span className="od-tag od-tag--topic">{primaryTopic(selected.topic)}</span>}
-                            <span className="od-tag od-tag--fmt"><svg className="ico"><use href="#i-file" /></svg>{(selected.formats[0] || 'CSV').toUpperCase()}</span>
-                          </span>
-                        </div>
-                      </div>
-                      {selected.download_url ? (
-                        <a href={selected.download_url} className="od-dl-btn" download>
-                          <svg className="ico"><use href="#i-download" /></svg> Download CSV
-                          <svg className="ico od-dl-caret"><use href="#i-chevron-down" /></svg>
-                        </a>
-                      ) : (
-                        <a href="#" className="od-dl-btn" onClick={(e) => e.preventDefault()}>
-                          <svg className="ico"><use href="#i-download" /></svg> Download CSV
-                          <svg className="ico od-dl-caret"><use href="#i-chevron-down" /></svg>
-                        </a>
-                      )}
-                    </div>
-
-                    {selected.desc && <p className="od-detail-desc">{selected.desc}</p>}
-
-                    {/* Stat row */}
-                    <div className="od-detail-stats">
-                      <div className="od-dstat"><svg className="ico"><use href="#i-database" /></svg>
-                        <span><em>Rows</em><b>{(selected.row_count || rowTotal || 0).toLocaleString()}</b></span></div>
-                      <div className="od-dstat"><svg className="ico"><use href="#i-grid" /></svg>
-                        <span><em>Columns</em><b>{preview ? preview.columns.length : '—'}</b></span></div>
-                      <div className="od-dstat"><svg className="ico"><use href="#i-clock" /></svg>
-                        <span><em>Updated</em><b>{selected.updated ? monthYear(selected.updated) : '—'}</b></span></div>
-                      <div className="od-dstat od-dstat--lic"><svg className="ico"><use href="#i-shield" /></svg>
-                        <span><em>License</em><b>{selected.licence || 'CC-BY 4.0'}</b></span></div>
-                    </div>
-
-                    {/* Tabs */}
-                    <div className="od-detail-tabs" role="tablist">
-                      <button role="tab" aria-selected={detailTab === 'preview'} className={detailTab === 'preview' ? 'is-on' : ''} onClick={() => setDetailTab('preview')}>Preview</button>
-                      <button role="tab" aria-selected={detailTab === 'schema'} className={detailTab === 'schema' ? 'is-on' : ''} onClick={() => setDetailTab('schema')}>Schema</button>
-                    </div>
-
-                    {previewLoading ? (
-                      <p className="od-preview-note">Loading preview…</p>
-                    ) : !preview ? (
-                      <p className="od-preview-note">No preview available for this dataset.</p>
-                    ) : detailTab === 'preview' ? (
-                      <>
-                        <div className="od-preview-scroll">
-                          <table className="od-preview-table">
-                            <thead><tr>{preview.columns.map(c => <th key={c}>{c}</th>)}</tr></thead>
-                            <tbody>
-                              {rowSlice.map((row, ri) => (
-                                <tr key={ri}>{row.map((v, ci) => <td key={ci}>{v}</td>)}</tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        <div className="od-preview-foot">
-                          <span className="od-rowsize">
-                            <select aria-label="Rows per page" value={rowsPerPage}
-                                    onChange={(e) => { setRowsPerPage(Number(e.target.value)); setRowPage(0); }}>
-                              <option value={5}>Show 5 rows</option>
-                              <option value={10}>Show 10 rows</option>
-                              <option value={20}>Show 20 rows</option>
-                            </select>
-                            <svg className="ico"><use href="#i-chevron-down" /></svg>
-                          </span>
-                          <span className="od-preview-foot-r">
-                            <span className="od-preview-note">{rowFrom}–{rowTo} of {rowTotal.toLocaleString()}</span>
-                            <span className="od-rowpager">
-                              <button disabled={rowPage === 0} onClick={() => setRowPage(p => p - 1)} aria-label="Previous rows">
-                                <svg className="ico"><use href="#i-chevron-right" /></svg></button>
-                              <button disabled={rowPage >= maxRowPage} onClick={() => setRowPage(p => p + 1)} aria-label="Next rows">
-                                <svg className="ico"><use href="#i-chevron-right" /></svg></button>
-                            </span>
-                          </span>
-                        </div>
-                      </>
-                    ) : (
-                      <ul className="od-schema">
-                        {preview.columns.map((c, ci) => (
-                          <li key={c} className="od-schema-row">
-                            <span className="od-schema-name">{c}</span>
-                            <span className="od-schema-type">{inferType(c, preview.rows.map(r => r[ci]))}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="od-foot">
-            <span className="od-foot-note">
-              <svg className="ico"><use href="#i-shield" /></svg>
-              <span className="od-foot-note-txt">
-                <strong>CC-BY 4.0 · k-anonymity ≥ 5 · aggregated to woreda or coarser</strong>
-                <span>Data are freely reusable with attribution. Facility-level data require additional approval.</span>
-              </span>
+            <span className="od-field">
+              <svg className="ico"><use href="#i-arrow-down" /></svg>
+              <select id="od-sort" aria-label="Sort" value={sort} onChange={(e) => { setSort(e.target.value as Sort); onAnyFilter(); }}>
+                <option value="updated">Recently updated</option>
+                <option value="downloads">Most rows</option>
+                <option value="title">Title A–Z</option>
+              </select>
             </span>
-            <button className="od-foot-link" onClick={() => openModal('access')}>
-              Request facility-level access <svg className="ico"><use href="#i-arrow-right" /></svg>
-            </button>
           </div>
         </div>
-      </section>
-    </>
+
+        {matches.length === 0 ? (
+          <div className="od-empty">
+            <svg className="ico" style={{ width: 28, height: 28, color: 'var(--ink-4)' }}><use href="#i-search" /></svg>
+            <p>No datasets match the current filters.</p>
+            <button className="od-foot-link" onClick={clearFilters}>Clear filters</button>
+          </div>
+        ) : (
+          <div className="od-split">
+            {/* MASTER — dataset list */}
+            <div className="od-master">
+              <ol className="od-list">
+                {paged.map((d: DatasetLive) => {
+                  const on = d.id === selectedId;
+                  const meta = [
+                    primaryTopic(d.topic),
+                    d.updated ? `Updated ${monthYear(d.updated)}` : '',
+                    compactPeriod(d.period),
+                    fmtSize(d.sizeMb),
+                  ].filter(Boolean);
+                  return (
+                    <li key={d.id} className={`od-row${on ? ' is-on' : ''}`}>
+                      <button className="od-row-btn" onClick={() => setSelectedId(d.id)} aria-pressed={on}>
+                        <span className="od-row-line">
+                          <span className="od-row-title">{d.title}</span>
+                          <span className={`od-tag od-tag--${d.tier}`}>{tierLabel(d.tier)}</span>
+                        </span>
+                        <span className="od-row-meta">
+                          {meta.map((m, i) => (
+                            <Fragment key={i}>
+                              {i > 0 && <span className="sep">·</span>}
+                              <span>{m}</span>
+                            </Fragment>
+                          ))}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+
+              {totalPages > 1 && (
+                <div className="od-pager">
+                  <button disabled={page === 0} onClick={() => setPage(p => p - 1)}>‹ Prev</button>
+                  <span>Page {page + 1} of {totalPages}</span>
+                  <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next ›</button>
+                </div>
+              )}
+            </div>
+
+            {/* DETAIL — selected dataset */}
+            <div className="od-detail">
+              {!selected ? (
+                <div className="od-detail-empty"><p>Select a dataset to preview it.</p></div>
+              ) : (
+                <>
+                  <div className="od-detail-hd">
+                    <div className="od-detail-titles">
+                      <h2 className="od-detail-title">{selected.title}</h2>
+                      <span className="od-detail-tags">
+                        <span className={`od-tag od-tag--${selected.tier}`}>{tierLabel(selected.tier)}</span>
+                        {primaryTopic(selected.topic) && <span className="od-tag od-tag--topic">{primaryTopic(selected.topic)}</span>}
+                      </span>
+                    </div>
+                    {selected.download_url ? (
+                      <a href={selected.download_url} className="od-dl-btn" download>
+                        <svg className="ico"><use href="#i-download" /></svg> Download CSV
+                      </a>
+                    ) : (
+                      <a href="#" className="od-dl-btn" onClick={(e) => e.preventDefault()}>
+                        <svg className="ico"><use href="#i-download" /></svg> Download CSV
+                      </a>
+                    )}
+                  </div>
+
+                  {selected.desc && <p className="od-detail-desc">{selected.desc}</p>}
+
+                  {/* Key stats — one quiet row */}
+                  <div className="od-detail-stats">
+                    <div className="od-dstat"><em>Rows</em><b>{(selected.row_count || rowTotal || 0).toLocaleString()}</b></div>
+                    <div className="od-dstat"><em>Columns</em><b>{preview ? preview.columns.length : '—'}</b></div>
+                    <div className="od-dstat"><em>Updated</em><b>{selected.updated ? monthYear(selected.updated) : '—'}</b></div>
+                    <div className="od-dstat"><em>License</em><b>{selected.licence || 'CC-BY 4.0'}</b></div>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="od-detail-tabs" role="tablist">
+                    <button role="tab" aria-selected={detailTab === 'preview'} className={detailTab === 'preview' ? 'is-on' : ''} onClick={() => setDetailTab('preview')}>Preview</button>
+                    <button role="tab" aria-selected={detailTab === 'schema'} className={detailTab === 'schema' ? 'is-on' : ''} onClick={() => setDetailTab('schema')}>Schema</button>
+                  </div>
+
+                  {previewLoading ? (
+                    <p className="od-preview-note">Loading preview…</p>
+                  ) : !preview ? (
+                    <p className="od-preview-note">No preview available for this dataset.</p>
+                  ) : detailTab === 'preview' ? (
+                    <>
+                      <div className="od-preview-scroll">
+                        <table className="od-preview-table">
+                          <thead><tr>{preview.columns.map(c => <th key={c}>{c}</th>)}</tr></thead>
+                          <tbody>
+                            {rowSlice.map((row, ri) => (
+                              <tr key={ri}>{row.map((v, ci) => <td key={ci}>{v}</td>)}</tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="od-preview-foot">
+                        <span className="od-rowsize">
+                          <select aria-label="Rows per page" value={rowsPerPage}
+                                  onChange={(e) => { setRowsPerPage(Number(e.target.value)); setRowPage(0); }}>
+                            <option value={5}>Show 5 rows</option>
+                            <option value={10}>Show 10 rows</option>
+                            <option value={20}>Show 20 rows</option>
+                          </select>
+                          <svg className="ico"><use href="#i-chevron-down" /></svg>
+                        </span>
+                        <span className="od-preview-foot-r">
+                          <span className="od-preview-note">{rowFrom}–{rowTo} of {rowTotal.toLocaleString()}</span>
+                          <span className="od-rowpager">
+                            <button disabled={rowPage === 0} onClick={() => setRowPage(p => p - 1)} aria-label="Previous rows">
+                              <svg className="ico"><use href="#i-chevron-right" /></svg></button>
+                            <button disabled={rowPage >= maxRowPage} onClick={() => setRowPage(p => p + 1)} aria-label="Next rows">
+                              <svg className="ico"><use href="#i-chevron-right" /></svg></button>
+                          </span>
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <ul className="od-schema">
+                      {preview.columns.map((c, ci) => (
+                        <li key={c} className="od-schema-row">
+                          <span className="od-schema-name">{c}</span>
+                          <span className="od-schema-type">{inferType(c, preview.rows.map(r => r[ci]))}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="od-foot">
+          <span className="od-foot-note">
+            <svg className="ico"><use href="#i-shield" /></svg>
+            <span className="od-foot-note-txt">
+              <strong>CC-BY 4.0 · k-anonymity ≥ 5 · aggregated to woreda or coarser</strong>
+              <span>Data are freely reusable with attribution. Facility-level data require additional approval.</span>
+            </span>
+          </span>
+          <button className="od-foot-link" onClick={() => openModal('access')}>
+            Request facility-level access <svg className="ico"><use href="#i-arrow-right" /></svg>
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 

@@ -1,11 +1,13 @@
 /**
  * Widget · pub-articles — Articles "newsroom" (page "articles").
  *
- * Design (2026-07-13 reimagining, ref 01_57_35): a featured LEAD hero (a small
- * carousel over the latest bulletins) → a filter row (search · category · topic
- * · date range · sort) → a three-column card GRID → numbered pagination. Real
- * data via useArticles (CMS); reads setPage/setArticle from the host. NHDW navy
- * palette; borderless soft cards, restrained semantic tints on category tags.
+ * Design (2026-07-13 elegance pass): a full-width dark HERO BAND (a slide, in the
+ * site's hero language — NOT a bordered card) that cycles the latest featured
+ * bulletins with prev/next + dots → a single unified filter bar (search ·
+ * category · topic · date range · sort) → a three-column card GRID → numbered
+ * pagination. Everything shares one flush left edge. Real data via useArticles
+ * (CMS); reads setPage/setArticle from the host. Restrained slate/ink neutrals +
+ * one deep-teal accent; borderless soft cards, muted category tints.
  */
 import { useMemo, useState } from 'react';
 import { ARTICLE_CATEGORIES, type Article } from '../../data/articles';
@@ -32,8 +34,9 @@ function excerpt(html: string, max = 150): string {
   return text.slice(0, max).replace(/\s+\S*$/, '') + '…';
 }
 
-/** Restrained semantic tint per category tag — navy by default; a warm tone for
- *  advisories/outbreaks, a teal for surveillance/PHEM. Class only; colours live in CSS. */
+/** Restrained category tint (class only; colours live in CSS). Kept to at most
+ *  three tones — accent teal for surveillance/PHEM, a muted amber for
+ *  advisories/outbreaks, slate for everything else — so the grid stays calm. */
 function catTone(category: string): string {
   const k = category.toLowerCase();
   if (/outbreak|alert|advis|warn/.test(k)) return 'warn';
@@ -47,43 +50,6 @@ function ageDays(iso: string): number {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return Number.POSITIVE_INFINITY;
   return (Date.now() - t) / 86_400_000;
-}
-
-/** Faint decorative illustration for the hero — an abstract administrative
- *  region-map (adjacent cells with one highlighted woreda), a small chart card
- *  and a health-cross tile. Pure navy/slate tints, no external asset. */
-function HeroArt() {
-  return (
-    <svg className="nw-hero-art" viewBox="0 0 340 250" aria-hidden="true" fill="none">
-      {/* region map — adjacent administrative cells sharing borders */}
-      <g stroke="var(--navy-500)" strokeWidth="1.3" strokeLinejoin="round" opacity="0.42">
-        <path d="M168 30 218 46 226 82 190 100 160 86Z" fill="var(--navy-50)" />
-        <path d="M218 46 268 74 270 112 226 82Z" fill="var(--navy-50)" />
-        <path d="M226 82 270 112 256 158 212 150 190 100Z" fill="rgba(100,116,139,0.14)" />
-        <path d="M160 86 190 100 212 150 182 184 146 168Z" fill="var(--navy-50)" />
-        <path d="M146 168 182 184 172 222 128 216 120 180Z" fill="var(--navy-50)" />
-        <path d="M120 108 160 86 146 168 120 180 96 138Z" fill="var(--navy-50)" />
-        <path d="M120 108 168 30 160 86Z" fill="var(--navy-50)" />
-      </g>
-      {/* highlighted woreda marker */}
-      <circle cx="236" cy="118" r="14" fill="var(--navy-500)" opacity="0.15" />
-      <circle cx="236" cy="118" r="6.5" fill="var(--navy-700)" opacity="0.9" />
-      {/* small analytics card, floating over the map */}
-      <g>
-        <rect x="30" y="98" width="94" height="70" rx="12" fill="#fff" stroke="var(--border-2)" strokeWidth="1.1" />
-        <rect x="44" y="108" width="46" height="6" rx="3" fill="var(--navy-500)" opacity="0.3" />
-        <rect x="44" y="142" width="11" height="14" rx="2.5" fill="var(--navy-500)" opacity="0.5" />
-        <rect x="61" y="132" width="11" height="24" rx="2.5" fill="var(--navy-500)" opacity="0.66" />
-        <rect x="78" y="120" width="11" height="36" rx="2.5" fill="var(--navy-700)" opacity="0.85" />
-        <rect x="95" y="136" width="11" height="20" rx="2.5" fill="var(--navy-500)" opacity="0.52" />
-      </g>
-      {/* health-cross tile, floating */}
-      <g transform="translate(236 170)">
-        <rect x="0" y="0" width="52" height="52" rx="14" fill="#fff" stroke="var(--border-2)" strokeWidth="1.1" />
-        <path d="M21 12h10v9h9v10h-9v9H21v-9h-9V21h9z" fill="var(--navy-600)" opacity="0.9" />
-      </g>
-    </svg>
-  );
 }
 
 function Articles({ host }: { host: PublicHost }) {
@@ -150,15 +116,11 @@ function Articles({ host }: { host: PublicHost }) {
   }, [totalPages, page]);
 
   return (
-    <section className="page-section nw-page">
+    <section className="nw-page">
       <div className="nw">
-        {/* Featured lead hero */}
+        {/* Featured lead — a dark HERO BAND (slide) */}
         {feat && (
           <div className="nw-hero-band">
-            {featured.length > 1 && (
-              <button className="nw-hero-nav nw-hero-nav--prev" aria-label="Previous"
-                      onClick={() => setFeatIdx(i => (i - 1 + featured.length) % featured.length)}>‹</button>
-            )}
             <article className="nw-hero">
               <div className="nw-hero-body">
                 <p className="nw-hero-eyebrow">Latest News</p>
@@ -172,49 +134,52 @@ function Articles({ host }: { host: PublicHost }) {
                   Read article <svg className="ico"><use href="#i-arrow-right" /></svg>
                 </button>
               </div>
-              <div className="nw-hero-visual"><HeroArt /></div>
+              {featured.length > 1 && (
+                <div className="nw-hero-foot">
+                  <div className="nw-hero-dots">
+                    {featured.map((_, i) => (
+                      <button key={i} className={i === featIdx % featured.length ? 'is-on' : ''}
+                              aria-label={`Featured ${i + 1}`} onClick={() => setFeatIdx(i)} />
+                    ))}
+                  </div>
+                  <div className="nw-hero-nav-group">
+                    <button className="nw-hero-nav" aria-label="Previous featured"
+                            onClick={() => setFeatIdx(i => (i - 1 + featured.length) % featured.length)}>‹</button>
+                    <button className="nw-hero-nav" aria-label="Next featured"
+                            onClick={() => setFeatIdx(i => (i + 1) % featured.length)}>›</button>
+                  </div>
+                </div>
+              )}
             </article>
-            {featured.length > 1 && (
-              <button className="nw-hero-nav nw-hero-nav--next" aria-label="Next"
-                      onClick={() => setFeatIdx(i => (i + 1) % featured.length)}>›</button>
-            )}
-            {featured.length > 1 && (
-              <div className="nw-hero-dots">
-                {featured.map((_, i) => (
-                  <button key={i} className={i === featIdx % featured.length ? 'is-on' : ''}
-                          aria-label={`Featured ${i + 1}`} onClick={() => setFeatIdx(i)} />
-                ))}
-              </div>
-            )}
           </div>
         )}
 
-        {/* Filter row */}
-        <div className="od-bar nw-bar">
+        {/* Unified filter bar */}
+        <div className="od-toolbar nw-toolbar">
           <span className="od-search">
             <svg className="ico"><use href="#i-search" /></svg>
             <input type="text" placeholder="Search articles by title or keywords…" aria-label="Search articles"
                    value={query} onChange={(e) => { setQuery(e.target.value); onAnyFilter(); }} />
           </span>
-          <div className="od-controls">
+          <div className="od-tools">
             <span className="od-field">
               <svg className="ico"><use href="#i-flag" /></svg>
               <select aria-label="Category" value={category} onChange={(e) => { setCategory(e.target.value); onAnyFilter(); }}>
-                <option value="all">Category</option>
+                <option value="all">All categories</option>
                 {ARTICLE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </span>
             <span className="od-field">
               <svg className="ico"><use href="#i-filter" /></svg>
               <select aria-label="Topic" value={topic} onChange={(e) => { setTopic(e.target.value); onAnyFilter(); }}>
-                <option value="all">Topic</option>
+                <option value="all">All topics</option>
                 {topics.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </span>
             <span className="od-field">
               <svg className="ico"><use href="#i-calendar" /></svg>
               <select aria-label="Date range" value={range} onChange={(e) => { setRange(e.target.value as Range); onAnyFilter(); }}>
-                <option value="all">Date range</option>
+                <option value="all">Any date</option>
                 <option value="30">Last 30 days</option>
                 <option value="90">Last 90 days</option>
                 <option value="year">This year</option>
@@ -239,8 +204,8 @@ function Articles({ host }: { host: PublicHost }) {
           </div>
         ) : (
           <div className="nw-grid">
-            {paged.map((a, i) => (
-              <article key={a.id} className={`nw-card${page === 0 && i === 0 ? ' is-lead' : ''}`}>
+            {paged.map((a) => (
+              <article key={a.id} className="nw-card">
                 <button className="nw-card-btn" onClick={() => open(a)}>
                   <span className="nw-card-top">
                     <span className={`nw-tag nw-tag--${catTone(a.category)}`}>{a.category}</span>
