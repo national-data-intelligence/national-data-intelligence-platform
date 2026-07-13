@@ -78,7 +78,7 @@ export function gaugeChart(el: HTMLElement, value: number): void {
       detail: {
         valueAnimation: true, offsetCenter: [0, '-2%'],
         fontSize: 26, fontWeight: 700, color: AXIS.label,
-        fontFamily: 'Inter, system-ui, sans-serif', formatter: '{value}%',
+        fontFamily: 'Nunito Sans, system-ui, sans-serif', formatter: '{value}%',
       },
       data: [{ value }],
     }],

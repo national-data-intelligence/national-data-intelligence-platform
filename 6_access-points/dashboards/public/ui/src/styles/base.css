@@ -100,7 +100,7 @@
   --shadow-hover:0 0 0 1px rgba(20,38,84,.06), 0 6px 14px rgba(20,38,84,.14), 0 26px 48px -10px rgba(20,38,84,.26);
 
   --font-serif:'Cormorant Garamond','Georgia',serif;
-  --font-sans:'Inter','system-ui',-apple-system,sans-serif;
+  --font-sans:'Nunito Sans', system-ui, sans-serif;
   --font-mono:'JetBrains Mono','Menlo',monospace;
 }
 

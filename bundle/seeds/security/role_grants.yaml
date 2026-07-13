@@ -262,7 +262,7 @@
     - ws-project-detail
     - ws-project-files
     - ws-project-artifacts
-    - ws-help-tools
+    - ws-help-guides
     - ws-help-reference
     - ws-settings-profile
 - role: R-CONS-SCI
@@ -296,7 +296,7 @@
     - ws-project-detail
     - ws-project-files
     - ws-project-artifacts
-    - ws-help-tools
+    - ws-help-guides
     - ws-help-reference
     - ws-settings-profile
 - role: R-CONS-RES
@@ -330,7 +330,7 @@
     - ws-project-detail
     - ws-project-files
     - ws-project-artifacts
-    - ws-help-tools
+    - ws-help-guides
     - ws-help-reference
     - ws-settings-profile
 - role: R-CONS-PRT
@@ -395,7 +395,7 @@
     - ws-models-table
     - ws-model-monitoring
     - ws-model-results
-    - ws-help-tools
+    - ws-help-guides
     - ws-help-reference
     - ws-settings-profile
 - role: R-OPS-ENG
@@ -411,7 +411,6 @@
     - pub-supply
     admin:
     - adm-alerts-routing
-    - adm-audit-events
     - adm-documentation
     - adm-dq
     - adm-models-datasets
@@ -433,7 +432,6 @@
     - pub-supply
     admin:
     - adm-alerts-routing
-    - adm-audit-events
     - adm-dashboard-control
     - adm-documentation
     - adm-dq
@@ -473,7 +471,7 @@
     - ws-project-detail
     - ws-project-files
     - ws-project-artifacts
-    - ws-help-tools
+    - ws-help-guides
     - ws-help-reference
     - ws-settings-profile
 - role: R-OPS-SEC
@@ -494,7 +492,6 @@
     # static nav item showed but the widget wasn't granted (I-9, 2026-07-11).
     - adm-topology
     - adm-alerts-routing
-    - adm-audit-events
     - adm-roles-permissions
     - adm-sso-cards
     - adm-users-access

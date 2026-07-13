@@ -83,11 +83,12 @@
   --shadow-3:0 24px 50px -16px rgba(15,23,42,.22), 0 8px 18px -6px rgba(15,23,42,.08);
   --shadow-hover:0 18px 36px -12px rgba(15,23,42,.18), 0 6px 14px -4px rgba(15,23,42,.06);
 
-  /* ── Typography: all-Inter (matches the reference goldens; serif retired —
-       --font-serif kept as an Inter alias so heading rules need no per-rule
-       edits). Self-hosted via @fontsource (main.tsx imports 400–800). ── */
-  --font-serif:'Inter','system-ui',-apple-system,sans-serif;
-  --font-sans:'Inter','system-ui',-apple-system,sans-serif;
+  /* ── Typography: Cormorant-Garamond headings over Nunito-Sans body — the
+       shared workshop face, applied across every staff/public dashboard (global
+       font decree). --font-serif drives every heading rule; --font-sans the
+       body. Self-hosted via @fontsource (main.tsx imports the weights). ── */
+  --font-serif:'Cormorant Garamond','Georgia',serif;
+  --font-sans:'Nunito Sans', system-ui, sans-serif;
   --font-mono:'JetBrains Mono','Menlo',monospace;
 
   /* ── Type ramp — single canonical scale for headings/labels. Values map
@@ -135,7 +136,7 @@
   /* neutrals */
   --paper:#FFFFFF; --paper-2:#F2F5F9; --bg:#F7F8FA; --bg-2:#F2F5F9; --sand:#F2F5F9;
   --border:#E5E9F0; --border-2:#D6DDE8;
-  --ink:#0F172A; --ink-2:#334155; --ink-3:#64748B; --ink-4:#94A3B8;
+  --ink:#111827; --ink-2:#334155; --ink-3:#64748B; --ink-4:#94A3B8;
   /* charcoal nav + slate emphasis (names kept for cascade compatibility) */
   --navy-900:#050b20; --navy-800:#0a1734; --navy-700:#334155;
   --navy-600:#475569; --navy-500:#64748B; --navy-50:#EEF2F7;
