@@ -8,6 +8,9 @@
 .env
 .env.*
 !.env.example
+# Fayda replica's isolated SMTP config: the real .env stays ignored (.env rule
+# above), but its placeholder template is committed as living documentation.
+!0_external/fayda/.env.template
 *.pem
 *.key
 *.p12

@@ -3,15 +3,19 @@
 Lives OUTSIDE k8s (0_external/, like the source replicas): it models a
 third-party national IdP the system integrates with, purely to assist the demo.
 
-Implements just enough of OAuth 2.0 + OpenID Connect Core to back the public
-dashboard's "Verify with Fayda" popup — the ONLY consumer. A non-registered
-visitor verifies their national ID before submitting an access request; the
-popup pre-fills the form and sets verified_via='fayda'. It is NOT a login
-provider (there is no Keycloak Fayda realm / "sign in with Fayda"). The claim
-shape matches what real Fayda issues; the auth flow shows a simple HTML form
-with the synthetic citizens loaded from seed/citizens.yaml.
+The primary consumer is the public dashboard's identity-verification step on the
+access-request form. Rather than an OIDC popup, a non-registered visitor now
+proves they hold a real Fayda identity via an EMAIL-OTP round-trip that Fayda
+runs entirely itself (exactly as a real external IdP sends its own codes):
+    POST /verify/challenge {fan}       — check the FAN exists, email a 6-digit
+                                          OTP to its registered address (Fayda's
+                                          OWN isolated SMTP), return masked email
+    POST /verify/confirm  {fan, code}  — validate the code, return the identity
+The OTP mailer is Fayda's own (0_external/fayda/.env → docker-compose), fully
+isolated from the NHDW gateway's mailer + smtp-secrets.
 
-Endpoints implemented (Discovery exposes them):
+The OAuth 2.0 / OpenID Connect endpoints remain implemented (a real IdP still
+exposes them); they are no longer wired into the dashboard flow:
     GET  /.well-known/openid-configuration
     GET  /jwks
     GET  /authorize    — login form + redirect with `code`
@@ -24,11 +28,15 @@ the public dashboard's FAYDA_* env vars at the production Fayda endpoints.
 """
 from __future__ import annotations
 
+import asyncio
 import html as _html
 import logging
 import os
+import random
 import secrets
+import smtplib
 import time
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -39,6 +47,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from jose import jwt
+from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 log = logging.getLogger("fayda-replica")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
@@ -99,6 +109,81 @@ CITIZENS = _load_citizens()
 _AUTH_CODES: dict[str, dict[str, Any]] = {}
 _ACCESS_TOKENS: dict[str, dict[str, Any]] = {}
 
+
+# ─── Email-OTP verification (Fayda owns this end-to-end) ───────────────────
+# The public NHDW access-request form asks a visitor to prove they hold a real
+# Fayda identity BEFORE submitting. Fayda — a third-party external IdP in
+# production — runs the WHOLE round-trip itself, exactly as a real IdP would send
+# its OWN codes: it checks the FAN against its registry, generates a numeric OTP,
+# emails it to the identity's registered address via ITS OWN SMTP (isolated from
+# the NHDW gateway's mailer), and confirms the code. Nothing here touches NHDW's
+# smtp-secrets; Fayda's SMTP creds are copied into its own isolated config
+# (0_external/fayda/.env → docker-compose → these env vars).
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or "587")
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "Fayda Verification <noreply@fayda.local>")
+SMTP_TLS = os.environ.get("SMTP_TLS", "true").lower() in ("1", "true", "yes", "on")
+
+# OTP store: FAN → challenge state. In-memory + ephemeral by design — an OTP that
+# survived a restart would be a security smell, not a feature.
+_OTP: dict[str, dict[str, Any]] = {}
+_OTP_TTL_S = 600            # a code is valid for 10 minutes
+_OTP_RESEND_COOLDOWN_S = 30  # min gap between two challenges for one FAN
+_OTP_MAX_ATTEMPTS = 5        # wrong-code tries before the challenge is burned
+
+
+class ChallengeReq(BaseModel):
+    fan: str
+
+
+class ConfirmReq(BaseModel):
+    fan: str
+    code: str
+
+
+def _mask_email(addr: str) -> str:
+    """Hide the local part: `biniyambelayneh376+aster.bekele@gmail.com`
+    → `b•••@gmail.com`. Never echo the full registered address back."""
+    try:
+        local, domain = addr.split("@", 1)
+    except ValueError:
+        return "•••"
+    head = local[0] if local else "•"
+    return f"{head}•••@{domain}"
+
+
+def _send_email_blocking(to_addr: str, subject: str, body: str) -> None:
+    msg = EmailMessage()
+    msg["From"] = SMTP_FROM
+    msg["To"] = to_addr
+    msg["Subject"] = subject
+    msg.set_content(body)
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as s:
+        if SMTP_TLS:
+            s.starttls()
+        if SMTP_USER:
+            s.login(SMTP_USER, SMTP_PASS)
+        s.send_message(msg)
+
+
+async def _send_email(to_addr: str, subject: str, body: str) -> bool:
+    """Send one text email via Fayda's OWN SMTP. Returns True on success, False
+    on any failure (logged, never raised) or when SMTP/recipient is unconfigured.
+    Runs the blocking smtplib call in a thread so the event loop never stalls."""
+    if not SMTP_HOST or not to_addr:
+        log.warning("[fayda] SMTP not configured (SMTP_HOST empty) — OTP email skipped")
+        return False
+    loop = asyncio.get_event_loop()
+    try:
+        await loop.run_in_executor(None, _send_email_blocking, to_addr, subject, body)
+        return True
+    except Exception as e:  # noqa: BLE001 — best-effort; the code is still logged
+        log.warning("[fayda] OTP email to %s failed: %s", _mask_email(to_addr), e)
+        return False
+
+
 app = FastAPI(title="Fayda Replica OIDC", description="Demo replica of Ethiopia's Fayda identity provider (external to NHDW).")
 
 
@@ -119,7 +204,7 @@ async def discovery() -> JSONResponse:
         "claims_supported": [
             "sub", "iss", "aud", "exp", "iat",
             "fayda_id", "name", "given_name", "family_name",
-            "gender", "birthdate", "phone_number",
+            "gender", "birthdate", "phone_number", "email",
         ],
     })
 
@@ -255,6 +340,7 @@ async def token(request: Request,
         "gender": citizen.get("gender", ""),
         "birthdate": citizen.get("birthdate", ""),
         "phone_number": citizen.get("phone_number", ""),
+        "email": citizen.get("email", ""),
     }
     id_token = jwt.encode(claims, _private_pem.decode(), algorithm="RS256",
                           headers={"kid": KID})
@@ -290,6 +376,110 @@ async def userinfo(request: Request) -> JSONResponse:
         "gender": c.get("gender", ""),
         "birthdate": c.get("birthdate", ""),
         "phone_number": c.get("phone_number", ""),
+        "email": c.get("email", ""),
+    })
+
+
+# ─── Email-OTP verification endpoints (NOT part of OIDC) ───────────────────
+#
+# The NHDW public dashboard proxies the browser's two calls straight here. Fayda
+# owns the entire flow: registry check → OTP mint → email (Fayda's own SMTP) →
+# code confirmation. A real external IdP would expose an equivalent verification
+# API and send its own codes; the OIDC endpoints above are untouched.
+
+@app.post("/verify/challenge")
+async def verify_challenge(req: ChallengeReq) -> JSONResponse:
+    """Step 1: confirm the FAN exists, then email a fresh 6-digit OTP to the
+    identity's registered address via Fayda's own SMTP."""
+    fan = (req.fan or "").strip()
+    if not (fan.isdigit() and 12 <= len(fan) <= 16):
+        return JSONResponse({"ok": False, "reason": "invalid_fan"}, status_code=400)
+
+    now = time.time()
+    prior = _OTP.get(fan)
+    if prior and (now - prior.get("last_sent_at", 0)) < _OTP_RESEND_COOLDOWN_S:
+        return JSONResponse({"ok": False, "reason": "rate_limited"}, status_code=429)
+
+    citizen = CITIZENS.get(fan)
+    if not citizen:
+        return JSONResponse({"ok": False, "reason": "not_found"}, status_code=404)
+
+    email = (citizen.get("email") or "").strip()
+    if not email:
+        return JSONResponse(
+            {"ok": False, "reason": "no_email_on_record"}, status_code=422)
+
+    code = f"{random.randint(0, 999999):06d}"
+    _OTP[fan] = {
+        "code": code,
+        "email": email,
+        "name": citizen.get("name", ""),
+        "given_name": citizen.get("given_name", ""),
+        "family_name": citizen.get("family_name", ""),
+        "phone_number": citizen.get("phone_number", ""),
+        "fayda_id": citizen.get("fayda_id", fan),
+        "expires_at": now + _OTP_TTL_S,
+        "attempts": 0,
+        "last_sent_at": now,
+        "consumed": False,
+    }
+
+    # DEV-ONLY trace so the code is recoverable from the FAYDA container logs
+    # (`docker logs fayda-replica | grep OTP`) when email delivery is slow.
+    log.info("[fayda][DEV-ONLY] OTP for FAN %s = %s (emailed to %s)",
+             fan, code, email)
+
+    subject = "Your Fayda verification code"
+    body = (
+        f"Hello {citizen.get('given_name') or citizen.get('name') or ''},\n\n"
+        f"Your Fayda verification code for your NHDW access request is:\n\n"
+        f"    {code}\n\n"
+        f"Enter this code on the access-request form to confirm your identity. "
+        f"It expires in 10 minutes. If you did not request this, you can ignore "
+        f"this email.\n\n"
+        f"— Fayda (Ethiopian National ID)"
+    )
+    # Send in the BACKGROUND: a third-party SMTP round-trip must never block (or
+    # time out) the challenge response — the OTP is already stored + logged, and
+    # email is best-effort. The task runs after the response is flushed.
+    return JSONResponse(
+        {
+            "ok": True,
+            "masked_email": _mask_email(email),
+            "emailed": bool(SMTP_HOST and email),  # dispatched (SMTP configured)
+        },
+        background=BackgroundTask(_send_email, email, subject, body),
+    )
+
+
+@app.post("/verify/confirm")
+async def verify_confirm(req: ConfirmReq) -> JSONResponse:
+    """Step 2: check the submitted code against the stored challenge. On success
+    return the verified identity for the access-request form to pre-fill."""
+    fan = (req.fan or "").strip()
+    code = (req.code or "").strip()
+
+    entry = _OTP.get(fan)
+    now = time.time()
+    if not entry or entry.get("consumed") or entry.get("expires_at", 0) < now:
+        return JSONResponse({"ok": False, "reason": "expired"}, status_code=400)
+
+    if entry["attempts"] >= _OTP_MAX_ATTEMPTS:
+        return JSONResponse(
+            {"ok": False, "reason": "too_many_attempts"}, status_code=429)
+
+    if code != entry["code"]:
+        entry["attempts"] += 1
+        return JSONResponse({"ok": False, "reason": "bad_code"}, status_code=400)
+
+    entry["consumed"] = True   # single-use
+    return JSONResponse({
+        "ok": True,
+        "fayda_id": entry["fayda_id"],
+        "name": entry["name"],
+        "given_name": entry["given_name"],
+        "family_name": entry["family_name"],
+        "phone_number": entry["phone_number"],
     })
 
 

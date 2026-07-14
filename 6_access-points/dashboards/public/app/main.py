@@ -13,16 +13,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-import secrets
 import time
 from pathlib import Path
-from typing import Any
 
 import httpx
-from urllib.parse import urlencode
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from itsdangerous import BadSignature, TimestampSigner
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.staticfiles import StaticFiles
 
 from app import marts as marts_db
@@ -44,22 +40,16 @@ STATIC_DIR = Path("/app/static")
 LOKI_URL   = os.environ.get("LOKI_URL", "http://loki:3100")
 
 # ─── Fayda verification ───────────────────────────────────────────────
-# Fayda is used for ONE thing: verifying a non-registered visitor's national ID
-# on the access-request form (the "Verify with Fayda" popup below). It is NOT a
-# login — there is no Keycloak "sign in with Fayda". We talk to the Fayda Replica
-# directly to show the verified-Fayda badge; the production path just points
-# these FAYDA_* URLs at the real Fayda endpoints.
-FAYDA_PUBLIC_BASE = os.environ.get("FAYDA_PUBLIC_BASE", "http://localhost:8096")
-FAYDA_INTERNAL_BASE = os.environ.get("FAYDA_INTERNAL_BASE", "http://host.k3d.internal:8096")
-FAYDA_CLIENT_ID = os.environ.get("FAYDA_CLIENT_ID", "nhdw-citizen-portal")
-FAYDA_CLIENT_SECRET = os.environ.get("FAYDA_CLIENT_SECRET", "fake-fayda-secret")
-FAYDA_REDIRECT_URI = os.environ.get(
-    "FAYDA_REDIRECT_URI", "https://public.127.0.0.1.nip.io/auth/fayda-callback")
-PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://public.127.0.0.1.nip.io")
-
-# Cheap state-token signer for the popup roundtrip — no user session here.
-_STATE_SECRET = os.environ.get("FAYDA_STATE_SECRET", "fayda-state-dev-only")
-_state_signer = TimestampSigner(_STATE_SECRET)
+# Fayda verifies a non-registered visitor's identity on the access-request form
+# via an email-OTP round-trip. Fayda (an EXTERNAL third-party IdP replica,
+# 0_external/fayda on host port 8096) owns the WHOLE flow itself — registry check,
+# OTP mint, email via its OWN isolated SMTP, and code confirmation. This server
+# only same-origin-proxies the two browser calls straight to the Fayda replica's
+# /verify/* endpoints (see the proxy routes below). It is NOT a login — there is
+# no Keycloak "sign in with Fayda". Reached over the k3d host route, like the
+# source replicas + the LLM; production points FAYDA_INTERNAL_BASE at real Fayda.
+FAYDA_INTERNAL_BASE = os.environ.get(
+    "FAYDA_INTERNAL_BASE", "http://host.k3d.internal:8096").rstrip("/")
 
 app = FastAPI(title="NHDW — Public Dashboard", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=False), name="static")
@@ -83,138 +73,49 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-# ─── Fayda federation popup flow ─────────────────────────────────────────
+# ─── Fayda email-OTP verification (same-origin proxy → Fayda replica) ────
 #
-# UX (citizen verifies their Ethiopian National ID before submitting an
-# access request):
-#   1. SPA opens window.open('/auth/fayda-start', 'fayda', 'popup')
-#   2. /auth/fayda-start signs a state token, builds the Fayda Replica
-#      authorize URL, 302s to it.
-#   3. Citizen picks themselves on the Fayda Replica picker page, Fake
-#      Fayda 302s back to /auth/fayda-callback?code=…&state=…
-#   4. /auth/fayda-callback verifies state, exchanges the code with Fake
-#      Fayda's /token, decodes claims, and returns a tiny HTML page that
-#      window.opener.postMessage()'s {fayda_id, name, given_name,
-#      family_name, phone, verified_via:'fayda'} back, then closes.
-#   5. AccessRequestModal listens for that message and pre-fills the form.
-#
-# This is a VERIFICATION step, not a login: no session is created, no Keycloak
-# realm is involved, and non-Fayda requests still flow through. The production
-# path is the same SPA flow with FAYDA_PUBLIC_BASE pointing at the real Fayda
-# authorize endpoint instead of the Replica.
+# The access-request modal verifies a visitor's Fayda identity with a two-step
+# email OTP, entirely owned by the external Fayda replica:
+#   1. POST /api/proxy/fayda/challenge {fan}  → Fayda confirms the FAN exists,
+#      mails a 6-digit code to the registered email (its OWN SMTP), and returns
+#      {ok, masked_email}.
+#   2. POST /api/proxy/fayda/verify {fan, code} → Fayda checks the code and
+#      returns {ok, fayda_id, name, …} on success.
+# Both forward straight to the Fayda replica's /verify/* over the k3d host route.
+# This server-side hop keeps the browser same-origin (no CORS, no direct Fayda
+# exposure) and never involves the NHDW gateway.
 
-@app.get("/auth/fayda-config")
-async def fayda_config() -> dict:
-    """Public configuration the SPA needs to open the Fayda popup.
-    Returned as 200 always — the popup is opened against /auth/fayda-start
-    rather than the IdP directly, so the SPA never sees Fayda URLs."""
-    return {
-        "verify_url": f"{PUBLIC_BASE}/auth/fayda-start",
-        "issuer":     FAYDA_PUBLIC_BASE,
-        "client_id":  FAYDA_CLIENT_ID,
-        "enabled":    True,
-    }
+@app.post("/api/proxy/fayda/challenge")
+async def proxy_fayda_challenge(request: Request) -> JSONResponse:
+    payload = await request.body()
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            r = await c.post(f"{FAYDA_INTERNAL_BASE}/verify/challenge",
+                             content=payload,
+                             headers={"Content-Type": "application/json"})
+    except httpx.RequestError as e:
+        return JSONResponse({"ok": False, "reason": "service_unavailable",
+                             "detail": f"fayda unreachable: {e}"}, status_code=502)
+    return JSONResponse(r.json() if r.headers.get("content-type", "")
+                        .startswith("application/json") else {"raw": r.text},
+                        status_code=r.status_code)
 
 
-@app.get("/auth/fayda-start")
-async def fayda_start() -> RedirectResponse:
-    """Build a signed state token + 302 to Fayda Replica's /authorize."""
-    nonce = secrets.token_urlsafe(16)
-    state = _state_signer.sign(
-        json.dumps({"n": nonce, "ts": int(time.time())}).encode()).decode()
-    params = {
-        "response_type": "code",
-        "client_id":     FAYDA_CLIENT_ID,
-        "redirect_uri":  FAYDA_REDIRECT_URI,
-        "scope":         "openid profile",
-        "state":         state,
-    }
-    url = f"{FAYDA_PUBLIC_BASE}/authorize?" + urlencode(params)
-    return RedirectResponse(url)
-
-
-@app.get("/auth/fayda-callback", response_class=HTMLResponse)
-async def fayda_callback(code: str = "", state: str = "") -> HTMLResponse:
-    """Exchange the code with Fayda Replica + postMessage claims to the opener."""
-    err: str | None = None
-    claims: dict[str, Any] = {}
-    if not code or not state:
-        err = "missing code or state"
-    else:
-        try:
-            _state_signer.unsign(state, max_age=600)
-        except BadSignature:
-            err = "invalid or expired state"
-    if not err:
-        try:
-            async with httpx.AsyncClient(timeout=10) as c:
-                token_resp = await c.post(
-                    # Server-to-server: use the internal address.
-                    f"{FAYDA_INTERNAL_BASE}/token",
-                    data={
-                        "grant_type":    "authorization_code",
-                        "code":          code,
-                        "redirect_uri":  FAYDA_REDIRECT_URI,
-                        "client_id":     FAYDA_CLIENT_ID,
-                        "client_secret": FAYDA_CLIENT_SECRET,
-                    },
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                )
-            if token_resp.status_code != 200:
-                err = f"token exchange failed: HTTP {token_resp.status_code}"
-                log.warning("fayda token exchange failed: %s", token_resp.text[:200])
-            else:
-                tokens = token_resp.json()
-                id_token = tokens.get("id_token", "")
-                # Lazy claim decode — the mock signs RS256 but we trust it
-                # implicitly in dev. Just base64-split.
-                try:
-                    payload = id_token.split(".")[1]
-                    payload += "=" * (-len(payload) % 4)
-                    import base64 as _b64
-                    claims = json.loads(_b64.urlsafe_b64decode(payload))
-                except Exception as e:                            # noqa: BLE001
-                    err = f"id_token decode failed: {e}"
-        except httpx.RequestError as e:
-            err = f"network error: {e}"
-
-    if err:
-        log.warning("fayda callback error: %s", err)
-        payload_js = json.dumps({"ok": False, "error": err})
-    else:
-        # Normalise the claims the SPA cares about. Drop signing-related
-        # fields; we don't want them leaked into the browser.
-        payload_js = json.dumps({
-            "ok":           True,
-            "verified_via": "fayda",
-            "fayda_id":     claims.get("fayda_id") or claims.get("sub"),
-            "name":         claims.get("name") or "",
-            "given_name":   claims.get("given_name") or "",
-            "family_name":  claims.get("family_name") or "",
-            "phone":        claims.get("phone_number") or "",
-            "gender":       claims.get("gender") or "",
-            "birthdate":    claims.get("birthdate") or "",
-        })
-
-    # Tiny bridge page — postMessage to the opener then close.
-    return HTMLResponse(f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Verifying with Fayda…</title>
-<style>body{{font-family:system-ui,sans-serif;text-align:center;padding:2rem;color:#1f2f54}}</style>
-</head><body>
-  <h3>Returning to NHDW…</h3>
-  <p style="color:#64748b">This window should close automatically.</p>
-  <script>
-    (function() {{
-      var msg = {payload_js};
-      try {{
-        if (window.opener) {{
-          window.opener.postMessage({{type:'nhdw:fayda-verify', payload:msg}}, '*');
-        }}
-      }} catch(e) {{ console.error('postMessage failed', e); }}
-      setTimeout(function(){{ window.close(); }}, 300);
-    }})();
-  </script>
-</body></html>""")
+@app.post("/api/proxy/fayda/verify")
+async def proxy_fayda_verify(request: Request) -> JSONResponse:
+    payload = await request.body()
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            r = await c.post(f"{FAYDA_INTERNAL_BASE}/verify/confirm",
+                             content=payload,
+                             headers={"Content-Type": "application/json"})
+    except httpx.RequestError as e:
+        return JSONResponse({"ok": False, "reason": "service_unavailable",
+                             "detail": f"fayda unreachable: {e}"}, status_code=502)
+    return JSONResponse(r.json() if r.headers.get("content-type", "")
+                        .startswith("application/json") else {"raw": r.text},
+                        status_code=r.status_code)
 
 
 @app.get("/api/dashboards")

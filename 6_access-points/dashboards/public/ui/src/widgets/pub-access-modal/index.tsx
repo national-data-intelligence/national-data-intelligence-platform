@@ -6,74 +6,62 @@
  * on a duplicate pending request, a 409). Reads closeModal + setPage from the
  * host — a public requester is NEVER linked to the admin console.
  *
- * Identity verification (§6.3) is modelled as explicit states:
- *   not-started → validating → verified            (Fayda: real popup verify)
- *                            → could-not-verify     (Fayda returned an error)
- *                            → service-unavailable  (Fayda popup unreachable)
- *   not-started → provided                          (National ID / Passport:
- *                                                     number recorded, pending
- *                                                     manual verification — we
- *                                                     never fake a verify here)
+ * Identity verification (§6.3) is a REAL email-OTP round-trip against Fayda:
+ *   1. The visitor enters their Fayda FAN and clicks "Send code". We POST
+ *      /api/proxy/fayda/challenge {fan}; the gateway confirms the FAN exists in
+ *      Fayda, emails a 6-digit code to the identity's registered address, and
+ *      returns the masked email.
+ *   2. The visitor enters the code and clicks "Verify". We POST
+ *      /api/proxy/fayda/verify {fan, code}; on success the gateway returns the
+ *      verified identity and we set verified_via='fayda' + fayda_id.
+ * The section is OPTIONAL (organisation accounts don't require it). A National
+ * ID / Passport path no longer exists — Fayda is the one real verifier.
+ *
+ * Explicit states:
+ *   not-started → sending → code-sent → verifying → verified
+ *                                     ↘ (bad_code / expired stay on code-sent)
  */
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
-
-type IdType = 'fayda' | 'national-id' | 'passport';
 
 /** Explicit verification lifecycle — one clear status is rendered per state. */
 type VerifyState =
-  | 'not-started'
-  | 'validating'          // Fayda popup open, awaiting the postMessage result
-  | 'verified'            // Fayda confirmed the citizen
-  | 'could-not-verify'    // Fayda returned ok:false (bad/expired/mismatched)
-  | 'service-unavailable' // the Fayda popup could not be opened / reached
-  | 'provided';           // National ID / Passport number entered + format-valid
+  | 'not-started'   // nothing sent yet
+  | 'sending'       // challenge in flight (emailing the code)
+  | 'code-sent'     // code emailed; awaiting the 6-digit entry
+  | 'verifying'     // verify in flight
+  | 'verified';     // Fayda confirmed the code
 
 type AccessForm = {
   name: string; email: string; phone: string; org: string; role: string;
   dashboards: string[]; purpose: string;
-  id_type: IdType;
-  identifier: string;                 // the entered FAN / national-id / passport number
+  fan: string;                        // the entered Fayda FAN
+  code: string;                       // the 6-digit OTP the visitor received
   verifyState: VerifyState;
+  maskedEmail: string;                // e.g. "b•••@gmail.com" — shown after send
   fayda_id: string;                   // set ONLY on a real Fayda verify
   verified_via: '' | 'fayda';         // 'fayda' ONLY when genuinely verified
 };
 
 const EMPTY: AccessForm = {
   name: '', email: '', phone: '', org: '', role: '', dashboards: [], purpose: '',
-  id_type: 'fayda', identifier: '', verifyState: 'not-started',
+  fan: '', code: '', verifyState: 'not-started', maskedEmail: '',
   fayda_id: '', verified_via: '',
 };
 
-type FieldErr = { name?: string; email?: string; purpose?: string; identifier?: string };
-
-/** Identity-type options — label, the field label, and an example placeholder. */
-const ID_TYPES: { v: IdType; label: string; field: string; placeholder: string }[] = [
-  { v: 'fayda',       label: 'Fayda (Ethiopian National ID)', field: 'Fayda number (FAN or FIN)', placeholder: 'e.g. 123456789012' },
-  { v: 'national-id', label: 'National ID card',              field: 'National ID number',        placeholder: 'ID card number' },
-  { v: 'passport',    label: 'Passport',                      field: 'Passport number',           placeholder: 'e.g. EP1234567' },
-];
+type FieldErr = { name?: string; email?: string; purpose?: string; fan?: string; code?: string };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const FAN_RE = /^\d{12,16}$/;   // Ethiopia's FIN is 12 digits, the FAN 16.
 
-/**
- * Basic client-side format rules per identity type (documented so reviewers know
- * what "format-valid" means — this is a shape check, not a verification):
- *   · Fayda:       12 to 16 digits, numeric (Ethiopia's FIN is 12, the FAN 16).
- *   · National ID: 6 to 20 letters/digits/hyphen.
- *   · Passport:    6 to 15 letters/digits.
- */
-function validateIdentifier(type: IdType, value: string): string | null {
+/** Format-check the FAN (shape only, not a verification). */
+function validateFan(value: string): string | null {
   const v = value.trim();
-  if (!v) return 'Enter your identifier number first.';
-  if (type === 'fayda')
-    return /^\d{12,16}$/.test(v) ? null : 'Enter a valid Fayda number (12 to 16 digits).';
-  if (type === 'national-id')
-    return /^[A-Za-z0-9-]{6,20}$/.test(v) ? null : 'Enter a valid National ID number (6 to 20 letters or digits).';
-  return /^[A-Za-z0-9]{6,15}$/.test(v) ? null : 'Enter a valid passport number (6 to 15 letters or digits).';
+  if (!v) return 'Enter your Fayda number first.';
+  return FAN_RE.test(v) ? null : 'Enter a valid Fayda number (12 to 16 digits).';
 }
 
-/** Turn a gateway error response into a friendly line — never raw HTTP/validation text. */
+/** Turn a gateway access-request error into a friendly line. */
 function friendlyError(status: number, body: any): string {
   const detail = body?.detail;
   if (status === 409) {
@@ -82,8 +70,6 @@ function friendlyError(status: number, body: any): string {
     return 'You already have a pending request for this access. We will review it shortly.';
   }
   if (status === 422) {
-    // FastAPI 422 detail is an ARRAY of field errors — map to a concise field
-    // list and never surface the library's raw message strings.
     const fields = new Set<string>();
     if (Array.isArray(detail)) {
       for (const d of detail) {
@@ -104,26 +90,18 @@ function friendlyError(status: number, body: any): string {
   return 'Something went wrong submitting your request. Please try again in a moment.';
 }
 
-/** One human line + tone for the current verification state. */
-function statusFor(state: VerifyState, idType: IdType, faydaId: string):
-    { tone: 'good' | 'watch' | 'alert' | 'muted'; text: string } | null {
-  switch (state) {
-    case 'validating':
-      return { tone: 'watch', text: 'Waiting for Fayda to confirm your identity in the popup window.' };
-    case 'verified':
-      return { tone: 'good', text: faydaId
-        ? `Identity verified with Fayda (${faydaId}). Reviewers will see a verified badge.`
-        : 'Identity verified with Fayda. Reviewers will see a verified badge.' };
-    case 'could-not-verify':
-      return { tone: 'alert', text: 'We could not verify this identity with Fayda. You can retry, or continue without verification.' };
-    case 'service-unavailable':
-      return { tone: 'alert', text: 'The Fayda verification service could not be reached. You can retry, or continue without verification.' };
-    case 'provided':
-      return { tone: 'watch', text: idType === 'passport'
-        ? 'Passport number recorded. A reviewer will verify it manually before approval.'
-        : 'National ID number recorded. A reviewer will verify it manually before approval.' };
-    default:
-      return null;
+/** Map a Fayda challenge/verify `reason` to a friendly line. */
+function faydaReason(reason: string | undefined): string {
+  switch (reason) {
+    case 'not_found':          return 'No Fayda record matches that number. Check the digits, or continue without verification.';
+    case 'invalid_fan':        return 'Enter a valid Fayda number (12 to 16 digits).';
+    case 'rate_limited':       return 'Please wait a moment before requesting another code.';
+    case 'no_email_on_record': return 'This Fayda identity has no email on record, so we cannot send a code.';
+    case 'bad_code':           return 'That code is not correct. Check the digits and try again.';
+    case 'expired':            return 'That code has expired — request a new one.';
+    case 'too_many_attempts':  return 'Too many incorrect attempts. Request a new code to try again.';
+    case 'service_unavailable': return 'The Fayda verification service could not be reached. Please try again in a moment.';
+    default:                   return 'We could not complete verification. Please try again in a moment.';
   }
 }
 
@@ -135,81 +113,93 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>('');
+  // Inline status under the identity card: a friendly line + tone.
+  const [verifyMsg, setVerifyMsg] =
+    useState<{ tone: 'good' | 'watch' | 'alert'; text: string } | null>(null);
 
   const update = (patch: Partial<AccessForm>) => setForm(f => ({ ...f, ...patch }));
 
-  // Listen for the Fayda popup's postMessage and resolve the verification state.
-  useEffect(() => {
-    const handler = (evt: MessageEvent) => {
-      const m = (evt.data ?? {}) as { type?: string; payload?: any };
-      if (m.type !== 'nhdw:fayda-verify') return;
-      const p = m.payload || {};
-      setForm(f => {
-        if (f.id_type !== 'fayda') return f;             // stray message; ignore
-        if (!p.ok) return { ...f, verifyState: 'could-not-verify', verified_via: '', fayda_id: '' };
-        return {
-          ...f,
-          verifyState: 'verified',
-          verified_via: 'fayda',
-          fayda_id: p.fayda_id || f.identifier.trim(),
-          name:  f.name  || p.name || `${p.given_name || ''} ${p.family_name || ''}`.trim(),
-          phone: f.phone || p.phone || '',
-        };
-      });
-    };
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, []);
-
-  const currentType = ID_TYPES.find(t => t.v === form.id_type)!;
-
-  // Changing the identity TYPE clears the entered value + any prior verification.
-  const changeType = (v: IdType) => {
-    setFieldErr(fe => ({ ...fe, identifier: undefined }));
-    update({ id_type: v, identifier: '', verifyState: 'not-started', fayda_id: '', verified_via: '' });
-  };
-
-  // Editing the identifier invalidates any earlier verify/provide result.
-  const changeIdentifier = (value: string) => {
-    setFieldErr(fe => ({ ...fe, identifier: undefined }));
+  // Editing the FAN invalidates any code already sent + any prior verification.
+  const changeFan = (value: string) => {
+    setFieldErr(fe => ({ ...fe, fan: undefined }));
+    setVerifyMsg(null);
     setForm(f => ({
-      ...f, identifier: value,
+      ...f, fan: value, code: '', maskedEmail: '',
       verifyState: 'not-started', fayda_id: '', verified_via: '',
     }));
   };
 
-  // Fayda path — validate the entered FAN, then drive the existing popup with it.
-  const verifyFayda = () => {
-    const e = validateIdentifier('fayda', form.identifier);
-    if (e) { setFieldErr(fe => ({ ...fe, identifier: e })); return; }
-    setFieldErr(fe => ({ ...fe, identifier: undefined }));
+  // Step 1 — confirm the FAN exists in Fayda + email a code to its address.
+  const sendCode = async () => {
+    const e = validateFan(form.fan);
+    if (e) { setFieldErr(fe => ({ ...fe, fan: e })); return; }
+    setFieldErr(fe => ({ ...fe, fan: undefined }));
+    setVerifyMsg(null);
     setErr('');
-    update({ verifyState: 'validating' });
-    const fan = form.identifier.trim();
-    const w = window.open(`/auth/fayda-start?fan=${encodeURIComponent(fan)}`, 'fayda',
-      'popup,width=520,height=640,scrollbars=yes');
-    if (!w) {
-      // Popup blocked / could not open → the verification service is unreachable.
-      update({ verifyState: 'service-unavailable' });
-      return;
-    }
-    // Cancel path: the user closed the popup without a result → revert to
-    // not-started rather than leaving it stuck on "validating".
-    const watch = window.setInterval(() => {
-      if (w.closed) {
-        window.clearInterval(watch);
-        setForm(f => (f.verifyState === 'validating' ? { ...f, verifyState: 'not-started' } : f));
+    update({ verifyState: 'sending' });
+    const fan = form.fan.trim();
+    try {
+      const r = await fetch('/api/proxy/fayda/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fan }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (r.ok && body.ok) {
+        setForm(f => ({ ...f, verifyState: 'code-sent', code: '',
+                        maskedEmail: body.masked_email || '' }));
+        setVerifyMsg({ tone: 'good',
+          text: `We sent a 6-digit code to ${body.masked_email || 'your registered email'}. Enter it below to finish.` });
+      } else {
+        setForm(f => ({ ...f, verifyState: 'not-started' }));
+        setVerifyMsg({ tone: 'alert', text: faydaReason(body.reason) });
       }
-    }, 500);
+    } catch {
+      setForm(f => ({ ...f, verifyState: 'not-started' }));
+      setVerifyMsg({ tone: 'alert',
+        text: 'We could not reach the verification service. Please try again in a moment.' });
+    }
   };
 
-  // National ID / Passport path — no backend verify exists, so we only record
-  // the number as "provided, pending manual verification". Never faked as OK.
-  const provideIdentifier = () => {
-    const e = validateIdentifier(form.id_type, form.identifier);
-    if (e) { setFieldErr(fe => ({ ...fe, identifier: e })); return; }
-    setFieldErr(fe => ({ ...fe, identifier: undefined }));
-    update({ verifyState: 'provided', verified_via: '', fayda_id: '' });
+  // Step 2 — submit the code the visitor received by email.
+  const verifyCode = async () => {
+    const code = form.code.trim();
+    if (!/^\d{4,8}$/.test(code)) {
+      setFieldErr(fe => ({ ...fe, code: 'Enter the 6-digit code from the email.' }));
+      return;
+    }
+    setFieldErr(fe => ({ ...fe, code: undefined }));
+    setErr('');
+    update({ verifyState: 'verifying' });
+    const fan = form.fan.trim();
+    try {
+      const r = await fetch('/api/proxy/fayda/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fan, code }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (r.ok && body.ok) {
+        setForm(f => ({
+          ...f,
+          verifyState: 'verified',
+          verified_via: 'fayda',
+          fayda_id: body.fayda_id || fan,
+          name:  f.name  || body.name || `${body.given_name || ''} ${body.family_name || ''}`.trim(),
+          phone: f.phone || body.phone_number || '',
+        }));
+        setVerifyMsg({ tone: 'good',
+          text: `Identity verified with Fayda${body.fayda_id ? ` (${body.fayda_id})` : ''}. Reviewers will see a verified badge.` });
+      } else {
+        // Stay on 'code-sent' so the visitor can retry the code or resend.
+        setForm(f => ({ ...f, verifyState: 'code-sent' }));
+        setVerifyMsg({ tone: 'alert', text: faydaReason(body.reason) });
+      }
+    } catch {
+      setForm(f => ({ ...f, verifyState: 'code-sent' }));
+      setVerifyMsg({ tone: 'alert',
+        text: 'We could not reach the verification service. Please try again in a moment.' });
+    }
   };
 
   const toggleDash = (id: string, on: boolean) =>
@@ -228,10 +218,6 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
     if (form.name.trim().length < 2) fe.name = 'Enter your full name (at least 2 characters).';
     if (!EMAIL_RE.test(form.email.trim())) fe.email = 'Enter a valid email address.';
     if (form.purpose.trim().length < 10) fe.purpose = 'Describe your intended use in at least 10 characters.';
-    if (form.identifier.trim()) {
-      const ie = validateIdentifier(form.id_type, form.identifier);
-      if (ie) fe.identifier = ie;
-    }
     setFieldErr(fe);
     return Object.keys(fe).length === 0;
   };
@@ -252,16 +238,11 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
       if (form.org.trim())   payload.org   = form.org.trim();
       if (form.role.trim())  payload.role  = form.role.trim();
       if (form.dashboards.length) payload.dashboards = form.dashboards;
-      // Identity: only 'fayda' + fayda_id when genuinely verified; otherwise the
-      // entered value travels as id_number (provided, pending manual review).
-      if (form.identifier.trim() || form.verifyState === 'verified') {
-        payload.id_type = form.id_type;
-        if (form.id_type === 'fayda' && form.verifyState === 'verified') {
-          payload.fayda_id = form.fayda_id || form.identifier.trim();
-          payload.verified_via = 'fayda';
-        } else if (form.identifier.trim()) {
-          payload.id_number = form.identifier.trim();
-        }
+      // Identity: id_type/fayda_id/verified_via='fayda' ONLY on a genuine verify.
+      if (form.verifyState === 'verified' && form.verified_via === 'fayda') {
+        payload.id_type = 'fayda';
+        payload.fayda_id = form.fayda_id || form.fan.trim();
+        payload.verified_via = 'fayda';
       }
       const r = await fetch('/api/proxy/access-requests', {
         method: 'POST',
@@ -274,6 +255,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
       // Reset the form after a successful submit so a re-open starts clean.
       setForm(EMPTY);
       setFieldErr({});
+      setVerifyMsg(null);
     } catch {
       setErr('We could not reach the server. Please check your connection and try again.');
     } finally {
@@ -282,17 +264,16 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
   };
 
   // Success-view actions — user-authorized only, never a link to the admin console.
-  const closeAll = () => { setSubmitted(null); setForm(EMPTY); setFieldErr({}); setErr(''); onClose(); };
-  const returnToDatasets = () => { setSubmitted(null); setForm(EMPTY); setFieldErr({}); setErr(''); setPage('data'); onClose(); };
+  const closeAll = () => { setSubmitted(null); setForm(EMPTY); setFieldErr({}); setErr(''); setVerifyMsg(null); onClose(); };
+  const returnToDatasets = () => { setSubmitted(null); setForm(EMPTY); setFieldErr({}); setErr(''); setVerifyMsg(null); setPage('data'); onClose(); };
 
   const verified = form.verifyState === 'verified';
-  const provided = form.verifyState === 'provided';
-  const status = statusFor(form.verifyState, form.id_type, form.fayda_id);
-  const toneColor = (t: 'good' | 'watch' | 'alert' | 'muted') =>
+  const codeSent = form.verifyState === 'code-sent' || form.verifyState === 'verifying';
+  const sending  = form.verifyState === 'sending';
+  const toneColor = (t: 'good' | 'watch' | 'alert') =>
     t === 'good' ? 'var(--good, #1d8b5a)'
     : t === 'alert' ? 'var(--alert, #c0392b)'
-    : t === 'watch' ? 'var(--watch, #b7791f)'
-    : 'var(--ink-3)';
+    : 'var(--watch, #b7791f)';
 
   return (
     <div className="modal-bg" onClick={onBackdrop}>
@@ -305,7 +286,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
               <p>Tell us who you are and what you need. We respond within 2 business days.</p>
             </div>
             <div className="modal-body">
-              {/* Identity verification (optional) — realistic identifier entry */}
+              {/* Identity verification (optional) — Fayda email-OTP round-trip */}
               <div style={{
                 background: verified ? 'var(--good-50, #e7f5ee)' : 'var(--paper-2)',
                 border: verified ? '1px solid var(--good, #1d8b5a)' : '1px solid var(--border)',
@@ -318,55 +299,70 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                   </span>
                   <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                     <p className="text-sm" style={{ margin: 0, fontWeight: 600 }}>
-                      Verify your identity (optional)
+                      Verify your identity with Fayda (optional)
                     </p>
                     <p className="text-xs muted" style={{ margin: '0.2rem 0 0' }}>
-                      Providing a government ID helps reviewers approve faster. Not required for organisation accounts.
+                      Enter your Fayda number; we email a one-time code to the address on your
+                      Fayda record to confirm it is you. Helps reviewers approve faster. Not required
+                      for organisation accounts.
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-2 gap-sm" style={{ marginTop: '0.8rem' }}>
-                  <div className="field-group">
-                    <label>ID type</label>
-                    <select value={form.id_type} onChange={e => changeType(e.target.value as IdType)}>
-                      {ID_TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
-                    </select>
+                {/* Step 1 — FAN + Send code */}
+                <div className="field-group" style={{ marginTop: '0.8rem' }}>
+                  <label>Fayda number (FAN)</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input type="text" inputMode="numeric"
+                           value={form.fan} placeholder="e.g. 1000000000000001"
+                           aria-invalid={!!fieldErr.fan}
+                           disabled={verified}
+                           onChange={e => changeFan(e.target.value)}
+                           style={{ flex: '1 1 auto', minWidth: 0 }} />
+                    <button type="button" className="btn btn-sm btn-primary"
+                            onClick={sendCode}
+                            disabled={sending || verified || form.verifyState === 'verifying'}
+                            style={{ flexShrink: 0 }}>
+                      {sending ? 'Sending' : verified ? 'Verified' : codeSent ? 'Resend code' : 'Send code'}
+                    </button>
                   </div>
-                  <div className="field-group">
-                    <label>{currentType.field}</label>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <input type="text" inputMode={form.id_type === 'fayda' ? 'numeric' : 'text'}
-                             value={form.identifier} placeholder={currentType.placeholder}
-                             aria-invalid={!!fieldErr.identifier}
-                             onChange={e => changeIdentifier(e.target.value)}
-                             style={{ flex: '1 1 auto', minWidth: 0 }} />
-                      {form.id_type === 'fayda' ? (
-                        <button type="button" className="btn btn-sm btn-primary"
-                                onClick={verifyFayda}
-                                disabled={form.verifyState === 'validating' || verified}
-                                style={{ flexShrink: 0 }}>
-                          {form.verifyState === 'validating' ? 'Opening Fayda' : verified ? 'Verified' : 'Verify'}
-                        </button>
-                      ) : (
-                        <button type="button" className="btn btn-sm btn-primary"
-                                onClick={provideIdentifier} disabled={provided}
-                                style={{ flexShrink: 0 }}>
-                          {provided ? 'Saved' : 'Use this ID'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  {fieldErr.fan && (
+                    <p className="text-xs" style={{ margin: '0.35rem 0 0', color: 'var(--alert, #c0392b)' }}>
+                      {fieldErr.fan}
+                    </p>
+                  )}
                 </div>
-                {fieldErr.identifier && (
-                  <p className="text-xs" style={{ margin: '0.35rem 0 0', color: 'var(--alert, #c0392b)' }}>
-                    {fieldErr.identifier}
-                  </p>
+
+                {/* Step 2 — code entry (revealed after a code is sent) */}
+                {codeSent && !verified && (
+                  <div className="field-group" style={{ marginTop: '0.7rem' }}>
+                    <label>6-digit code</label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input type="text" inputMode="numeric" maxLength={8}
+                             value={form.code} placeholder="123456"
+                             aria-invalid={!!fieldErr.code}
+                             onChange={e => { setFieldErr(fe => ({ ...fe, code: undefined }));
+                                              update({ code: e.target.value }); }}
+                             style={{ flex: '1 1 auto', minWidth: 0, letterSpacing: '0.25em' }} />
+                      <button type="button" className="btn btn-sm btn-primary"
+                              onClick={verifyCode}
+                              disabled={form.verifyState === 'verifying'}
+                              style={{ flexShrink: 0 }}>
+                        {form.verifyState === 'verifying' ? 'Verifying' : 'Verify'}
+                      </button>
+                    </div>
+                    {fieldErr.code && (
+                      <p className="text-xs" style={{ margin: '0.35rem 0 0', color: 'var(--alert, #c0392b)' }}>
+                        {fieldErr.code}
+                      </p>
+                    )}
+                  </div>
                 )}
-                {status && (
+
+                {verifyMsg && (
                   <p className="text-xs" role="status" aria-live="polite"
-                     style={{ margin: '0.5rem 0 0', fontWeight: 500, color: toneColor(status.tone) }}>
-                    {status.text}
+                     style={{ margin: '0.6rem 0 0', fontWeight: 500, color: toneColor(verifyMsg.tone) }}>
+                    {verifyMsg.text}
                   </p>
                 )}
               </div>

@@ -13,8 +13,19 @@ services:
     image: nhdw/fayda-replica:dev
     container_name: fayda-replica
     restart: unless-stopped
+    # Fayda's OWN isolated SMTP — the OTP mailer for the access-request identity
+    # check. Values are interpolated from ./.env (auto-loaded by compose; see
+    # .env.template). Kept fully separate from the NHDW gateway's smtp-secrets;
+    # if ./.env is absent the vars fall back to empty and email is skipped (the
+    # OTP is still generated + logged for the demo).
     environment:
       FAYDA_ISSUER: "http://localhost:8096"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_TLS: "${SMTP_TLS:-true}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      SMTP_FROM: "${SMTP_FROM:-Fayda Verification <noreply@fayda.local>}"
     ports:
       - "8096:8000"
     healthcheck:

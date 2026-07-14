@@ -1,28 +1,37 @@
 #!/usr/bin/env python3
-"""Regression test: public access-request FORM guards + identity state model (§6.3).
+"""Regression test: public access-request FORM guards + Fayda email-OTP model (§6.3).
 
 Pins the client-side behaviour that keeps a public requester from ever seeing a
 raw 422 or a link to the admin console:
   · field-level validation BEFORE submit (full name >= 2, valid email,
     purpose >= 10) — inline messages, no round-trip;
-  · identity-verification state model — an invalid Fayda FAN is refused inline;
-    a Fayda ok:false result renders "could not verify" (NEVER a fake success);
-    a National ID number is recorded as "pending manual verification";
+  · Fayda identity verification is an email-OTP round-trip — an invalid FAN is
+    refused inline; a real challenge to a seeded FAN emails a code that, once
+    entered, reaches the verified state; a wrong code is rejected (NEVER a fake
+    success); an unknown FAN says "no record matches";
   · the form RESETS after a successful submit;
   · the success view exposes user-authorized actions only ("Return to datasets"
     / "Close") and NO link to the admin dashboard.
 
-The verification-failure and verified states are driven by posting the same
-`nhdw:fayda-verify` message the real popup would send, so no live Fayda replica
-is needed for those assertions.
+The verified state is driven by the REAL flow (the Fayda replica owns it): the
+test challenges a seeded FAN and reads the one-time code from the fayda container
+log (the [fayda][DEV-ONLY] line), so it exercises the true round-trip.
 
-Requires: a running system (bundle/scripts/verify-system.sh green) and
-playwright. Run:  python3 test_access_form.py   -> exits non-zero on any failure.
+Requires: a running system (bundle/scripts/verify-system.sh green) incl. the
+Fayda replica on host :8096, and playwright. Run:
+    python3 test_access_form.py   -> exits non-zero on any failure.
 """
+import re
+import subprocess
 import time
+
 from playwright.sync_api import sync_playwright
 
 PUBLIC = "https://public.127.0.0.1.nip.io/"
+# Seeded Fayda identities (0_external/fayda/seed/citizens.yaml). Each maps to a
+# reachable gmail plus-alias, so a real code is delivered + logged.
+SEEDED_FAN = "1000000000000023"   # Genet Abera
+UNKNOWN_FAN = "9999999999999999"
 FAILURES: list[str] = []
 
 
@@ -43,11 +52,14 @@ def body(pg) -> str:
     return pg.inner_text("body")
 
 
-def post_fayda(pg, payload_js: str) -> None:
-    """Dispatch the exact message the Fayda popup would postMessage back."""
-    pg.evaluate(
-        "window.postMessage({type:'nhdw:fayda-verify', payload:" + payload_js + "}, '*')")
-    pg.wait_for_timeout(400)
+def read_otp(fan: str) -> str | None:
+    """Read the one-time code the Fayda replica generated + logged for this FAN."""
+    out = subprocess.run(
+        ["bash", "-lc",
+         f"docker logs fayda-replica 2>&1 | grep 'DEV-ONLY' | grep 'FAN {fan}' | tail -1"],
+        capture_output=True, text=True, timeout=30).stdout
+    m = re.search(r"= (\d{6}) ", out)
+    return m.group(1) if m else None
 
 
 def main() -> int:
@@ -56,14 +68,14 @@ def main() -> int:
         ctx = b.new_context(ignore_https_errors=True,
                             viewport={"width": 1400, "height": 2200})
 
-        # ---- 1. invalid identity identifier (Fayda FAN client validation) ----
+        # ---- 1. invalid Fayda FAN — refused inline (client format check) ----
         pg = ctx.new_page()
         open_modal(pg)
-        pg.fill("input[placeholder='e.g. 123456789012']", "abc123")   # not numeric / too short
-        pg.get_by_role("button", name="Verify", exact=True).click()
+        pg.fill("input[placeholder='e.g. 1000000000000001']", "abc123")  # not numeric
+        pg.get_by_role("button", name="Send code", exact=True).click()
         pg.wait_for_timeout(300)
         check("valid Fayda number" in body(pg),
-              "invalid FAN is refused inline (no popup, no fake verify)")
+              "invalid FAN is refused inline (no request, no fake verify)")
 
         # ---- 2. missing required fields (submit guard, inline messages) ----
         pg.get_by_role("button", name="Submit request", exact=True).click()
@@ -74,30 +86,41 @@ def main() -> int:
         check("at least 10 characters" in txt, "short purpose blocked inline")
         check("Request submitted" not in txt, "a guarded submit does not reach the success view")
 
-        # ---- 3. backend verification failure -> could-not-verify (no fake OK) ----
+        # ---- 3. unknown FAN -> "no record matches" (not a fake OK) ----
         pg2 = ctx.new_page()
         open_modal(pg2)
-        pg2.fill("input[placeholder='e.g. 123456789012']", "123456789012")
-        post_fayda(pg2, "{ok:false, error:'regtest forced failure'}")
-        check("could not verify" in body(pg2).lower(),
-              "Fayda ok:false renders 'could not verify' (not a success)")
+        pg2.fill("input[placeholder='e.g. 1000000000000001']", UNKNOWN_FAN)
+        pg2.get_by_role("button", name="Send code", exact=True).click()
+        pg2.wait_for_timeout(1500)
+        check("no fayda record matches" in body(pg2).lower(),
+              "unknown FAN reports 'no record matches' (never a success)")
         check("Identity verified with Fayda" not in body(pg2),
-              "a failed verify NEVER shows the verified badge")
+              "an unknown FAN NEVER shows the verified badge")
 
-        # verified state (positive control) via the same message channel
-        post_fayda(pg2, "{ok:true, fayda_id:'FIN-REG-TEST', name:'Reg Test'}")
-        check("Identity verified with Fayda" in body(pg2),
-              "Fayda ok:true reaches the verified state")
-
-        # ---- 4. National ID -> provided, pending manual verification ----
+        # ---- 4. real OTP round-trip: seeded FAN -> code -> verified ----
         pg3 = ctx.new_page()
         open_modal(pg3)
-        pg3.select_option(".modal select", "national-id")
-        pg3.fill("input[placeholder='ID card number']", "NID-90210")
-        pg3.get_by_role("button", name="Use this ID", exact=True).click()
-        pg3.wait_for_timeout(300)
-        check("verify it manually" in body(pg3),
-              "National ID is recorded as pending manual verification (not verified)")
+        pg3.fill("input[placeholder='e.g. 1000000000000001']", SEEDED_FAN)
+        pg3.get_by_role("button", name="Send code", exact=True).click()
+        pg3.wait_for_selector("text=We sent a 6-digit code", timeout=15000)
+        pg3.wait_for_timeout(700)
+        # wrong code first — rejected, never a fake success
+        pg3.fill("input[maxlength='8']", "000000")
+        pg3.get_by_role("button", name="Verify", exact=True).click()
+        pg3.wait_for_timeout(500)
+        check("not correct" in body(pg3).lower(),
+              "a wrong code is rejected ('not correct')")
+        check("Identity verified with Fayda" not in body(pg3),
+              "a wrong code NEVER shows the verified badge")
+        # now the real code from the fayda log
+        code = read_otp(SEEDED_FAN)
+        check(bool(code), "Fayda emitted + logged a 6-digit OTP for the seeded FAN")
+        if code:
+            pg3.fill("input[maxlength='8']", code)
+            pg3.get_by_role("button", name="Verify", exact=True).click()
+            pg3.wait_for_selector("text=Identity verified with Fayda", timeout=15000)
+            check("Identity verified with Fayda" in body(pg3),
+                  "the emailed code reaches the verified state (real round-trip)")
 
         # ---- 5. successful submit + form reset + no admin link ----
         pg4 = ctx.new_page()
@@ -110,7 +133,6 @@ def main() -> int:
         pg4.wait_for_selector("text=Request submitted", timeout=15000)
         done = body(pg4)
         check("Request submitted" in done, "valid submit reaches the success view")
-        import re
         check(bool(re.search(r"AR-\d{4}-\d{4}", done)), "success view shows an AR- tracking id")
         # success view is user-authorized only — never links to the admin console
         admin_links = pg4.eval_on_selector_all(
@@ -134,7 +156,6 @@ def main() -> int:
 
     # Best-effort DB cleanup of the row this test created (leaves the queue clean).
     try:
-        import subprocess
         subprocess.run(
             ["bash", "-lc",
              "kubectl -n nhdw exec -i postgres-vault-0 -- env "

@@ -86,15 +86,13 @@ spec:
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 80, name: http } ]
           env:
-            # Fayda Replica is EXTERNAL (0_external/fayda, compose on host port 8096
-            # — like the source replicas). The pod reaches it via the k3d host route;
-            # the citizen's browser opens the popup on localhost.
+            # Fayda identity verification is an email-OTP round-trip owned entirely
+            # by the EXTERNAL Fayda replica (0_external/fayda, compose on host port
+            # 8096 — like the source replicas). This server's /api/proxy/fayda/*
+            # forwards straight to the replica's /verify/* over the k3d host route;
+            # the replica mints + emails + confirms the code with its OWN isolated
+            # SMTP (not the NHDW gateway). Production points this at real Fayda.
             - { name: FAYDA_INTERNAL_BASE, value: "http://host.k3d.internal:8096" }
-            - { name: FAYDA_PUBLIC_BASE,   value: "http://localhost:8096" }
-            # OAuth-state signer key — secret-driven (optional → absent falls back
-            # to the app's in-code default, so this is non-breaking).
-            - name: FAYDA_STATE_SECRET
-              valueFrom: { secretKeyRef: { name: app-signing-secrets, key: FAYDA_STATE_SECRET, optional: true } }
           readinessProbe: { httpGet: { path: /health, port: 80 }, initialDelaySeconds: 3, periodSeconds: 5 }
 ---
 apiVersion: v1
