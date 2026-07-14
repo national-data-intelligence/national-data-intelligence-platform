@@ -59,24 +59,42 @@ MISSING_REALM_ROLES = {
     # R-SUPER exists in BOTH realms so the cross-realm superadmin test account can
     # hold it on the moh-staff side (internal-bi/workshop) as well as privileged-ops.
     "moh-staff":      ["R-PD-HIV", "R-RHB-OROMIA", "R-SUPER"],
-    "privileged-ops": ["R-SUPER"],
+    # R-OPS-NONE is the ZERO-GRANT landing role for anyone who reaches the
+    # privileged-ops realm through a brokered IdP (Google/EHIA). It is NOT in the
+    # OPA decision router (common.rego) and holds no permissions, so OPA
+    # default-denies it every action ("unknown role" → allow:false). This is the
+    # security floor for the admin login page: the Google/EHIA buttons are visible
+    # and the login authenticates, but the identity lands with nothing — a
+    # brokered user can never become an operator/admin (see IDENTITY_PROVIDERS).
+    "privileged-ops": ["R-SUPER", "R-OPS-NONE"],
 }
 
 
 # Dashboard clients we want present as public PKCE clients.
 # `convert_from_confidential`: if True, downgrade an existing confidential
 # client to public (used for the pre-existing internal-bi client).
-# IdP brokers — federate ONLY the moh-staff realm to: REAL Google (social OIDC,
-# Keycloak's built-in `google` provider, creds from keycloak-idp-secrets) and the
-# mocked ehia-saml-mock realm (SAML "federation", imported at Keycloak startup).
-# There is NO Google mock fallback — if GOOGLE_CLIENT_ID is unset the social
-# broker is simply skipped (see _google_configured / main).
+# IdP brokers — every protected dashboard's login page offers the SAME three
+# options: username/password, REAL Google (social OIDC, Keycloak's built-in
+# `google` provider, creds from keycloak-idp-secrets) and the mocked
+# ehia-saml-mock realm (SAML "federation", imported at Keycloak startup). Both
+# staff realms are brokered: moh-staff (internal-bi + workshop dashboards) AND
+# privileged-ops (admin dashboard). There is NO Google mock fallback — if
+# GOOGLE_CLIENT_ID is unset/placeholder the social broker is simply skipped on
+# BOTH realms (see _google_configured / main); EHIA stays up either way.
 #
-# SECURITY (plan §B, least-privilege): external IdPs never mint operators/admins.
-# The privileged-ops realm (operators, security, super-user) is username/password
-# ONLY — no brokered IdP can reach it. A social/federated user lands in moh-staff
-# with a minimal read-only role (steward elevates via the access-request flow if
-# more is needed); we do NOT auto-grant R-OPS-ADM to whoever clicks "Google".
+# SECURITY (defense-in-depth — a public social/federated login must NEVER become
+# an operator/admin). The admin realm (privileged-ops: operators, security,
+# super-user) now SHOWS the Google + EHIA buttons and lets them authenticate, but
+# its brokered entries land every such identity on `R-OPS-NONE` — a zero-grant
+# realm role that is NOT in the OPA decision router, so OPA default-denies it every
+# action ("unknown role" → allow:false). Net effect: the button is visible and
+# login works, but authz grants nothing — a Google/EHIA user who signs in at the
+# admin page hits SPEC_DENIED and holds no operator/admin capability. Google
+# additionally carries idp_trust=low, so the OPA trust guard blocks it from every
+# sensitive action even if a role were ever mis-assigned. The moh-staff brokers
+# keep their real read-only landing roles (a steward elevates via the
+# access-request flow); we never auto-grant an operator role to whoever clicks
+# "Google"/"EHIA".
 IDENTITY_PROVIDERS = [
     {
         "into_realm":      "moh-staff",
@@ -99,6 +117,34 @@ IDENTITY_PROVIDERS = [
         "default_role":    "R-CONS-RES",   # trusted-partner researcher (non-PHI)
         # Trusted government identity partner → HIGH trust (email verified,
         # no trust-guard restriction beyond its role).
+        "trust_email":     True,
+        "trust_tier":      "high",
+    },
+    # ── privileged-ops (admin dashboard) — buttons visible, authz denied ──────
+    # Same two brokers, but they land on R-OPS-NONE (zero grants) so a brokered
+    # identity authenticates yet gets NO operator/admin access (OPA unknown-role
+    # deny). This is the security floor described above — do NOT give these a
+    # real operator role.
+    {
+        "into_realm":      "privileged-ops",
+        "alias":           "google",
+        "display":         "Google",
+        "kind":            "google",        # REAL Google, same creds as moh-staff
+        "default_role":    "R-OPS-NONE",   # zero-grant landing role → OPA denies all
+        "trust_email":     False,
+        "trust_tier":      "low",           # OPA trust guard also blocks sensitive actions
+    },
+    {
+        "into_realm":      "privileged-ops",
+        "alias":           "ehia-saml",
+        "display":         "EHIA",
+        "kind":            "saml",
+        "source_realm":    "ehia-saml-mock",
+        "default_role":    "R-OPS-NONE",   # zero-grant landing role → OPA denies all
+        # Federated partner identity, but into the ADMIN realm it still lands with
+        # no grants — the whole point is that no external login yields operator
+        # access. Kept high-trust (matches its moh-staff nature); the denial comes
+        # from the empty role, not the trust tier.
         "trust_email":     True,
         "trust_tier":      "high",
     },
@@ -471,35 +517,71 @@ def configure_idp(token: str, spec: dict) -> None:
         print(f"    ✓ created broker {into}/{alias} → {dst}")
 
     # Default-role mapper: every brokered user gets `default_role` on first
-    # login. Idempotent — drop + recreate.
+    # login. Provider-aware (SAML vs OIDC) — see ensure_default_role_mapper.
     drole = spec.get("default_role")
     if drole:
-        ensure_default_role_mapper(token, into, alias, drole)
+        ensure_default_role_mapper(token, into, alias, drole, spec["kind"])
 
     # P1.3 — stamp the broker's trust tier onto every user it federates.
     ensure_idp_trust_mapper(token, into, alias, spec.get("trust_tier", "low"))
 
 
-def ensure_default_role_mapper(token: str, realm: str, alias: str, role: str) -> None:
+# SAML brokers have NO hardcoded-role IdP mapper in Keycloak 26 — only
+# `oidc-hardcoded-role-idp-mapper` exists (OIDC/social). The old generic
+# `hardcoded-role-idp-mapper` id is unregistered, so a broker carrying it throws
+# `NullPointerException … preprocessFederatedIdentity … target is null` and
+# federation fails outright (this silently broke EHIA on BOTH realms). To hardcode
+# a role for a SAML-federated identity we make the mock IdP's SP client emit a
+# CONSTANT SAML attribute (saml-hardcode-attribute-mapper, added in
+# configure_broker_source_clients) and grant the role off that attribute with
+# `saml-role-idp-mapper`. The marker name+value MUST match on both sides.
+SAML_ROLE_MARKER_ATTR  = "nhdw-broker-role-marker"
+SAML_ROLE_MARKER_VALUE = "ehia-federated"
+
+
+def ensure_default_role_mapper(token: str, realm: str, alias: str, role: str, kind: str) -> None:
+    """Grant `role` to every user federated through `alias` on first login.
+
+    Provider-aware, because Keycloak 26 registers different role mappers per
+    broker type (there is no generic hardcoded-role mapper):
+      · OIDC/social (Google) → `oidc-hardcoded-role-idp-mapper` (unconditional).
+      · SAML (EHIA) → `saml-role-idp-mapper`, keyed on the constant SAML marker
+        attribute the SP client emits.
+    Self-healing: if a same-named mapper already exists with the WRONG type
+    (e.g. the unregistered `hardcoded-role-idp-mapper` left by a prior seed), it
+    is deleted and recreated with the correct provider mapper."""
     mapper_name = f"default-{role}"
+    if kind == "saml":
+        idp_mapper = "saml-role-idp-mapper"
+        cfg = {
+            "attribute.name":  SAML_ROLE_MARKER_ATTR,
+            "attribute.value": SAML_ROLE_MARKER_VALUE,
+            "role":            role,
+            "syncMode":        "INHERIT",
+        }
+    else:  # google / oidc social
+        idp_mapper = "oidc-hardcoded-role-idp-mapper"
+        cfg = {
+            "role":     role,
+            "syncMode": "INHERIT",
+        }
     code, mappers = api(token, "GET",
                         f"/realms/{realm}/identity-provider/instances/{alias}/mappers")
     if code == 200 and isinstance(mappers, list):
         for m in mappers:
-            if m.get("name") == mapper_name:
-                # Already there.
-                return
+            if m.get("name") != mapper_name:
+                continue
+            if m.get("identityProviderMapper") == idp_mapper:
+                return  # correct mapper already present
+            # Wrong type — delete so we can recreate with the registered mapper.
+            api(token, "DELETE",
+                f"/realms/{realm}/identity-provider/instances/{alias}/mappers/{m.get('id')}")
+            break
     body = {
-        "name":                  mapper_name,
-        "identityProviderAlias": alias,
-        # Generic (provider-agnostic) hardcoded-role mapper — the `oidc-`
-        # prefixed variant silently no-ops on a SAML broker, which left EHIA
-        # users with no R- role (R-UNKNOWN → denied). This one applies to both.
-        "identityProviderMapper": "hardcoded-role-idp-mapper",
-        "config": {
-            "role":      role,
-            "syncMode":  "INHERIT",
-        },
+        "name":                   mapper_name,
+        "identityProviderAlias":  alias,
+        "identityProviderMapper": idp_mapper,
+        "config":                 cfg,
     }
     code, payload = api(token, "POST",
                         f"/realms/{realm}/identity-provider/instances/{alias}/mappers",
@@ -507,7 +589,7 @@ def ensure_default_role_mapper(token: str, realm: str, alias: str, role: str) ->
     if code not in (201, 204):
         print(f"    ✗ default-role mapper {realm}/{alias}/{role}: {code} {payload}")
         sys.exit(1)
-    print(f"      · default-role mapper → {role}")
+    print(f"      · default-role mapper → {role} ({idp_mapper})")
 
 
 def ensure_unmanaged_attributes(token: str, realm: str) -> None:
@@ -723,26 +805,53 @@ def configure_broker_source_clients(token: str) -> None:
             attrs["saml_assertion_consumer_url_post"] = acs
             attrs["saml_single_logout_service_url_post"] = acs
             match["redirectUris"] = [acs, f"http://keycloak:8080/realms/{into}/broker/ehia-saml/endpoint"]
+            # Emit a CONSTANT SAML attribute in the assertion so the broker's
+            # saml-role-idp-mapper can hardcode the federated user's default role
+            # (Keycloak 26 has no hardcoded-role IdP mapper for SAML). Idempotent.
+            pms = match.setdefault("protocolMappers", [])
+            if not any(pm.get("name") == SAML_ROLE_MARKER_ATTR for pm in pms):
+                pms.append({
+                    "name":           SAML_ROLE_MARKER_ATTR,
+                    "protocol":       "saml",
+                    "protocolMapper": "saml-hardcode-attribute-mapper",
+                    "config": {
+                        "attribute.name":       SAML_ROLE_MARKER_ATTR,
+                        "attribute.nameformat": "Basic",
+                        "attribute.value":      SAML_ROLE_MARKER_VALUE,
+                        "friendly.name":        SAML_ROLE_MARKER_ATTR,
+                    },
+                })
             code, p = api(token, "PUT", f"/realms/ehia-saml-mock/clients/{match['id']}", match)
             if code not in (200, 204):
                 print(f"    ✗ ehia-saml-mock SP {into}: {code} {p}"); sys.exit(1)
             print(f"    ✓ ehia-saml-mock SP {into} entityID/ACS → {kb}")
 
 
-def ensure_no_brokers(token: str, realm: str) -> None:
-    """Enforce that `realm` has NO brokered identity provider — operators/admins
-    authenticate with username/password ONLY, so no external (social/federated)
-    IdP can ever mint one. Convergent: deletes any IdP instance found, so this
-    holds even if a prior seed / imported realm added one (the security invariant
-    is asserted every boot, not just on a clean import)."""
+def prune_unexpected_brokers(token: str, realm: str) -> None:
+    """Convergently delete any brokered IdP on `realm` that is NOT one we
+    intentionally configure (from IDENTITY_PROVIDERS) — so a stray IdP left by a
+    prior seed / imported realm can never sneak in an unintended login. The
+    EXPECTED brokers (google + ehia-saml) are preserved: they are safe by
+    construction on privileged-ops because they land every brokered user on
+    R-OPS-NONE (zero grants → OPA default-deny), so the admin login page can show
+    the Google/EHIA buttons without ever handing out operator/admin access.
+
+    When Google creds are absent/placeholder the google broker is NOT expected
+    (it's skipped in main), so a stale google instance would be pruned here too —
+    keeping the "no creds ⇒ Google button absent, not broken" invariant."""
+    expected = {p["alias"] for p in IDENTITY_PROVIDERS if p["into_realm"] == realm}
+    if not _google_configured():
+        expected.discard("google")
     code, idps = api(token, "GET", f"/realms/{realm}/identity-provider/instances")
     if code != 200 or not isinstance(idps, list):
         return
     for idp in idps:
         alias = idp.get("alias")
+        if alias in expected:
+            continue
         code2, _ = api(token, "DELETE", f"/realms/{realm}/identity-provider/instances/{alias}")
         if code2 in (200, 204):
-            print(f"    ✓ removed broker {realm}/{alias} — admin realm is password-only")
+            print(f"    ✓ removed UNEXPECTED broker {realm}/{alias} (not in IDENTITY_PROVIDERS)")
         else:
             print(f"    ! could not remove broker {realm}/{alias}: {code2}")
 
@@ -933,8 +1042,13 @@ def main() -> int:
     print("\n▸ broker source-realm client hostnames (mock IdPs → KC_PUBLIC_BASE)")
     configure_broker_source_clients(token)
 
-    print("\n▸ password-only admin realm (strip any brokered IdP from privileged-ops)")
-    ensure_no_brokers(token, "privileged-ops")
+    # privileged-ops now brokers google + ehia-saml too (buttons visible on the
+    # admin login page), but every brokered identity lands on R-OPS-NONE (zero
+    # grants → OPA denies). Prune only UNEXPECTED brokers so we never strip the
+    # ones we just configured, while still removing any stray IdP a prior seed
+    # left behind.
+    print("\n▸ admin realm brokers (keep google+ehia-saml, prune any unexpected)")
+    prune_unexpected_brokers(token, "privileged-ops")
 
     print("\n▸ idp_trust claim (P1.3 trust guard) — nhdw-flat-roles scope, both realms")
     for realm in ("moh-staff", "privileged-ops"):

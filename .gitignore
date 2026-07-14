@@ -135,3 +135,4 @@ _tools/
 2_pipelines/*/target/
 2_pipelines/*/dbt_packages/
 bundle/seeds/entity-model/sample-data/
+client_secret_*.json
