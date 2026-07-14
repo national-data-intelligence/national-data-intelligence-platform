@@ -139,10 +139,10 @@
   /* ═══ Top bar inside main · balanced left/right padding (reference-golden
      masthead: eyebrow + 2rem/800 title from Topbar.tsx, no band, no hairline) ═══ */
   .bi-topbar {
-    /* Horizontal padding MUST match .bi-pageframe (3.6rem) so the masthead
+    /* Horizontal padding MUST match .bi-pageframe (5.5rem) so the masthead
        title/breadcrumb sit flush-left with the page content below, not inset
-       ~1.4rem further left. Both are siblings in .bi-main (same left edge). */
-    padding: 1.3rem 3.6rem 1.1rem 3.6rem;
+       further left. Both are siblings in .bi-main (same left edge). */
+    padding: 1.3rem 5.5rem 1.1rem 5.5rem;
     display: flex; align-items: flex-end; justify-content: space-between;
     gap: 1.2rem;
   }
@@ -1044,7 +1044,7 @@
   }
 
   /* ═══ Page body within main · balanced left/right padding (more breathing room off both edges) ═══ */
-  .bi-pageframe { padding: 1.4rem 4.4rem 3rem 4.4rem; } /* shared 4.4rem left/right content margin */
+  .bi-pageframe { padding: 1.4rem 5.5rem 3rem 5.5rem; } /* shared 5.5rem left/right content margin */
 
   /* ═══ Fine grid backdrop for the Ethiopia maps · applied via .map-graticule on the chart host ═══ */
   .map-graticule {

@@ -5,9 +5,10 @@
  * page opens like the rest of the public site — a LIGHT editorial masthead
  * (eyebrow + serif title + one quiet intro line, mirroring the Open Data page) →
  * a FEATURED SLIDESHOW: a compact light card (~half the old lead height, no
- * coloured top border) with a headline column on the left and a big, story-fitting
- * icon on the right, auto-advancing through the newest few with prev/next + dots
- * (the old "more featured" rail is gone) → a small "All articles" list header →
+ * coloured top border) with left-aligned headline copy over a soft flowing-wave
+ * background (bg-waves.svg) under a translucent light overlay, auto-advancing
+ * through the newest few with prev/next + dots (no icons, no "more featured"
+ * rail) → a small "All articles" list header →
  * the unified filter bar → a three-column card GRID → numbered pagination.
  * Everything shares one flush left edge. Real data via useArticles (CMS); reads
  * setPage/setArticle from the host. Restrained slate/ink neutrals + one deep-teal
@@ -53,23 +54,6 @@ function catTone(category: string): string {
   if (/phem|surveil|epidem/.test(k)) return 'teal';
   if (/research|study|program/.test(k)) return 'plum';
   return 'navy';
-}
-
-/** A large, story-fitting sprite icon for the featured slide, inferred from the
- *  article's category / tags / title. Falls back to a public-notice megaphone.
- *  Most specific themes first (a BCG cold-chain notice is immunization, not just
- *  "advisory"). Icons all exist in static/assets/icons.html. */
-function storyIcon(a: Article): string {
-  const s = `${a.category} ${a.tags.join(' ')} ${a.title}`.toLowerCase();
-  if (/immuni[sz]|vaccin|\bepi\b|\bbcg\b|measles|polio|\bmr\b|campaign/.test(s)) return 'i-syringe';
-  if (/cold.?chain|cold chain|temperature|thermo|storage/.test(s))              return 'i-thermo';
-  if (/hearts|hypertension|cardio|\bncd\b|\bheart\b|stroke/.test(s))            return 'i-heart';
-  if (/cholera|outbreak|epidemic|influenza|\bavian\b|virus|zoonot|dengue/.test(s)) return 'i-virus';
-  if (/nutrition|feeding|\bfood\b|stunting|wasting|\biycf\b/.test(s))           return 'i-pill';
-  if (/research|study|surveil|labor|\blab\b|analys|evidence|diagnos/.test(s))   return 'i-microscope';
-  if (/alert|advis|warn|emergenc|\bphem\b|preparedness/.test(s))                return 'i-alert';
-  if (/strateg|\bplan\b|policy|framework|invest|\bhsdip\b|\bhstp\b/.test(s))    return 'i-policy';
-  return 'i-megaphone';
 }
 
 /** Days between an ISO date and today (approximate; used by the date-range filter). */
@@ -199,10 +183,6 @@ function Articles({ host }: { host: PublicHost }) {
                 <button className="nw-slide-btn" onClick={() => open(feat)}>
                   Read article <svg className="ico"><use href="#i-arrow-right" /></svg>
                 </button>
-              </div>
-
-              <div className={`nw-slide-art nw-slide-art--${catTone(feat.category)}`} aria-hidden="true">
-                <svg className="nw-slide-ico"><use href={`#${storyIcon(feat)}`} /></svg>
               </div>
             </article>
 

@@ -3,7 +3,9 @@
      does NOT span over the sidebar · mirrors .bi-topbar pattern.
   ═══════════════════════════════════════════════════════════════ */
   .admin-topbar {
-    padding: 1.3rem 2.2rem 1.1rem 2.2rem;
+    /* MUST match .admin-pageframe's 5.5rem so the masthead/breadcrumb sit flush
+       with the page content on BOTH left and right edges */
+    padding: 1.3rem 5.5rem 1.1rem 5.5rem;
     display: flex; align-items: flex-end; justify-content: space-between;
     gap: 1.2rem;
   }
@@ -247,10 +249,10 @@
     background: var(--bg);
   }
   .admin-pageframe {
-    /* content gutter doubled (2.2rem → 4.4rem) and aligned to the shared 4.4rem
-       left/right content margin used across every dashboard */
-    padding: 0.4rem 4.4rem 2.5rem;
-    max-width: 1500px;
+    /* shared 5.5rem left/right content gutter; the topbar uses the SAME inset so
+       masthead + content are flush on both edges. No max-width so it fills the
+       main column (matches internal-bi), giving generous, equal side margins. */
+    padding: 0.4rem 5.5rem 2.5rem;
     min-width: 0;
     width: 100%;
   }
