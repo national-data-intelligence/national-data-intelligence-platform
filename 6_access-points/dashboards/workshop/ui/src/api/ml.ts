@@ -57,34 +57,33 @@ export type MlModelDetail = MlModelSummary & {
   last_run: MlRun | null;
 };
 
-/** Flat forecast schema — one row per (model × disease × district × ISO
- *  year/week) from ops_ml.ml_predictions (3_storage/…/11_ml_predictions.sh).
- *  `district` is the woreda uid for the disease family and the commodity
- *  name for stockout_forecast; `disease` is '' for non-disease models.
- *  Postgres `numeric` columns arrive as decimal STRINGS through the
- *  gateway's JSON encoding (verified live 2026-07-03) — format with
- *  fmtNum/fmtProb, never assume number. */
-export type Dec = number | string;        // pg numeric over JSON
-export type MlPredictionRow = {
-  predicted_at: string;
-  model_version: string;
-  disease: string;
-  district: string;
-  year: number;
-  week: number;
-  pred_cases_mean: Dec | null;
-  pred_cases_sd: Dec | null;
-  pred_cases_lwr95: Dec | null;
-  pred_cases_median: Dec | null;
-  pred_cases_upr95: Dec | null;
-  endemic_mean: Dec | null;
-  endemic_sd: Dec | null;
-  outbreak_z: Dec | null;
-  alarm_threshold: Dec | null;
-  alarm_prob: Dec | null;                 // 0..1
-  alarm_flag: number | null;              // 1 ⇔ alarm_prob ≥ 0.5
-  n_draws: number | null;
-  attrs: Record<string, unknown>;
+/** pg numeric over JSON — some gateway numbers arrive as decimal STRINGS
+ *  (verified live 2026-07-03); format with fmtNum, never assume number. */
+export type Dec = number | string;
+
+/** One field of a model's input/output SCHEMA — GET /gw/ml/{model}/schema.
+ *  `type` is the MLflow signature type (string | long | double | datetime |
+ *  boolean); `example` (inputs only) is the value from the model's
+ *  input_example, used as a form placeholder. This is catalogue metadata — it
+ *  describes the SHAPE a caller supplies / the model returns, never any stored
+ *  prediction data. */
+export type MlSchemaField = {
+  name: string;
+  type: string | null;
+  required: boolean;
+  example?: unknown;
+};
+
+/** GET /gw/ml/{model}/schema — the input/output contract of the serving
+ *  (@champion, else latest) version. `published:false` ⇒ no signature was
+ *  logged for this model; the UI shows an honest "schema not published" note. */
+export type MlSchema = {
+  model: string;
+  version: string | null;
+  published: boolean;
+  inputs: MlSchemaField[];
+  outputs: MlSchemaField[];
+  input_example: Record<string, unknown>;
 };
 
 /** One MLflow version of a model, with its alias list.
@@ -148,18 +147,11 @@ export function getModel(name: string): Promise<MlModelDetail> {
   return _json<MlModelDetail>(`${GW}/${encodeURIComponent(name)}`);
 }
 
-export async function listPredictions(
-  name: string,
-  params: { limit?: number; disease?: string; district?: string } = {},
-): Promise<MlPredictionRow[]> {
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
-  }
-  const suffix = qs.toString() ? `?${qs}` : '';
-  const j = await _json<{ model: string; rows: MlPredictionRow[]; row_count: number }>(
-    `${GW}/${encodeURIComponent(name)}/predictions${suffix}`);
-  return j.rows;
+/** The model's input/output schema (catalogue metadata). Backs the workshop
+ *  Models workbench: the typed run form (inputs) + the output-shape table.
+ *  Never returns stored predictions — only the model's contract. */
+export function getSchema(name: string): Promise<MlSchema> {
+  return _json<MlSchema>(`${GW}/${encodeURIComponent(name)}/schema`);
 }
 
 export async function listVersions(name: string): Promise<MlVersion[]> {
@@ -220,12 +212,6 @@ export function fmtNum(n: Dec | null | undefined, digits = 1): string {
   if (n == null || !Number.isFinite(Number(n))) return '—';
   return Number(n).toLocaleString(undefined,
     { minimumFractionDigits: 0, maximumFractionDigits: digits });
-}
-
-/** alarm_prob 0..1 → '82%'. */
-export function fmtProb(p: Dec | null | undefined): string {
-  if (p == null || !Number.isFinite(Number(p))) return '—';
-  return `${Math.round(Number(p) * 100)}%`;
 }
 
 /** Pill class for an alias badge — @champion is the serving alias. */

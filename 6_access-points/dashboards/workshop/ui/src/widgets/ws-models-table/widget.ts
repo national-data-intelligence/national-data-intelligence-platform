@@ -133,7 +133,7 @@ async function draw(ctx: WidgetCtx) {
         </table>
       </div>
       <p class="muted" style="font-size:.76rem;margin:.4rem 0 0">
-        Click a model to open its workbench and health panels below.
+        Click a model to open its workbench below: info, input/output schema and a run form.
         ${allowedTiers ? `Tier surface capped to ${esc(allowedTiers.join(', '))} for your role.` : ''}</p>`;
 
     out.querySelectorAll<HTMLElement>('tr.ws-model-row').forEach(tr => {

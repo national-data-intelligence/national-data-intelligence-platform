@@ -1278,16 +1278,42 @@
     max-height: 190px; overflow-y: auto;
   }
 
-  /* ── Phase-3 monitoring placeholder (no fake charts) ── */
-  .mdl-placeholder {
-    display: flex; gap: 0.8rem; align-items: flex-start;
-    border: 1px dashed var(--border-2);
-    border-radius: 10px;
-    background: var(--paper-2);
-    padding: 0.95rem 1.1rem;
+  /* ── input-schema typed run form (ws-model-workbench, usage-only) ── */
+  .mdl-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 0.7rem 0.9rem;
+    margin: 0.55rem 0 0.2rem;
   }
-  .mdl-placeholder > svg { width: 18px; height: 18px; color: var(--ink-4); flex-shrink: 0; margin-top: 0.1rem; }
-  .mdl-placeholder p { font-size: 0.82rem; line-height: 1.55; color: var(--ink-3); margin: 0; }
+  .mdl-field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+  .mdl-field-lbl {
+    font-size: 0.74rem; font-weight: 600; color: var(--ink-2);
+    display: flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap;
+  }
+  .mdl-field-lbl code { font-family: var(--font-mono); color: var(--navy-700); font-size: 0.94em; }
+  .mdl-field-type {
+    font-weight: 500; color: var(--ink-4); font-size: 0.64rem;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .mdl-field-req { color: var(--alert); font-weight: 700; }
+  .mdl-field input {
+    width: 100%;
+    font-family: var(--font-mono); font-size: 0.8rem;
+    border: 1px solid var(--border-2); border-radius: 8px;
+    background: var(--paper);
+    padding: 0.5rem 0.65rem;
+    color: var(--ink);
+  }
+  .mdl-field input:focus { outline: 2px solid var(--navy-500); outline-offset: -1px; }
+  .mdl-run-out {
+    margin-top: 0.65rem;
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 0.9rem;
+    overflow-x: auto;
+  }
+  .mdl-run-out-note { font-size: 0.76rem; color: var(--ink-3); margin: 0.55rem 0 0; }
 
   /* Toast — confirmation after a submit */
   .wk-toast {
@@ -1715,49 +1741,9 @@
   }
   .prj-card.active .prj-card-open { color: var(--navy-700); }
 
-  /* ws-model-monitoring · PSI bars + performance chart */
-  .ws-psi { display: flex; align-items: center; gap: 0.5rem; min-width: 160px; }
-  .ws-psi-track {
-    position: relative; flex: 1; height: 8px;
-    background: var(--navy-50);
-    border-radius: 4px; overflow: visible;
-  }
-  .ws-psi-fill { height: 100%; border-radius: 4px; min-width: 1px; }
-  .ws-psi-thr {
-    position: absolute; top: -3px; bottom: -3px; width: 2px;
-    background: var(--alert);
-    border-radius: 1px;
-  }
-  .ws-psi-val {
-    font-variant-numeric: tabular-nums;
-    font-size: 0.78rem; color: var(--ink-2); min-width: 3.2em; text-align: right;
-  }
-  .ws-perf-chart { margin: 0.4rem 0 0.8rem; max-width: 640px; }
-  .ws-perf-chart .ws-perf-title {
-    font-size: 0.82rem; font-weight: 600; color: var(--ink-2);
-    margin-bottom: 0.25rem;
-  }
-  /* Single-window metrics render as compact stat tiles, not a big empty chart. */
-  .ws-perf-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 0.7rem;
-  }
-  .ws-perf-stat {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--paper-2);
-    padding: 0.7rem 0.85rem;
-  }
-  .ws-perf-stat-val {
-    font-size: 1.5rem; font-weight: 700; line-height: 1;
-    font-variant-numeric: tabular-nums lining-nums; letter-spacing: -0.02em;
-  }
-  .ws-perf-stat-lbl {
-    font-size: 0.8rem; font-weight: 600; color: var(--ink-2);
-    margin-top: 0.3rem; text-transform: uppercase; letter-spacing: 0.03em;
-  }
-  .ws-perf-stat-sub { font-size: 0.72rem; color: var(--ink-3); margin-top: 0.15rem; }
+  /* ws-model-monitoring / ws-model-results CSS (PSI bars, perf tiles) RETIRED
+     2026-07-14 — model health/drift/performance is an admin-only surface; both
+     widgets were archived and the workshop Models page is now usage-only. */
 
   /* ws-project-artifacts · compact rows */
   .ws-proj-art {

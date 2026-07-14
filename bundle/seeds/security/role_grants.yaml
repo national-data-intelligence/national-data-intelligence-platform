@@ -250,8 +250,6 @@
     - ws-datasets-table
     - ws-models-table
     - ws-model-workbench
-    - ws-model-monitoring
-    - ws-model-results
     - ws-projects-table
     - ws-project-detail
     - ws-project-files
@@ -283,8 +281,6 @@
     - ws-datasets-table
     - ws-models-table
     - ws-model-workbench
-    - ws-model-monitoring
-    - ws-model-results
     - ws-projects-table
     - ws-project-detail
     - ws-project-files
@@ -316,8 +312,6 @@
     - ws-datasets-table
     - ws-models-table
     - ws-model-workbench
-    - ws-model-monitoring
-    - ws-model-results
     - ws-projects-table
     - ws-project-detail
     - ws-project-files
@@ -383,8 +377,6 @@
     workshop:
     - ws-datasets-table
     - ws-models-table
-    - ws-model-monitoring
-    - ws-model-results
     - ws-help-guides
     - ws-settings-profile
 - role: R-OPS-ENG
@@ -454,8 +446,6 @@
     - ws-datasets-table
     - ws-models-table
     - ws-model-workbench
-    - ws-model-monitoring
-    - ws-model-results
     - ws-projects-table
     - ws-project-detail
     - ws-project-files

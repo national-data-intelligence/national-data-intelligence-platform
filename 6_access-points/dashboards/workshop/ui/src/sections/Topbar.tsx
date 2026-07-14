@@ -18,7 +18,7 @@ function initials(name: string): string {
 const PAGE_DESC: Record<string, string> = {
   Workspace: 'Your projects, compute and community at a glance. Open a lab, build a dataset, or pick up where you left off.',
   Datasets:  'Build governed datasets from the marts and manage the ones you have generated.',
-  Models:    'Browse the model catalogue, inspect performance and run predictions.',
+  Models:    'Browse the model catalogue, read each model’s input/output schema and run one on your own inputs.',
   Projects:  'Create, manage, and collaborate on data science projects.',
   Community: 'Groups share artifacts at the shared tier. Manage invitations, requests and memberships.',
   Help:      'How-to guides and reference for working in the workshop.',
