@@ -292,8 +292,8 @@ async def decide_access_request(
         prov_status = "provisioned"
 
     if note is None and provisioning:
-        note = (f"Provisioned {granted_role} · set-password email "
-                f"{'sent' if provisioning['emailed'] else 'FAILED — check SMTP'}")
+        note = (f"Provisioned {granted_role}. Set-password email "
+                f"{'sent to the applicant' if provisioning['emailed'] else 'could not be sent (email delivery is unavailable)'}")
 
     async with pool.acquire() as conn:
         result = await conn.fetchrow("""

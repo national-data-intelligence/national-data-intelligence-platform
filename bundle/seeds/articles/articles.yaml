@@ -9,7 +9,7 @@ articles:
     category: PHEM
     author: EPHI Surveillance
     date: 2026-06-14
-    title: Cholera outbreak response — Somali Region update (Week 24)
+    title: Cholera outbreak response: Somali Region update (Week 24)
     tags: [cholera, outbreak, Somali]
     summary: >-
       Rapid response teams have been deployed to four woredas in Somali Region.
@@ -28,7 +28,7 @@ articles:
     tags: [HSDIP, policy, consultation]
     summary: >-
       The Federal Ministry of Health begins national consultations for the
-      Health Sector Development & Investment Plan (2023/24–2030), focusing on
+      Health Sector Development & Investment Plan (2023/24 to 2030), focusing on
       quality, equity, and digital health.
     body: |
       <p>His Excellency the Minister of Health officially launched the consultation process for the Health Sector Development and Investment Plan (HSDIP) today at the Skylight Hotel in Addis Ababa.</p>
@@ -39,7 +39,7 @@ articles:
     category: Advisory
     author: EPI Directorate
     date: 2026-06-08
-    title: Routine immunization campaign — June 16–22
+    title: Routine immunization campaign: June 16 to 22
     tags: [immunisation, Penta3, pastoralist]
     linked_widget: pub-region
     summary: >-
@@ -47,7 +47,7 @@ articles:
       pastoralist regions. Caregivers are encouraged to visit their nearest
       health post.
     body: |
-      <p>The Expanded Programme on Immunization (EPI) is conducting a one-week catch-up campaign across Afar, Somali, Benishangul-Gumuz, and Gambella regions from <strong>16–22 June 2026</strong>.</p>
+      <p>The Expanded Programme on Immunization (EPI) is conducting a one-week catch-up campaign across Afar, Somali, Benishangul-Gumuz, and Gambella regions from <strong>16 to 22 June 2026</strong>.</p>
       <p>Antigens included: BCG, Penta1-3, MCV1, MCV2, IPV, PCV, rotavirus. The campaign uses outreach teams covering 412 sites including health posts, mobile clinics, and school grounds.</p>
       <p>Caregivers are encouraged to bring their child's immunization card. Lost cards can be reissued at the site.</p>
 
@@ -77,7 +77,7 @@ articles:
       rolled out to 142 more primary health centres, bringing total coverage to
       511 facilities across 11 regions.
     body: |
-      <p>The Federal Ministry of Health announced today the expansion of the HEARTS programme — a WHO-led standardised approach to managing hypertension in primary care — to <strong>142 additional health centres</strong>.</p>
+      <p>The Federal Ministry of Health announced today the expansion of the HEARTS programme, a WHO-led standardised approach to managing hypertension in primary care, to <strong>142 additional health centres</strong>.</p>
       <p>The expansion targets areas where HTN screening coverage has been below 30%. Each facility receives a kit including digital BP monitors, validated training, simplified treatment protocols, and a 6-month medication starter package.</p>
       <p>This brings total HEARTS coverage to 511 health centres across 11 regions, on track for the HSDIP target of 600 centres by end of 2026.</p>
 
@@ -85,7 +85,7 @@ articles:
     category: Advisory
     author: EFDA
     date: 2026-05-22
-    title: Cold-chain integrity advisory — BCG lot 2024-LOT-39812
+    title: Cold-chain integrity advisory: BCG lot 2024-LOT-39812
     tags: [cold chain, safety, EPI]
     summary: >-
       EFDA issued an advisory regarding cold-chain temperature excursions
@@ -107,7 +107,7 @@ articles:
       outbreak forecasting model providing weekly woreda-level alarm
       probabilities for cholera, malaria, and dengue.
     body: |
-      <p>The Public Health Institute, in partnership with EPHI, has formally deployed <strong>EWARS+</strong> — an extension of the WHO EWARS framework that integrates rainfall, temperature, and humidity data with surveillance reporting.</p>
+      <p>The Public Health Institute, in partnership with EPHI, has formally deployed <strong>EWARS+</strong>, an extension of the WHO EWARS framework that integrates rainfall, temperature, and humidity data with surveillance reporting.</p>
       <p>The model produces weekly alarm probabilities at woreda level for cholera, malaria, dengue, and meningitis. Probabilities are published every Monday and feed directly into PHEM's weekly bulletin.</p>
       <p>Initial validation shows a lead time of 2-3 weeks ahead of outbreak confirmation, with sensitivity 78% and specificity 84% across the 2024-2025 retrospective dataset.</p>
 
