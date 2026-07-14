@@ -2,16 +2,18 @@
  * Widget · pub-articles — Articles "newsroom" (page "articles").
  *
  * Design (2026-07-14 redesign): the heavy dark navy hero "island" is gone. The
- * page now opens like the rest of the public site — a LIGHT editorial masthead
+ * page opens like the rest of the public site — a LIGHT editorial masthead
  * (eyebrow + serif title + one quiet intro line, mirroring the Open Data page) →
- * a FEATURED LEAD laid out as a light card: a large serif headline + dek + byline
- * beside a slim "more featured" rail that swaps the lead (no dark box, no carousel
- * dots) → a small "All articles" list header → the unified filter bar → a
- * three-column card GRID → numbered pagination. Everything shares one flush left
- * edge. Real data via useArticles (CMS); reads setPage/setArticle from the host.
- * Restrained slate/ink neutrals + one deep-teal accent; borderless soft cards.
+ * a FEATURED SLIDESHOW: a compact light card (~half the old lead height, no
+ * coloured top border) with a headline column on the left and a big, story-fitting
+ * icon on the right, auto-advancing through the newest few with prev/next + dots
+ * (the old "more featured" rail is gone) → a small "All articles" list header →
+ * the unified filter bar → a three-column card GRID → numbered pagination.
+ * Everything shares one flush left edge. Real data via useArticles (CMS); reads
+ * setPage/setArticle from the host. Restrained slate/ink neutrals + one deep-teal
+ * accent; borderless soft cards.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { ARTICLE_CATEGORIES, type Article } from '../../data/articles';
 import { useArticles } from '../../hooks/useArticles';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
@@ -53,6 +55,23 @@ function catTone(category: string): string {
   return 'navy';
 }
 
+/** A large, story-fitting sprite icon for the featured slide, inferred from the
+ *  article's category / tags / title. Falls back to a public-notice megaphone.
+ *  Most specific themes first (a BCG cold-chain notice is immunization, not just
+ *  "advisory"). Icons all exist in static/assets/icons.html. */
+function storyIcon(a: Article): string {
+  const s = `${a.category} ${a.tags.join(' ')} ${a.title}`.toLowerCase();
+  if (/immuni[sz]|vaccin|\bepi\b|\bbcg\b|measles|polio|\bmr\b|campaign/.test(s)) return 'i-syringe';
+  if (/cold.?chain|cold chain|temperature|thermo|storage/.test(s))              return 'i-thermo';
+  if (/hearts|hypertension|cardio|\bncd\b|\bheart\b|stroke/.test(s))            return 'i-heart';
+  if (/cholera|outbreak|epidemic|influenza|\bavian\b|virus|zoonot|dengue/.test(s)) return 'i-virus';
+  if (/nutrition|feeding|\bfood\b|stunting|wasting|\biycf\b/.test(s))           return 'i-pill';
+  if (/research|study|surveil|labor|\blab\b|analys|evidence|diagnos/.test(s))   return 'i-microscope';
+  if (/alert|advis|warn|emergenc|\bphem\b|preparedness/.test(s))                return 'i-alert';
+  if (/strateg|\bplan\b|policy|framework|invest|\bhsdip\b|\bhstp\b/.test(s))    return 'i-policy';
+  return 'i-megaphone';
+}
+
 /** Days between an ISO date and today (approximate; used by the date-range filter). */
 function ageDays(iso: string): number {
   const t = Date.parse(iso);
@@ -75,7 +94,17 @@ function Articles({ host }: { host: PublicHost }) {
   const featured = useMemo(
     () => [...ART].sort((a, b) => b.date.localeCompare(a.date)).slice(0, FEATURED),
     [ART]);
-  const feat = featured[featIdx % Math.max(1, featured.length)] || null;
+  const slideCount = featured.length;
+  const feat = featured[featIdx % Math.max(1, slideCount)] || null;
+  const goSlide = (i: number) => setFeatIdx((i + slideCount) % Math.max(1, slideCount));
+
+  // Gentle auto-advance through the featured slides; any manual nav resets the
+  // timer (featIdx is a dep) and it stops when there is a single slide.
+  useEffect(() => {
+    if (slideCount < 2) return;
+    const id = setInterval(() => setFeatIdx(i => (i + 1) % slideCount), 7000);
+    return () => clearInterval(id);
+  }, [slideCount, featIdx]);
 
   const topics = useMemo(
     () => Array.from(new Set(ART.flatMap(a => a.tags.map(t => t.trim()).filter(Boolean)))).sort(),
@@ -146,50 +175,57 @@ function Articles({ host }: { host: PublicHost }) {
           </p>
         </header>
 
-        {/* Featured lead — a light editorial block (no dark island) */}
+        {/* Featured slideshow — a light card: headline column + a big story icon,
+            cycling through the newest few (auto-advance + dots, no dark island) */}
         {feat && (
-          <article className="nw-lead">
-            <div className="nw-lead-main">
-              <p className="nw-lead-kicker">
-                <span className="nw-lead-flag">Featured</span>
-                <span className={`nw-tag nw-tag--${catTone(feat.category)}`}>{feat.category}</span>
-              </p>
-              <h2 className="nw-lead-h2">
-                <button className="nw-lead-title" onClick={() => open(feat)}>{feat.title}</button>
-              </h2>
-              <p className="nw-lead-dek">{feat.summary || excerpt(feat.body, 240)}</p>
-              <div className="nw-lead-meta">
-                {feat.author && (
-                  <span className="nw-lead-by"><svg className="ico"><use href="#i-user" /></svg>{feat.author}</span>
-                )}
-                <span className="nw-lead-fact"><svg className="ico"><use href="#i-calendar" /></svg>{fmtDate(feat.date)}</span>
-                <span className="nw-lead-fact"><svg className="ico"><use href="#i-clock" /></svg>{readMins(feat.body)} min read</span>
+          <div className="nw-slideshow" aria-roledescription="carousel" aria-label="Featured articles">
+            <article className="nw-slide" key={feat.id}>
+              <div className="nw-slide-main">
+                <p className="nw-slide-kicker">
+                  <span className="nw-slide-flag">Featured</span>
+                  <span className={`nw-tag nw-tag--${catTone(feat.category)}`}>{feat.category}</span>
+                </p>
+                <h2 className="nw-slide-h2">
+                  <button className="nw-slide-title" onClick={() => open(feat)}>{feat.title}</button>
+                </h2>
+                <p className="nw-slide-dek">{feat.summary || excerpt(feat.body, 170)}</p>
+                <div className="nw-slide-meta">
+                  {feat.author && (
+                    <span className="nw-slide-by"><svg className="ico"><use href="#i-user" /></svg>{feat.author}</span>
+                  )}
+                  <span className="nw-slide-fact"><svg className="ico"><use href="#i-calendar" /></svg>{fmtDate(feat.date)}</span>
+                  <span className="nw-slide-fact"><svg className="ico"><use href="#i-clock" /></svg>{readMins(feat.body)} min read</span>
+                </div>
+                <button className="nw-slide-btn" onClick={() => open(feat)}>
+                  Read article <svg className="ico"><use href="#i-arrow-right" /></svg>
+                </button>
               </div>
-              <button className="nw-lead-btn" onClick={() => open(feat)}>
-                Read article <svg className="ico"><use href="#i-arrow-right" /></svg>
-              </button>
-            </div>
 
-            {featured.length > 1 && (
-              <aside className="nw-lead-rail" aria-label="More featured articles">
-                <p className="nw-lead-rail-lbl">More featured</p>
-                <ol className="nw-lead-list">
+              <div className={`nw-slide-art nw-slide-art--${catTone(feat.category)}`} aria-hidden="true">
+                <svg className="nw-slide-ico"><use href={`#${storyIcon(feat)}`} /></svg>
+              </div>
+            </article>
+
+            {slideCount > 1 && (
+              <div className="nw-slide-nav">
+                <button className="nw-slide-arrow" onClick={() => goSlide(featIdx - 1)} aria-label="Previous featured article">
+                  <svg className="ico nw-slide-arrow-prev"><use href="#i-chevron-right" /></svg>
+                </button>
+                <span className="nw-slide-dots" role="tablist">
                   {featured.map((f, i) => (
-                    <li key={f.id}>
-                      <button
-                        className={`nw-lead-item${i === featIdx % featured.length ? ' is-on' : ''}`}
-                        aria-current={i === featIdx % featured.length ? 'true' : undefined}
-                        onClick={() => setFeatIdx(i)}>
-                        <span className={`nw-lead-item-tag nw-tag--${catTone(f.category)}`}>{f.category}</span>
-                        <span className="nw-lead-item-title">{f.title}</span>
-                        <span className="nw-lead-item-date">{fmtDate(f.date)}</span>
-                      </button>
-                    </li>
+                    <button key={f.id}
+                            className={`nw-slide-dot${i === featIdx % slideCount ? ' is-on' : ''}`}
+                            aria-label={`Show featured article ${i + 1}`}
+                            aria-current={i === featIdx % slideCount ? 'true' : undefined}
+                            onClick={() => goSlide(i)} />
                   ))}
-                </ol>
-              </aside>
+                </span>
+                <button className="nw-slide-arrow" onClick={() => goSlide(featIdx + 1)} aria-label="Next featured article">
+                  <svg className="ico"><use href="#i-chevron-right" /></svg>
+                </button>
+              </div>
             )}
-          </article>
+          </div>
         )}
 
         {/* List header */}

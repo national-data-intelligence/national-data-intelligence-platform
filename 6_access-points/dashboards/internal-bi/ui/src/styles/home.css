@@ -1044,7 +1044,7 @@
   }
 
   /* ═══ Page body within main · balanced left/right padding (more breathing room off both edges) ═══ */
-  .bi-pageframe { padding: 1.4rem 3.6rem 3rem 3.6rem; }
+  .bi-pageframe { padding: 1.4rem 4.4rem 3rem 4.4rem; } /* shared 4.4rem left/right content margin */
 
   /* ═══ Fine grid backdrop for the Ethiopia maps · applied via .map-graticule on the chart host ═══ */
   .map-graticule {

@@ -7,7 +7,7 @@
   /* Shared horizontal page gutter — topbar, hero, main sections and footer all
      use var(--pub-gutter) inside a max-width:1600 centered box, so every band is
      FLUSH left+right. Doubled from the old 1.6rem; fluid so mobile stays sane. */
-  --pub-gutter: clamp(1.8rem, 5.2vw, 4.2rem);
+  --pub-gutter: clamp(1.8rem, 5.2vw, 4.4rem);  /* cap aligned to the shared 4.4rem content margin */
   /* ── Theme: deep institutional NAVY BLUE over clean white main. ──
      The `navy-*` names are now genuine dark navy (not charcoal); the deep
      stops are pushed darker for the hero / gov-bar / footer gravitas. Every

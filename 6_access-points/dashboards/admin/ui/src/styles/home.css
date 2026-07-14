@@ -247,7 +247,9 @@
     background: var(--bg);
   }
   .admin-pageframe {
-    padding: 0.4rem 2.2rem 2.5rem;
+    /* content gutter doubled (2.2rem → 4.4rem) and aligned to the shared 4.4rem
+       left/right content margin used across every dashboard */
+    padding: 0.4rem 4.4rem 2.5rem;
     max-width: 1500px;
     min-width: 0;
     width: 100%;
