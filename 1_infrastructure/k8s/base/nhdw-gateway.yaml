@@ -61,6 +61,11 @@ spec:
             # only downgrades if the host lacks the 14b weights. Baked here so a
             # gateway redeploy never silently reverts to the code fallback.
             - { name: NHDW_LLM_MODEL, value: "qwen2.5:14b" }
+            # Keep the model resident in VRAM across demo-length idle gaps. The
+            # per-request keep_alive overrides Ollama's own 30m, so without this the
+            # 11GB model unloads after 30m and the next call cold-loads (~15-20s) —
+            # which surfaces to the SPA as a misleading "model unreachable".
+            - { name: NHDW_LLM_KEEP_ALIVE, value: "24h" }
             - { name: OPS_PG_HOST,    value: "postgres-vault.nhdw.svc.cluster.local" }
             - { name: OPS_PG_PORT,    value: "5432" }
             - { name: OPS_PG_DATABASE, value: "nhdw_ops" }

@@ -37,7 +37,7 @@ services:
       # Keep the loaded model resident between turns (matches the gateway's
       # per-request keep_alive default in routes/chat.py) so a 14b answer never
       # pays cold-reload latency mid-demo.
-      OLLAMA_KEEP_ALIVE: "30m"
+      OLLAMA_KEEP_ALIVE: "24h"   # keep the model resident across demo idle gaps (no cold VRAM reloads)
     ports:
       - "11434:11434"        # 0.0.0.0 — reachable from k3d pods via host.k3d.internal
     volumes:
