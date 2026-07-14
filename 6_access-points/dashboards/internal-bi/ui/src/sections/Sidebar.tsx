@@ -46,10 +46,7 @@ export default function Sidebar() {
         </a>
       </div>
 
-      <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
-        color: 'rgba(255,255,255,0.4)', margin: '1rem 0 0.4rem' }}>Dashboards</div>
-
-      <nav className="bi-nav">
+      <nav className="bi-nav" style={{ marginTop: '1rem' }}>
         {visible.map(p => (
           <a key={p.id} className={state.active === p.id ? 'active' : undefined} onClick={() => setActive(p.id)}>
             <svg className="ico"><use href={'#' + p.ico} /></svg>

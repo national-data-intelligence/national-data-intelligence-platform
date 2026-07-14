@@ -17,8 +17,8 @@
     display: flex; align-items: center; gap: 0.4rem;
   }
   .admin-topbar .tb-title h2 {
-    font-family: var(--font-serif);
-    font-size: 1.6rem; font-weight: 600;
+    font-family: var(--font-sans);
+    font-size: 1.6rem; font-weight: 800;
     color: var(--ink); margin: 0;
     line-height: 1.1;
   }

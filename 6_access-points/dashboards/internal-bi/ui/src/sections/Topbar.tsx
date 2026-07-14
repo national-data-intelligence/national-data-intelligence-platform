@@ -53,7 +53,7 @@ export default function Topbar() {
           <span aria-hidden="true" style={{ opacity: 0.55 }}>›</span>
           <span>{title}</span>
         </div>
-        <h2 style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{title}</h2>
+        <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1 }}>{title}</h2>
         {subtitle && (
           <p style={{ margin: '0.2rem 0 0', fontSize: '0.92rem', fontWeight: 500, color: 'var(--ink-3)' }}>{subtitle}</p>
         )}

@@ -809,7 +809,16 @@
     display: flex; flex-direction: column; gap: 0.7rem;
     background: linear-gradient(180deg, #fafafa 0%, #ffffff 100%);
   }
-  .ai-msg { max-width: 86%; line-height: 1.45; font-size: 0.86rem; }
+  .ai-msg { max-width: 86%; min-width: 0; line-height: 1.45; font-size: 0.86rem; overflow-wrap: anywhere; }
+  /* fenced code the bot emits (```sql …```) — wrap long lines instead of
+     overflowing the chat panel horizontally */
+  .ai-code {
+    display: block; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%;
+    background: #14171f; color: #f4f4f5; font-family: var(--font-mono, monospace);
+    font-size: 0.74rem; line-height: 1.4; padding: 0.5rem 0.65rem; border-radius: 6px;
+    margin: 0.35rem 0;
+  }
+  .ai-msg pre, .ai-msg code { max-width: 100%; overflow-wrap: anywhere; }
   .ai-msg.bot {
     background: #f1f3f7;
     color: var(--ink);
