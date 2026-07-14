@@ -121,6 +121,7 @@ export default function ChatbotPanel() {
   const driveStep = useCallback(async (sessionId: string, step: Step): Promise<void> => {
     if (step.kind === 'answer') {
       setTurns(t => [...t, { who: 'bot', text: step.answer, tool_calls: step.tool_calls }]);
+      maybeInjectSql(step.answer);
       return;
     }
     // SPA-executor tool call.
@@ -257,6 +258,30 @@ export default function ChatbotPanel() {
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Deterministic SQL auto-inject. qwen frequently writes the query as a ```sql
+ *  block in prose (or claims it "placed the query") WITHOUT calling
+ *  write_widget_input. If the assistant's answer carries a SELECT/WITH statement,
+ *  drop it straight into the Data Export editor — navigating to that page first and
+ *  waiting for the editor to mount — so "add the sql to the query editor" always
+ *  works regardless of the model's tool discipline. */
+function maybeInjectSql(answer: string): void {
+  const m = /```(?:sql)?\s*([\s\S]*?)```/i.exec(answer || '');
+  const sql = (m ? m[1] : '').trim();
+  if (!sql || !/^\s*(with|select)\b/i.test(sql)) return;
+  const api = window.__nhdwDashboard as DashboardApi | undefined;
+  if (!api || typeof api.write_widget_input !== 'function') return;
+  const editorHere = () => !!document.querySelector('[data-widget-input="ex-sql-editor"]');
+  const inject = () => { try { api.write_widget_input({ widget_id: 'ex-sql-editor', value: sql }); } catch { /* no-op */ } };
+  if (editorHere()) { inject(); return; }
+  // Not on the Data Export page yet — navigate there, then inject once it mounts.
+  try { api.navigate_to_page?.({ page_id: 'export' }); } catch { /* no-op */ }
+  let tries = 0;
+  const iv = window.setInterval(() => {
+    if (editorHere()) { inject(); window.clearInterval(iv); }
+    else if (++tries > 25) window.clearInterval(iv);   // give up after ~2.5s
+  }, 100);
 }
 
 // Minimal, XSS-safe markdown for assistant messages: escape first, THEN apply
