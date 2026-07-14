@@ -123,11 +123,17 @@ const def: WidgetDef = {
 
     ctx.el.innerHTML = `
       <style>
+        /* Flatten the dashboard card frame for this article: no border, no
+         * shadow, no card padding, so the guide reads as plain page content
+         * (owner: remove the heavy card style around the whole content area). */
+        .widget-card:has(.hg-wrap) {
+          background: transparent !important; border: none !important;
+          box-shadow: none !important; padding: 0 !important; overflow: visible !important;
+        }
         .hg-wrap {
-          display: grid; gap: 2.4rem;
-          grid-template-columns: minmax(0, 74ch) 200px;
+          display: grid; gap: 3rem;
+          grid-template-columns: minmax(0, 1fr) 208px;
           align-items: start; scroll-behavior: smooth;
-          max-width: 1040px; margin: 0 auto;
         }
         .hg-article { min-width: 0; }
         .hg-hero { margin: 0 0 2rem; }
@@ -141,7 +147,7 @@ const def: WidgetDef = {
           font-size: 2.15rem; line-height: 1.1; letter-spacing: -0.015em;
           color: ${theme.ink[0]}; margin: 0 0 0.7rem; text-wrap: balance;
         }
-        .hg-lede { font-size: 1.02rem; line-height: 1.6; color: ${theme.ink[1]}; margin: 0; max-width: 62ch; }
+        .hg-lede { font-size: 1.05rem; line-height: 1.62; color: ${theme.ink[1]}; margin: 0; max-width: 82ch; }
         .hg-section { padding: 1.9rem 0; border-top: 1px solid var(--border); scroll-margin-top: 1.5rem; }
         .hg-section:first-of-type { border-top: none; padding-top: 0.4rem; }
         .hg-h2 {

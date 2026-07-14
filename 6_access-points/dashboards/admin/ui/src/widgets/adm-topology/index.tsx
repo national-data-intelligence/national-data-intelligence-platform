@@ -276,7 +276,7 @@ function AuditTab() {
   return (
     <>
       <p className="muted" style={{ marginTop: 0, fontSize: '0.78rem' }}>
-        The API-gateway request audit (<code>ops_audit.gateway_log</code>) — who
+        The API-gateway request audit (<code>ops_audit.gateway_log</code>): who
         accessed what, and the OPA policy decision. Consolidated here from the
         retired standalone Audit-logs page. Latest 100 events.
       </p>
@@ -509,11 +509,11 @@ function Infra() {
     <section>
       <style>{TOPO_FE_CSS}</style>
       <p className="page-lede">
-        Live <strong>system topology</strong> — every deployed application workload and the wiring
+        Live <strong>system topology</strong>: every deployed application workload and the wiring
         between them, auto-derived from the cluster. Nodes are coloured by health; edges that carry
         real gateway traffic animate (speed ∝ request rate). Click a node or edge for detail. The{' '}
         <a href="/oauth2gate/login?realm=privileged-ops&rd=/k8s/" target="_blank" rel="noreferrer"><strong>Cluster console</strong></a> (Headlamp,
-        SSO-gated) is the raw-Kubernetes escape hatch — edit, scale and exec where this page reads.
+        SSO-gated) is the raw-Kubernetes escape hatch: edit, scale and exec where this page reads.
       </p>
 
       {/* ── rich summary: cluster-health donut, host gauges, tier, traffic, live cluster capacity ── */}
@@ -538,20 +538,20 @@ function Infra() {
             <a className="btn btn-sm btn-ghost"
                href="https://prometheus.127.0.0.1.nip.io/oauth2gate/login?realm=privileged-ops&rd=/"
                target="_blank" rel="noreferrer" data-testid="prometheus-btn"
-               title="Prometheus — metrics store & query UI (SSO-gated)">
+               title="Prometheus: metrics store & query UI (SSO-gated)">
               <svg className="ico ico-sm"><use href="#i-pulse" /></svg> Prometheus ↗
             </a>
             <a className="btn btn-sm btn-ghost"
                href="https://alertmanager.127.0.0.1.nip.io/oauth2gate/login?realm=privileged-ops&rd=/"
                target="_blank" rel="noreferrer" data-testid="alertmanager-btn"
-               title="Alertmanager — alert routing & silences (SSO-gated)">
+               title="Alertmanager: alert routing & silences (SSO-gated)">
               <svg className="ico ico-sm"><use href="#i-bell" /></svg> Alertmanager ↗
             </a>
             {/* #57: the raw-Kubernetes escape hatch — SSO-gated Headlamp */}
             <a className="btn btn-sm"
                href="/oauth2gate/login?realm=privileged-ops&rd=/k8s/"
                target="_blank" rel="noreferrer" data-testid="cluster-console-btn"
-               title="Headlamp — edit/scale/exec on nhdw workloads (SSO-gated)">
+               title="Headlamp: edit/scale/exec on nhdw workloads (SSO-gated)">
               <svg className="ico ico-sm"><use href="#i-tools" /></svg> Cluster console ↗
             </a>
           </span>
@@ -597,7 +597,7 @@ function Infra() {
         <div className="topo-detail">
           {!sel && (
             <p className="muted" style={{ margin: 0 }}>
-              Select a node to inspect its identity, health and connections — or an edge to see its traffic.
+              Select a node to inspect its identity, health and connections, or an edge to see its traffic.
             </p>
           )}
 
@@ -689,7 +689,7 @@ function Infra() {
                           ready {detail?.replicas ? `${detail.replicas.ready}/${detail.replicas.desired}` : `${ready ?? '?'}/${desired ?? '?'}`}
                         </span>
                       </div>
-                      {n.phantom && <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>Declared in the manifests but no live pod was found — the workload is not currently deployed.</p>}
+                      {n.phantom && <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>Declared in the manifests but no live pod was found. The workload is not currently deployed.</p>}
                       {detail && !detail.error && !n.phantom && (
                         <dl className="topo-dl" style={{ marginTop: '0.2rem' }}>
                           <dt><Ico n="refresh" />Restarts</dt><dd className={detail.restarts > 0 ? 'watch' : ''}>{detail.restarts ?? '—'}</dd>
@@ -921,7 +921,7 @@ function Infra() {
                   </>
                 ) : (
                   <p className="muted" style={{ margin: '0.4rem 0 0', fontSize: '0.82rem' }}>
-                    Structural edge — declared wiring with no measured flows in this window.
+                    Structural edge: declared wiring with no measured flows in this window.
                     Traffic sources: <code>gateway_log</code> (HTTP RED on gateway edges) and
                     <code>hubble</code> (CNI-level flows on everything else, incl. lab pods).
                   </p>

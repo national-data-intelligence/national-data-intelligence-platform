@@ -33,7 +33,7 @@ export default function AlertModal() {
         body: JSON.stringify({ disease, geography, metric: 'alarm_probability', op: '>=', threshold, cadence }),
       });
       if (!r.ok) { const j = await r.json().catch(() => ({})); setMsg(j.detail || `Could not subscribe (${r.status}).`); }
-      else { setMsg('✓ Subscribed — you’ll be emailed when this alert fires.'); await app.loadAlertSubs(); }
+      else { setMsg('✓ Subscribed. You’ll be emailed when this alert fires.'); await app.loadAlertSubs(); }
     } catch { setMsg('Network error creating the subscription.'); }
     finally { setBusy(false); }
   }
@@ -56,7 +56,7 @@ export default function AlertModal() {
       <div className="modal" style={{ maxWidth: '640px' }}>
         <div className="modal-hdr">
           <h2><svg className="ico"><use href="#i-bell" /></svg> Alert subscriptions</h2>
-          <p>Get an email when alarm probability crosses your threshold — sent to your own account.</p>
+          <p>Get an email when alarm probability crosses your threshold, sent to your own account.</p>
         </div>
         <div className="modal-body">
 
@@ -137,7 +137,7 @@ export default function AlertModal() {
                 ))}
               </div>
             ) : (
-              <p className="muted text-sm">No subscriptions yet — set the scope above and click Subscribe.</p>
+              <p className="muted text-sm">No subscriptions yet. Set the scope above and click Subscribe.</p>
             )}
           </div>
 

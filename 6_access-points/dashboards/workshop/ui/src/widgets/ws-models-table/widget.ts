@@ -54,8 +54,8 @@ async function draw(ctx: WidgetCtx) {
 
   if (!models.length) {
     ctx.empty(mlErr
-      ? `Could not load the model registry — ${mlErr}`
-      : 'The registry is empty — models appear once a package is trained and registered by the ML runner.');
+      ? `Could not load the model registry: ${mlErr}`
+      : 'The registry is empty. Models appear once a package is trained and registered by the ML runner.');
     return;
   }
 

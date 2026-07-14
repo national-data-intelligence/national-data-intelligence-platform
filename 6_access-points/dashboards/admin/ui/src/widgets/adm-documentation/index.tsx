@@ -53,22 +53,22 @@ function currentRoles(): string[] {
  *  (omitted ⇒ every role that can see this admin page may use the tool). */
 const TOOLS: Array<{ name: string; ico: string; desc: string; url: string; auth: string; roles?: string[] }> = [
   { name: 'dbt Docs',      ico: 'i-database', desc: 'Model lineage graph, column-level docs and the compiled DAG for every staging, vault and mart model.', url: `https://dbt-docs.127.0.0.1.nip.io/?realm=${REALM}`, auth: 'OIDC · Keycloak' },
-  { name: 'Airflow',       ico: 'i-refresh',  desc: 'Pipeline & ML batch-inference orchestrator — DAG runs, task logs and schedules.', url: 'https://airflow.127.0.0.1.nip.io/', auth: 'OIDC · Keycloak' },
+  { name: 'Airflow',       ico: 'i-refresh',  desc: 'Pipeline & ML batch-inference orchestrator: DAG runs, task logs and schedules.', url: 'https://airflow.127.0.0.1.nip.io/', auth: 'OIDC · Keycloak' },
   // MLflow's gate excludes the security-officer role (R-OPS-SEC) — hide the tile
   // for it so it never 403s (gate ALLOWED_ROLES: R-CONS-*, R-OPS-ADM, R-SUPER).
   { name: 'MLflow',        ico: 'i-microscope', desc: 'Experiment tracking, the model registry and run artifacts for the workshop ML packages.', url: `https://mlflow.127.0.0.1.nip.io/oauth2gate/login?realm=${REALM}&rd=/`, auth: 'OIDC · Keycloak', roles: ['R-OPS-ADM', 'R-SUPER'] },
-  { name: 'MinIO Console', ico: 'i-folder',   desc: 'Browse the data lake and the nhdw-docs bucket — objects, manifests and ingest sidecars.', url: 'https://minio-console.127.0.0.1.nip.io/', auth: 'SSO · Keycloak' },
-  { name: 'Cluster console (Headlamp)', ico: 'i-tools', desc: 'Raw-Kubernetes control — edit/scale/exec on nhdw workloads (namespace edit), read-only elsewhere.', url: `/oauth2gate/login?realm=${REALM}&rd=/k8s/`, auth: 'OIDC · Keycloak (tool-gate)' },
+  { name: 'MinIO Console', ico: 'i-folder',   desc: 'Browse the data lake and the nhdw-docs bucket: objects, manifests and ingest sidecars.', url: 'https://minio-console.127.0.0.1.nip.io/', auth: 'SSO · Keycloak' },
+  { name: 'Cluster console (Headlamp)', ico: 'i-tools', desc: 'Raw-Kubernetes control: edit/scale/exec on nhdw workloads (namespace edit), read-only elsewhere.', url: `/oauth2gate/login?realm=${REALM}&rd=/k8s/`, auth: 'OIDC · Keycloak (tool-gate)' },
   { name: 'Prometheus',    ico: 'i-pulse',    desc: 'Metrics store and query UI for the observability plane the topology page reads from.', url: `https://prometheus.127.0.0.1.nip.io/oauth2gate/login?realm=${REALM}&rd=/`, auth: 'OIDC · Keycloak' },
   { name: 'Alertmanager',  ico: 'i-bell',     desc: 'Alert routing and silences for the Prometheus alert rules (see Alert routing page).', url: `https://alertmanager.127.0.0.1.nip.io/oauth2gate/login?realm=${REALM}&rd=/`, auth: 'OIDC · Keycloak' },
   // Jupyter is a moh-staff (workshop) tool; a privileged-ops operator can't
   // authenticate to it. Only R-SUPER spans both realms, so gate the tile to it
   // (its real home is the workshop dashboard's tools).
-  { name: 'Jupyter',       ico: 'i-notebook', desc: 'The workshop research sandbox — notebooks over the governed marts.', url: 'https://jupyter.127.0.0.1.nip.io/', auth: 'OIDC · Keycloak (moh-staff)', roles: ['R-SUPER'] },
+  { name: 'Jupyter',       ico: 'i-notebook', desc: 'The workshop research sandbox: notebooks over the governed marts.', url: 'https://jupyter.127.0.0.1.nip.io/', auth: 'OIDC · Keycloak (moh-staff)', roles: ['R-SUPER'] },
   // Superset is likewise a moh-staff analyst tool (self-service SQL/BI over the
   // marts via Trino). Same cross-realm gate as Jupyter — its home is the workshop.
   { name: 'Superset',      ico: 'i-chart-bar', desc: 'Self-service SQL Lab + no-code chart/dashboard building over the marts (Trino).', url: 'https://superset.127.0.0.1.nip.io/login/keycloak', auth: 'OIDC · Keycloak (moh-staff)', roles: ['R-SUPER'] },
-  { name: 'Keycloak',      ico: 'i-lock',     desc: 'Identity provider admin console — realms, clients, users and identity-provider wiring.', url: 'https://keycloak.127.0.0.1.nip.io/', auth: 'Keycloak admin' },
+  { name: 'Keycloak',      ico: 'i-lock',     desc: 'Identity provider admin console: realms, clients, users and identity-provider wiring.', url: 'https://keycloak.127.0.0.1.nip.io/', auth: 'Keycloak admin' },
 ];
 
 /** Minimal, dependency-free markdown → HTML for the in-app doc viewer. Handles
@@ -155,7 +155,7 @@ function Documentation() {
     <section className="doc-page">
       <p className="page-lede">
         The operator's reference: what this deployment is and how it's configured, where the API
-        contract lives, the system documentation (served from the data lake — open or download any
+        contract lives, the system documentation (served from the data lake, open or download any
         of them here), and every external tool one click away on your existing session.
       </p>
 
@@ -200,7 +200,7 @@ function Documentation() {
          style={{ display: 'flex', alignItems: 'center', gap: '.85rem', padding: '.7rem 1rem', textDecoration: 'none' }}>
         <svg className="ico" style={{ flex: 'none', color: 'var(--navy-500)' }}><use href="#i-code" /></svg>
         <span style={{ flex: 1, minWidth: 0 }} className="text-sm">
-          <strong>API reference</strong> — the gateway's full OpenAPI contract at <code>/docs</code>: every route,
+          <strong>API reference</strong>. The gateway's full OpenAPI contract at <code>/docs</code>: every route,
           with schemas and a try-it-out console, behind your session.
         </span>
         <span className="text-xs muted" style={{ flex: 'none' }}>FastAPI · Swagger</span>
@@ -214,7 +214,7 @@ function Documentation() {
         <div className="ps-hdr">
           <div>
             <h3 className="ps-title"><svg className="ico"><use href="#i-book" /></svg> System documentation</h3>
-            <p className="ps-sub">Served live from the data lake (<code>nhdw-docs</code>) — open any document in the viewer or download the file.</p>
+            <p className="ps-sub">Served live from the data lake (<code>nhdw-docs</code>). Open any document in the viewer or download the file.</p>
           </div>
         </div>
         {docsErr && <p className="text-xs" style={{ color: 'var(--alert)' }}>Documentation feed unavailable: {docsErr}</p>}
@@ -269,7 +269,7 @@ function Documentation() {
         <div className="ps-hdr">
           <div>
             <h3 className="ps-title"><svg className="ico"><use href="#i-tools" /></svg> Operator tools</h3>
-            <p className="ps-sub">External consoles, opened with your existing Keycloak session — no second login.</p>
+            <p className="ps-sub">External consoles, opened with your existing Keycloak session. No second login.</p>
           </div>
           <div className="ps-meta">realm · <strong>{REALM}</strong></div>
         </div>

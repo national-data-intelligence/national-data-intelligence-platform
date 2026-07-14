@@ -183,7 +183,7 @@ export function TablePager<T>({ kit }: { kit: TableKit<T> }) {
   const to = Math.min(kit.filteredTotal, kit.page * kit.pageSize);
   return (
     <div className="tk-pager">
-      <span className="muted">{from}–{to} of {kit.filteredTotal}</span>
+      <span className="muted">{from} to {to} of {kit.filteredTotal}</span>
       <span className="tk-spacer" />
       <button className="btn btn-sm btn-ghost" disabled={kit.page <= 1} onClick={() => kit.setPage(kit.page - 1)}>
         ‹ Prev

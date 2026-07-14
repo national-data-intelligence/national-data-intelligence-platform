@@ -258,7 +258,7 @@ export default function TopoSummary({ graph, infra, health, cluster }:
   return (
     <div className="topo-summary">
       <div className="topo-sum-card sp2">
-        <div className="topo-sum-hd" title="In-cluster Kubernetes workloads only — external dependencies are not nodes.">
+        <div className="topo-sum-hd" title="In-cluster Kubernetes workloads only. External dependencies are not nodes.">
           <span>Cluster health</span><span className="topo-sum-meta">{deployed || nodeTotal} in-cluster workloads</span>
         </div>
         <div ref={healthRef} className="topo-sum-chart" style={{ height: 150 }} />
@@ -282,7 +282,7 @@ export default function TopoSummary({ graph, infra, health, cluster }:
             <div ref={loadRef} className="topo-gauge" />
           </div>
         ) : (
-          <p className="topo-sum-empty">{host?.error ? `Host metrics unavailable — ${host.error}` : 'Host metrics loading…'}</p>
+          <p className="topo-sum-empty">{host?.error ? `Host metrics unavailable: ${host.error}` : 'Host metrics loading…'}</p>
         )}
         {host && !host.error && (
           <div className="topo-sum-foot">
@@ -293,7 +293,7 @@ export default function TopoSummary({ graph, infra, health, cluster }:
       </div>
 
       <div className="topo-sum-card sp2">
-        <div className="topo-sum-hd" title="User/browser requests entering the cluster through the gateway — internal pod-to-pod hops are excluded.">
+        <div className="topo-sum-hd" title="User/browser requests entering the cluster through the gateway. Internal pod-to-pod hops are excluded.">
           <span>Inbound traffic <span className="topo-sum-meta" style={{ fontWeight: 500 }}>· req/s</span></span>
           <span className="topo-sum-meta">{graph?.meta?.window ? `window ${graph.meta.window}` : 'live'}</span>
         </div>
@@ -306,7 +306,7 @@ export default function TopoSummary({ graph, infra, health, cluster }:
           <div className="topo-sum-kpi"><div className="v" style={{ color: traffic.errEdges ? tk.watch : tk.ink3 }}>{traffic.errEdges}</div><div className="l">edges w/ err</div></div>
         </div>
         {traffic.hasSeries ? <div ref={trafficRef} className="topo-sum-chart" style={{ height: 96 }} />
-          : <p className="topo-sum-empty">No inbound user traffic in this window — the gateway audit log
+          : <p className="topo-sum-empty">No inbound user traffic in this window. The gateway audit log
             (<code>ops_audit.gateway_log</code>) is the only real source on this mesh-less cluster. Open a dashboard to see it move.</p>}
       </div>
 
@@ -379,12 +379,12 @@ export default function TopoSummary({ graph, infra, health, cluster }:
                   {cluster.hpas.map(h => (
                     <div key={h.name} className="topo-hpa">
                       <span className="topo-hpa-name" title={h.name}>{h.target ?? h.name}</span>
-                      <span className="topo-hpa-rep"><strong>{h.current ?? '—'}</strong>→{h.desired ?? '—'}<em> / {h.min ?? '?'}–{h.max ?? '?'}</em></span>
+                      <span className="topo-hpa-rep"><strong>{h.current ?? '—'}</strong>→{h.desired ?? '—'}<em> / {h.min ?? '?'} to {h.max ?? '?'}</em></span>
                       <span className="topo-hpa-cpu">{h.currentCpuPct != null ? `${h.currentCpuPct}%` : '—'}{h.targetCpuPct != null ? ` / ${h.targetCpuPct}%` : ''}</span>
                     </div>
                   ))}
                 </div>
-              ) : <p className="topo-cluster-none">No HPAs — replicas are fixed. Scale live from a node's detail panel.</p>}
+              ) : <p className="topo-cluster-none">No HPAs. Replicas are fixed. Scale live from a node's detail panel.</p>}
               <p className="topo-sum-note">RED (req / err / latency) + history need the observability stack (#81).</p>
             </div>
           </div>

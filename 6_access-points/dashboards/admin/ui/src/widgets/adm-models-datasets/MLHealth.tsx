@@ -100,7 +100,7 @@ function PerfChart({ rows, metric }: { rows: ml.PerfRow[]; metric: string }) {
     return (
       <p className="mlh-chart-empty muted">
         {pts.length === 1
-          ? `Only one ${metric} window recorded so far — a trend needs at least two.`
+          ? `Only one ${metric} window recorded so far. A trend needs at least two.`
           : `No ${metric} windows recorded yet.`}
       </p>
     );
@@ -340,9 +340,9 @@ export default function MLHealth() {
   return (
     <section className="mlh-page">
       <p className="page-lede">
-        Every model the platform carries, in one place — submitted and accepted models,
+        Every model the platform carries, in one place: submitted and accepted models,
         including those graduated into BI integration and the public models living in
-        workshop projects — with latest run, feature drift (PSI/KS from the monitoring
+        workshop projects, with latest run, feature drift (PSI/KS from the monitoring
         job), newest performance window, and schedule staleness. Investigate and retrain
         in the workshop; the registry of record is MLflow.
       </p>
@@ -391,7 +391,7 @@ export default function MLHealth() {
           <svg className="ico"><use href="#i-info" /></svg>
           <div>
             <h4>Fleet monitoring endpoint not available yet</h4>
-            <p>The gateway answered 404 for <code>/gw/ml/monitoring/fleet</code> — it
+            <p>The gateway answered 404 for <code>/gw/ml/monitoring/fleet</code>. It
             hasn't been rebuilt with the monitoring routes yet. No monitoring data
             can be shown until it is; nothing here is simulated.</p>
           </div>
@@ -411,7 +411,7 @@ export default function MLHealth() {
           <div className="ps-hdr">
             <div>
               <h3 className="ps-title"><svg className="ico"><use href="#i-pulse" /></svg> Model fleet</h3>
-              <p className="ps-sub">One row per model — expand a row for per-feature drift and the performance trend.</p>
+              <p className="ps-sub">One row per model. Expand a row for per-feature drift and the performance trend.</p>
             </div>
             <div className="ps-meta">drift &amp; performance · <strong>monitoring job</strong> · refreshes every 30s</div>
           </div>
@@ -505,7 +505,7 @@ export default function MLHealth() {
                   {items.length === 0 && (
                     <tr>
                       <td colSpan={6} className="muted">
-                        The monitoring feed is live but reports no models yet — register a
+                        The monitoring feed is live but reports no models yet. Register a
                         model in MLflow and run the monitoring job to populate this table.
                       </td>
                     </tr>

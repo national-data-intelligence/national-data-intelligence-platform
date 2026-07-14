@@ -17,7 +17,7 @@ async function draw(ctx: WidgetCtx): Promise<void> {
 
   if (!mine.length) {
     ctx.el.innerHTML = `<div style="padding:1.2rem;text-align:center;color:${theme.ink[2]};font-size:.85rem">
-      You're not in any groups yet — request to join one from <strong>Discover</strong>, or accept an invitation.</div>`;
+      You're not in any groups yet. Request to join one from <strong>Discover</strong>, or accept an invitation.</div>`;
     return;
   }
   ctx.el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:.7rem">

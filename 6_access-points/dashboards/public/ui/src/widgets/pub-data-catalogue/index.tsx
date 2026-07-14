@@ -51,7 +51,7 @@ function tierLabel(t: string): string {
 function compactPeriod(p: string): string {
   if (!p || p === 'n/a') return '';
   const years = p.match(/\d{4}/g);
-  if (years && years.length >= 2 && years[0] !== years[years.length - 1]) return `${years[0]}–${years[years.length - 1]}`;
+  if (years && years.length >= 2 && years[0] !== years[years.length - 1]) return `${years[0]} to ${years[years.length - 1]}`;
   if (years && years.length >= 1) return years[0];
   return p;
 }
@@ -169,7 +169,7 @@ function DataCatalogue({ host }: { host: PublicHost }) {
         <header className="od-head">
           <p className="od-eyebrow">Open Data</p>
           <h1 className="od-title">Public dataset catalog</h1>
-          <p className="od-sub">{DATA.length} curated datasets, openly licensed under CC-BY 4.0 — preview in the browser, download as CSV.</p>
+          <p className="od-sub">{DATA.length} curated datasets, openly licensed under CC-BY 4.0. Preview in the browser, download as CSV.</p>
         </header>
 
         {/* Unified control bar */}
@@ -199,7 +199,7 @@ function DataCatalogue({ host }: { host: PublicHost }) {
               <select id="od-sort" aria-label="Sort" value={sort} onChange={(e) => { setSort(e.target.value as Sort); onAnyFilter(); }}>
                 <option value="updated">Recently updated</option>
                 <option value="downloads">Most rows</option>
-                <option value="title">Title A–Z</option>
+                <option value="title">Title A to Z</option>
               </select>
             </span>
           </div>
@@ -325,7 +325,7 @@ function DataCatalogue({ host }: { host: PublicHost }) {
                           <svg className="ico"><use href="#i-chevron-down" /></svg>
                         </span>
                         <span className="od-preview-foot-r">
-                          <span className="od-preview-note">{rowFrom}–{rowTo} of {rowTotal.toLocaleString()}</span>
+                          <span className="od-preview-note">{rowFrom} to {rowTo} of {rowTotal.toLocaleString()}</span>
                           <span className="od-rowpager">
                             <button disabled={rowPage === 0} onClick={() => setRowPage(p => p - 1)} aria-label="Previous rows">
                               <svg className="ico"><use href="#i-chevron-right" /></svg></button>

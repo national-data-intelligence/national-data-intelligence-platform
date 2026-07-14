@@ -4,5 +4,5 @@ kind: table
 description: >
   Operator cockpit over the reconciled widget catalog (#47): runtime
   enable/disable at dashboard/page/section/widget/placement level
-  (catalog_override — survives re-seed, subtract-only) + the soft-orphan
+  (catalog_override: survives re-seed, subtract-only) + the soft-orphan
   panel with explicit purge.

@@ -580,7 +580,7 @@ export function heatmap(
     const sizes = [10, 20, 50];
     const sizeOpts = sizes.map(s => `<option value="${s}"${state.pageSize === s ? ' selected' : ''}>${s}</option>`).join('') + `<option value="9999"${state.pageSize >= 9999 ? ' selected' : ''}>All</option>`;
     foot.innerHTML =
-      `<span>Showing ${a}–${b} of ${total} ${esc(rowNoun)}</span><span class="sp"></span>` +
+      `<span>Showing ${a} to ${b} of ${total} ${esc(rowNoun)}</span><span class="sp"></span>` +
       `<span class="rpp">Rows per page <select class="rmhm-rpp">${sizeOpts}</select></span>` +
       `<button class="rmhm-pg prev"${state.page === 0 ? ' disabled' : ''}><svg class="ico ico-sm" style="transform:rotate(180deg)"><use href="#i-chevron-right"/></svg></button>` +
       pageNums(state.page, totalPages) +

@@ -81,12 +81,12 @@ function predictionsHtml(rows: MlPredictionRow[] | null, err: string | null): st
   if (err) return `<p class="mdl-note alert">Failed to load predictions: ${esc(err)}</p>`;
   if (rows === null) return `<p class="muted">Loading predictions…</p>`;
   if (!rows.length) {
-    return `<p class="mdl-note">No stored predictions yet — rows appear in
+    return `<p class="mdl-note">No stored predictions yet. Rows appear in
       <code>ops_ml.ml_predictions</code> after the model's first successful batch run.</p>`;
   }
   const hasDisease = rows.some(r => r.disease !== '');
   return `
-    <p class="mdl-note">Sample from the latest successful batch run — most recent target
+    <p class="mdl-note">Sample from the latest successful batch run; most recent target
       week first, highest alarm probability at the top (first ${rows.length} rows shown).</p>
     <div class="art-schema mdl-scroll-x">
       <table>
@@ -102,7 +102,7 @@ function predictionsHtml(rows: MlPredictionRow[] | null, err: string | null): st
               <td><code>${esc(r.district)}</code></td>
               <td>${esc(r.year)}·W${esc(r.week)}</td>
               <td>${esc(fmtNum(r.pred_cases_mean))}${(r.pred_cases_lwr95 != null && r.pred_cases_upr95 != null)
-                ? ` <span class="muted">[${esc(fmtNum(r.pred_cases_lwr95))}–${esc(fmtNum(r.pred_cases_upr95))}]</span>` : ''}</td>
+                ? ` <span class="muted">[${esc(fmtNum(r.pred_cases_lwr95))} to ${esc(fmtNum(r.pred_cases_upr95))}]</span>` : ''}</td>
               <td>${r.alarm_flag === 1
                 ? `<span class="pill alert">alarm · ${esc(fmtProb(r.alarm_prob))}</span>`
                 : `<span class="muted">${esc(fmtProb(r.alarm_prob))}</span>`}</td>
@@ -229,7 +229,7 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
         </div>
         ${state.mode === 'paste'
           ? `<textarea class="mdl-run-csv" rows="5" aria-label="CSV input"
-               placeholder="header row, then data rows — e.g.\ncol_a,col_b,…\nvalue,value,…">${esc(state.pasteText)}</textarea>`
+               placeholder="header row, then data rows, e.g.\ncol_a,col_b,…\nvalue,value,…">${esc(state.pasteText)}</textarea>`
           : `<label class="mdl-run-file">
                <input type="file" accept=".csv,text/csv">
                <svg class="ico"><use href="#i-upload"/></svg>
@@ -240,7 +240,7 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
         ${state.phase === 'failed' && state.error ? `
           <div class="alert-banner" style="background:var(--alert-50);color:var(--alert)">
             <div style="min-width:0;flex:1">
-              <div>Prediction failed${state.jobId ? ` — runner job <code>${esc(state.jobId)}</code> reported:` : ':'}</div>
+              <div>Prediction failed${state.jobId ? `. Runner job <code>${esc(state.jobId)}</code> reported:` : ':'}</div>
               <pre class="mdl-run-err">${esc(state.error)}</pre>
             </div>
           </div>` : ''}
@@ -262,7 +262,7 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
                  <svg class="ico"><use href="#i-download"/></svg> Download result CSV</a>`
             : `<div class="alert-banner" style="background:var(--watch-50);color:var(--watch)">
                  The result CSV is stored at <code>${esc(job.result_uri || 'unknown')}</code>, but a
-                 browser download link could not be signed — ask an operator to fetch it.</div>`}
+                 browser download link could not be signed; ask an operator to fetch it.</div>`}
           <div class="mdl-run-actions">
             <button class="btn btn-ghost btn-sm" data-act="reset">Run another prediction</button>
           </div>
@@ -277,7 +277,7 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
               : 'Model running in the cluster…'}</strong>
             <div class="muted">
               ${state.jobId ? `job <code>${esc(state.jobId)}</code> · ` : ''}
-              <span class="mdl-run-elapsed">${state.elapsed}s</span> elapsed — typically 10–30s.
+              <span class="mdl-run-elapsed">${state.elapsed}s</span> elapsed, typically 10 to 30s.
               The job keeps running if you navigate away.</div>
           </div>
         </div>`;
@@ -291,14 +291,14 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
         </div>
         <p class="mdl-note">
           Submitting creates a one-off runner job in the cluster that loads
-          <code>${esc(model)}@champion</code>, scores your CSV and stores the result —
-          <strong>this takes roughly 10–30 seconds</strong>; the result is a
+          <code>${esc(model)}@champion</code>, scores your CSV and stores the result.
+          <strong>This takes roughly 10 to 30 seconds</strong>; the result is a
           downloadable CSV, not an instant answer.</p>
         <p class="mdl-note">
           Your CSV must match the model's input signature
           (<code>feature_spec.yaml → input.signature</code> in the model package).
           The gateway does not expose the signature, so the required columns can't
-          be listed here — the runner validates the upload against the real
+          be listed here; the runner validates the upload against the real
           signature and any mismatch is reported below verbatim.</p>
         ${body}
       </div>`;
@@ -336,7 +336,7 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
 async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   const model = ctx.filters.ws_model || '';
   if (!model) {
-    ctx.empty('Select a model in the catalogue above to open its workbench — facts, versions, latest predictions and the predict runner.');
+    ctx.empty('Select a model in the catalogue above to open its workbench: facts, versions, latest predictions and the predict runner.');
     return;
   }
 
@@ -356,7 +356,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   if (pRes.status === 'fulfilled') preds = pRes.value; else predsErr = pRes.reason?.message || String(pRes.reason);
 
   if (!detail) {
-    ctx.empty(`Failed to load model “${model}” — ${detailErr}`);
+    ctx.empty(`Failed to load model “${model}”: ${detailErr}`);
     return;
   }
 
@@ -376,7 +376,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
 
       ${detail.description
         ? `<p class="mdl-detail-desc">${esc(detail.description)}</p>`
-        : `<p class="mdl-note">This model has no description in the registry — its package manifest carried none.</p>`}
+        : `<p class="mdl-note">This model has no description in the registry; its package manifest carried none.</p>`}
 
       <div class="mdl-facts">
         ${fact('i-shield-check', 'Serving version', detail.champion_version

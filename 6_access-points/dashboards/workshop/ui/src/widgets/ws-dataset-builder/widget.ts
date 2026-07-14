@@ -39,7 +39,7 @@ async function draw(ctx: WidgetCtx) {
   } catch (e: any) { tplErr = tplErr || e?.message || String(e); }
 
   if (!templates.length && tplErr) {
-    ctx.empty(`Dataset templates unavailable — ${tplErr}`);
+    ctx.empty(`Dataset templates unavailable: ${tplErr}`);
     return;
   }
 
@@ -48,7 +48,7 @@ async function draw(ctx: WidgetCtx) {
   ctx.el.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:.8rem">
       <p style="font-size:.84rem;color:${theme.ink[2]};margin:0;max-width:78ch">
-        Pick a curated starter over a governed mart — or write your own SQL —
+        Pick a curated starter over a governed mart (or write your own SQL)
         and the builder runs it through the governed query chain and catalogs
         the result as a real, independent dataset. Optionally link it to a
         project.</p>
@@ -68,7 +68,7 @@ async function draw(ctx: WidgetCtx) {
             <svg class="ico ico-sm"><use href="#i-tools"/></svg>
             <strong>From SQL</strong>
           </div>
-          <p>Write a governed query over the marts your role can read — same
+          <p>Write a governed query over the marts your role can read; same
           row-scope and OPA enforcement as every other query.</p>
           <code>SELECT … FROM bi_*.mart_*</code>
         </button>
@@ -85,18 +85,18 @@ async function draw(ctx: WidgetCtx) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
           <label><span>Link to project <span class="muted">· optional</span></span>
             <select name="project">
-              <option value="">— none (independent) —</option>
+              <option value="">None (independent)</option>
               ${activeProjects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}
             </select></label>
           <label><span>Tier</span>
             <select name="tier">
-              <option value="personal">Personal — only me</option>
-              <option value="shared">Shared — my group</option>
-              <option value="public">Public — everyone</option>
+              <option value="personal">Personal (only me)</option>
+              <option value="shared">Shared (my group)</option>
+              <option value="public">Public (everyone)</option>
             </select></label>
         </div>
         ${projErr ? `
-          <p class="muted" style="font-size:.8rem;margin:0">Could not load your projects: ${esc(projErr)} — you can still generate an unlinked dataset.</p>` : ''}
+          <p class="muted" style="font-size:.8rem;margin:0">Could not load your projects: ${esc(projErr)}. You can still generate an unlinked dataset.</p>` : ''}
         <div class="ws-gen-out"></div>
         <div style="display:flex;gap:.5rem;justify-content:flex-end">
           <button type="button" class="btn btn-sm btn-ghost" data-act="cancel">Cancel</button>
@@ -173,7 +173,7 @@ async function draw(ctx: WidgetCtx) {
         ctx.bus.set('ws_datasets', String(Date.now()));   // refresh the catalog table
         out.innerHTML = `
           <div class="alert-banner" style="background:var(--good-50);color:var(--good)">
-            Generated <strong>&nbsp;${esc(title)}&nbsp;</strong> —
+            Generated <strong>&nbsp;${esc(title)}&nbsp;</strong>:
             ${esc(Number(res.rows ?? 0).toLocaleString())} rows ·
             ${esc(Number(res.byte_count ?? 0).toLocaleString())} bytes ·
             artifact <code>${esc(res.artifact_id || '?')}</code>.

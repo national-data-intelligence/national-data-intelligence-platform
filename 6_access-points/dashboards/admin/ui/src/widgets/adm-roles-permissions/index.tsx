@@ -196,7 +196,7 @@ function RolesGrants({ catalog }: { catalog: api.Catalog | null }) {
       {denied && (
         <div className="alert-banner mb-sm" style={{ background: 'var(--alert-50)', color: 'var(--alert)' }}>
           <svg className="ico ico-sm"><use href="#i-lock" /></svg>{' '}
-          The gateway declined the roles directory for your session — this editor needs the{' '}
+          The gateway declined the roles directory for your session. This editor needs the{' '}
           <code>manage_users</code> capability (and <code>edit_roles</code> to save).
         </div>
       )}
@@ -219,7 +219,7 @@ function RolesGrants({ catalog }: { catalog: api.Catalog | null }) {
                       onClick={() => select(r.id)}
                       style={{ cursor: 'pointer', background: selectedId === r.id ? 'var(--navy-50, #eef2f8)' : undefined }}>
                     <td><code>{r.code}</code>{!OPA_ENFORCED_ROLE_CODES.has(r.code) &&
-                      <span className="pill watch text-xs" title="no rego policy — not OPA-enforced" style={{ marginLeft: '0.35rem' }}>no-OPA</span>}</td>
+                      <span className="pill watch text-xs" title="no rego policy, not OPA-enforced" style={{ marginLeft: '0.35rem' }}>no-OPA</span>}</td>
                     <td>{r.name}</td>
                     <td style={{ textAlign: 'right' }}>{r.user_count}</td>
                   </tr>
@@ -306,7 +306,7 @@ function CapabilityPicker({ selected, onToggle, disabled }: {
         );
       })}
       {extra.map(code => (
-        <button key={code} type="button" title="capability not in the SPA catalog — preserved as-is"
+        <button key={code} type="button" title="capability not in the SPA catalog, preserved as-is"
                 className="pill good" style={{ cursor: 'pointer', border: 'none' }}
                 onClick={() => onToggle(code)} disabled={disabled}>
           {code} ✓
@@ -333,15 +333,15 @@ function MetaCapEditor({ code, draft, patch, disabled }: {
       <div className="grid grid-2 gap-lg" style={{ alignItems: 'start' }}>
         <div className="field-group">
           <label>Role code</label>
-          <input value={code} disabled readOnly title="Code is immutable — it keys the OPA rego dispatch." />
+          <input value={code} disabled readOnly title="Code is immutable. It keys the OPA rego dispatch." />
         </div>
         <div className="field-group">
           <label>Multi-role combine strategy</label>
           <select value={draft.combine_strategy} disabled={disabled}
                   data-testid="role-combine"
                   onChange={e => patch({ combine_strategy: e.target.value as Draft['combine_strategy'] })}>
-            <option value="union">union — widen across the user's roles</option>
-            <option value="intersection">intersection — narrow to the common grant</option>
+            <option value="union">union: widen across the user's roles</option>
+            <option value="intersection">intersection: narrow to the common grant</option>
           </select>
         </div>
       </div>
@@ -459,7 +459,7 @@ function WidgetGrantEditor({ catalog, draft, patch, disabled }: {
         ({new Set(draft.widgets.map(w => `${w.dashboard_id}::${w.widget_id}`)).size})
       </span></h5>
       <p className="text-xs muted">
-        Axis C · <code>role_widget</code>. Grouped by dashboard — the catalog exposes no
+        Axis C · <code>role_widget</code>. Grouped by dashboard: the catalog exposes no
         page/section placement, so a checked widget is granted <strong>across every page of
         that dashboard</strong>; untouched grants keep their existing page scope on save.
       </p>
@@ -489,7 +489,7 @@ function WidgetGrantEditor({ catalog, draft, patch, disabled }: {
                 )}
               </div>
               <div style={{ padding: '0.35rem 0.75rem' }}>
-                {!grantable && <p className="text-xs muted" style={{ margin: '0.2rem 0' }}>No dashboard mapping — not grantable here.</p>}
+                {!grantable && <p className="text-xs muted" style={{ margin: '0.2rem 0' }}>No dashboard mapping, not grantable here.</p>}
                 {g.widgets.map(w => {
                   const on = grantedKey.has(`${g.id}::${w.id}`);
                   return (
@@ -500,7 +500,7 @@ function WidgetGrantEditor({ catalog, draft, patch, disabled }: {
                       <code className="text-xs">{w.id}</code>
                       <span className="text-sm">{w.title}</span>
                       <span className="pill neutral text-xs">{w.kind}</span>
-                      {w.requires && <span className="pill info text-xs" title="mart-backed — OPA-gated">mart</span>}
+                      {w.requires && <span className="pill info text-xs" title="mart-backed, OPA-gated">mart</span>}
                     </label>
                   );
                 })}
@@ -534,7 +534,7 @@ function ScopeEditor({ draft, patch, disabled }: {
         ({Object.values(draft.scope).filter(v => v.length).length} restricted dimension{Object.values(draft.scope).filter(v => v.length).length === 1 ? '' : 's'})
       </span></h5>
       <p className="text-xs muted" style={{ lineHeight: 1.5 }}>
-        <code>ops_perm.role_scope</code> — the role-level cap on every filter&apos;s pickable
+        <code>ops_perm.role_scope</code>: the role-level cap on every filter&apos;s pickable
         values, resolved as <strong>role_scope ∩ user_scope</strong> (e.g.
         <code> geography=[OR]</code>, <code>programme=[HIV]</code>). A dimension left empty is
         <strong> unrestricted</strong>. Per-user tightening lives on the user (Users and Access).
@@ -550,7 +550,7 @@ function ScopeEditor({ draft, patch, disabled }: {
               <td>
                 <input style={{ width: '100%' }} disabled={disabled}
                        data-testid={`scope-input-${dim}`}
-                       placeholder="— unrestricted — (comma,separated,values)"
+                       placeholder="unrestricted (comma,separated,values)"
                        value={(draft.scope[dim] ?? []).join(', ')}
                        onChange={e => setDim(dim, e.target.value.split(',').map(x => x.trim()).filter(Boolean))} />
               </td>

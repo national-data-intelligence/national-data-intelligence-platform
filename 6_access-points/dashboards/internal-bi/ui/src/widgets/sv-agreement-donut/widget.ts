@@ -20,7 +20,7 @@ const def: WidgetDef = {
     const overall = Number(r.overall_agreement_pct ?? 0);
     const segs = [
       { name: 'Agree ≥95%', value: Number(r.agree_pct ?? 0), color: t.status.good },
-      { name: 'Moderate 80–94%', value: Number(r.moderate_pct ?? 0), color: t.status.watch },
+      { name: 'Moderate 80 to 94%', value: Number(r.moderate_pct ?? 0), color: t.status.watch },
       { name: 'Low <80%', value: Number(r.low_pct ?? 0), color: t.status.alert },
     ];
     const delta = Number(r.delta_pp ?? 0);

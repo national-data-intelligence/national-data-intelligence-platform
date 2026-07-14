@@ -85,7 +85,7 @@ const def: ModalDef = {
         (form.elements.namedItem('justification') as HTMLTextAreaElement).value.trim();
       if (!profile || !justification) {
         errBox.innerHTML = `<div class="alert-banner" style="background:var(--watch-50);color:var(--watch)">
-          Pick a profile and describe the workload — the reviewer needs the justification.</div>`;
+          Pick a profile and describe the workload; the reviewer needs the justification.</div>`;
         return;
       }
       const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;

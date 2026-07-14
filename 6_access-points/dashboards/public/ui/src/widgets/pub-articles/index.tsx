@@ -1,13 +1,15 @@
 /**
  * Widget · pub-articles — Articles "newsroom" (page "articles").
  *
- * Design (2026-07-13 elegance pass): a full-width dark HERO BAND (a slide, in the
- * site's hero language — NOT a bordered card) that cycles the latest featured
- * bulletins with prev/next + dots → a single unified filter bar (search ·
- * category · topic · date range · sort) → a three-column card GRID → numbered
- * pagination. Everything shares one flush left edge. Real data via useArticles
- * (CMS); reads setPage/setArticle from the host. Restrained slate/ink neutrals +
- * one deep-teal accent; borderless soft cards, muted category tints.
+ * Design (2026-07-14 redesign): the heavy dark navy hero "island" is gone. The
+ * page now opens like the rest of the public site — a LIGHT editorial masthead
+ * (eyebrow + serif title + one quiet intro line, mirroring the Open Data page) →
+ * a FEATURED LEAD laid out as a light card: a large serif headline + dek + byline
+ * beside a slim "more featured" rail that swaps the lead (no dark box, no carousel
+ * dots) → a small "All articles" list header → the unified filter bar → a
+ * three-column card GRID → numbered pagination. Everything shares one flush left
+ * edge. Real data via useArticles (CMS); reads setPage/setArticle from the host.
+ * Restrained slate/ink neutrals + one deep-teal accent; borderless soft cards.
  */
 import { useMemo, useState } from 'react';
 import { ARTICLE_CATEGORIES, type Article } from '../../data/articles';
@@ -32,6 +34,12 @@ function excerpt(html: string, max = 150): string {
   const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/\s+([.,;:!?])/g, '$1').trim();
   if (text.length <= max) return text;
   return text.slice(0, max).replace(/\s+\S*$/, '') + '…';
+}
+
+/** Approx reading time in whole minutes from an HTML body (~200 wpm). */
+function readMins(html: string): number {
+  const words = html.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
 }
 
 /** Restrained category tint (class only; colours live in CSS). Kept to at most
@@ -63,7 +71,7 @@ function Articles({ host }: { host: PublicHost }) {
   const [featIdx, setFeatIdx] = useState(0);
   const ART = useArticles();
 
-  // Featured carousel = the newest few, independent of the browse filters below.
+  // Featured lead = the newest few, independent of the browse filters below.
   const featured = useMemo(
     () => [...ART].sort((a, b) => b.date.localeCompare(a.date)).slice(0, FEATURED),
     [ART]);
@@ -96,8 +104,18 @@ function Articles({ host }: { host: PublicHost }) {
       });
   }, [ART, query, category, topic, range, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  // On the default view (no filters, newest-first) the featured items are already
+  // surfaced in the lead, so drop them from the list to avoid a duplicate top row.
+  // When the reader searches or filters, the list stays complete.
+  const isDefault = !query.trim() && category === 'all' && topic === 'all' && range === 'all' && sort === 'newest';
+  const listed = useMemo(() => {
+    if (!isDefault) return filtered;
+    const ids = new Set(featured.map(f => f.id));
+    return filtered.filter(a => !ids.has(a.id));
+  }, [filtered, featured, isDefault]);
+
+  const totalPages = Math.max(1, Math.ceil(listed.length / PAGE_SIZE));
+  const paged = listed.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const open = (a: Article) => { setArticle(a); setPage('article'); };
   const clear = () => { setQuery(''); setCategory('all'); setTopic('all'); setRange('all'); setPageNum(0); };
@@ -118,41 +136,67 @@ function Articles({ host }: { host: PublicHost }) {
   return (
     <section className="nw-page">
       <div className="nw">
-        {/* Featured lead — a dark HERO BAND (slide) */}
+        {/* Light editorial masthead — same opening as the rest of the site */}
+        <header className="nw-head">
+          <p className="nw-eyebrow">Newsroom</p>
+          <h1 className="nw-title">News and health bulletins</h1>
+          <p className="nw-sub">
+            Weekly PHEM surveillance bulletins, official press releases from the Federal Ministry
+            of Health, and public-health advisories from Ethiopia's health institutions, most recent first.
+          </p>
+        </header>
+
+        {/* Featured lead — a light editorial block (no dark island) */}
         {feat && (
-          <div className="nw-hero-band">
-            <article className="nw-hero">
-              <div className="nw-hero-body">
-                <p className="nw-hero-eyebrow">Latest News</p>
-                <button className="nw-hero-title" onClick={() => open(feat)}>{feat.title}</button>
-                <p className="nw-hero-dek">{feat.summary || excerpt(feat.body, 190)}</p>
-                <p className="nw-hero-meta">
-                  <span className={`nw-tag nw-tag--${catTone(feat.category)}`}>{feat.category}</span>
-                  <span className="sep">·</span><span className="nw-date">{fmtDate(feat.date)}</span>
-                </p>
-                <button className="nw-hero-btn" onClick={() => open(feat)}>
-                  Read article <svg className="ico"><use href="#i-arrow-right" /></svg>
-                </button>
+          <article className="nw-lead">
+            <div className="nw-lead-main">
+              <p className="nw-lead-kicker">
+                <span className="nw-lead-flag">Featured</span>
+                <span className={`nw-tag nw-tag--${catTone(feat.category)}`}>{feat.category}</span>
+              </p>
+              <h2 className="nw-lead-h2">
+                <button className="nw-lead-title" onClick={() => open(feat)}>{feat.title}</button>
+              </h2>
+              <p className="nw-lead-dek">{feat.summary || excerpt(feat.body, 240)}</p>
+              <div className="nw-lead-meta">
+                {feat.author && (
+                  <span className="nw-lead-by"><svg className="ico"><use href="#i-user" /></svg>{feat.author}</span>
+                )}
+                <span className="nw-lead-fact"><svg className="ico"><use href="#i-calendar" /></svg>{fmtDate(feat.date)}</span>
+                <span className="nw-lead-fact"><svg className="ico"><use href="#i-clock" /></svg>{readMins(feat.body)} min read</span>
               </div>
-              {featured.length > 1 && (
-                <div className="nw-hero-foot">
-                  <div className="nw-hero-dots">
-                    {featured.map((_, i) => (
-                      <button key={i} className={i === featIdx % featured.length ? 'is-on' : ''}
-                              aria-label={`Featured ${i + 1}`} onClick={() => setFeatIdx(i)} />
-                    ))}
-                  </div>
-                  <div className="nw-hero-nav-group">
-                    <button className="nw-hero-nav" aria-label="Previous featured"
-                            onClick={() => setFeatIdx(i => (i - 1 + featured.length) % featured.length)}>‹</button>
-                    <button className="nw-hero-nav" aria-label="Next featured"
-                            onClick={() => setFeatIdx(i => (i + 1) % featured.length)}>›</button>
-                  </div>
-                </div>
-              )}
-            </article>
-          </div>
+              <button className="nw-lead-btn" onClick={() => open(feat)}>
+                Read article <svg className="ico"><use href="#i-arrow-right" /></svg>
+              </button>
+            </div>
+
+            {featured.length > 1 && (
+              <aside className="nw-lead-rail" aria-label="More featured articles">
+                <p className="nw-lead-rail-lbl">More featured</p>
+                <ol className="nw-lead-list">
+                  {featured.map((f, i) => (
+                    <li key={f.id}>
+                      <button
+                        className={`nw-lead-item${i === featIdx % featured.length ? ' is-on' : ''}`}
+                        aria-current={i === featIdx % featured.length ? 'true' : undefined}
+                        onClick={() => setFeatIdx(i)}>
+                        <span className={`nw-lead-item-tag nw-tag--${catTone(f.category)}`}>{f.category}</span>
+                        <span className="nw-lead-item-title">{f.title}</span>
+                        <span className="nw-lead-item-date">{fmtDate(f.date)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </aside>
+            )}
+          </article>
         )}
+
+        {/* List header */}
+        <div className="nw-listhdr">
+          <h2 className="nw-listhdr-h2">All articles</h2>
+          <span className="nw-listhdr-count">{listed.length} {listed.length === 1 ? 'article' : 'articles'}</span>
+        </div>
 
         {/* Unified filter bar */}
         <div className="od-toolbar nw-toolbar">
@@ -187,16 +231,16 @@ function Articles({ host }: { host: PublicHost }) {
             </span>
             <span className="od-field">
               <svg className="ico"><use href="#i-arrow-down" /></svg>
-              <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+              <select aria-label="Sort" value={sort} onChange={(e) => { setSort(e.target.value as Sort); onAnyFilter(); }}>
                 <option value="newest">Newest first</option>
                 <option value="oldest">Oldest first</option>
-                <option value="az">Title A–Z</option>
+                <option value="az">Title A to Z</option>
               </select>
             </span>
           </div>
         </div>
 
-        {filtered.length === 0 ? (
+        {listed.length === 0 ? (
           <div className="od-empty">
             <svg className="ico" style={{ width: 28, height: 28, color: 'var(--ink-4)' }}><use href="#i-search" /></svg>
             <p>No articles match the current filters.</p>

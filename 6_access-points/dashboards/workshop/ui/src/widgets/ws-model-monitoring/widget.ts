@@ -171,11 +171,11 @@ async function draw(ctx: WidgetCtx) {
   } catch (e: any) { perfErr = e?.message || String(e); }
 
   if (driftErr && perfErr && !drift.length && !perf.length) {
-    ctx.empty(`Monitoring unavailable for ${model} — drift: ${driftErr} · performance: ${perfErr}`);
+    ctx.empty(`Monitoring unavailable for ${model}. Drift: ${driftErr} · performance: ${perfErr}`);
     return;
   }
   if (!drift.length && !perf.length) {
-    ctx.empty(`No monitoring rows yet for ${model} — runs write drift/performance after each scheduled scoring.`);
+    ctx.empty(`No monitoring rows yet for ${model}. Runs write drift/performance after each scheduled scoring.`);
     return;
   }
 
@@ -211,8 +211,8 @@ async function draw(ctx: WidgetCtx) {
         ${latestDrift.length
           ? driftHtml(latestDrift, theme)
           : `<p class="mdl-note">${driftErr
-              ? `Drift endpoint unavailable — ${esc(driftErr)}`
-              : 'No drift rows yet — runs write PSI/KS vs the training profile after each scheduled scoring.'}</p>`}
+              ? `Drift endpoint unavailable: ${esc(driftErr)}`
+              : 'No drift rows yet. Runs write PSI/KS vs the training profile after each scheduled scoring.'}</p>`}
       </div>
       <div>
         <div class="mdl-section-h">Performance</div>
@@ -220,8 +220,8 @@ async function draw(ctx: WidgetCtx) {
           ? `${singleMetrics.length ? `<div class="ws-perf-stats">${singleMetrics.map(m => perfStat(perf, m, theme)).join('')}</div>` : ''}
              ${seriesMetrics.map(m => perfChart(perf, m, theme)).join('')}`
           : `<p class="mdl-note">${perfErr
-              ? `Performance endpoint unavailable — ${esc(perfErr)}`
-              : 'No performance rows yet — the actuals scorer writes accuracy-vs-actuals windows after each scheduled run.'}</p>`}
+              ? `Performance endpoint unavailable: ${esc(perfErr)}`
+              : 'No performance rows yet. The actuals scorer writes accuracy-vs-actuals windows after each scheduled run.'}</p>`}
       </div>
     </div>`;
 }

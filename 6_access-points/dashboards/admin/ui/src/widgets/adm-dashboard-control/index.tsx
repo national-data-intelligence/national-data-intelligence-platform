@@ -132,7 +132,7 @@ function DashboardControl() {
   return (
     <section id="dashboard-control" data-testid="dashboard-control">
       <p className="page-lede">
-        Runtime enable/disable over the reconciled catalog — survives every re-seed. Toggles
+        Runtime enable/disable over the reconciled catalog, surviving every re-seed. Toggles
         <strong> subtract visibility only</strong>: role grants still gate first, nothing here
         widens access. The authored structure itself is edited as catalog data files in the repo.
       </p>
@@ -217,7 +217,7 @@ function DashboardControl() {
             <div>
               <h3 className="ps-title"><svg className="ico"><use href="#i-alert" /></svg> Orphaned widgets <span className="text-xs muted">({orphans.length})</span></h3>
               <p className="ps-sub">Removed from the authored catalog; hidden everywhere. Grants/placements are
-                preserved — re-adding the widget revives them. Purge to delete permanently.</p>
+                preserved, and re-adding the widget revives them. Purge to delete permanently.</p>
             </div>
           </div>
           <div className="card card-elev" style={{ paddingTop: '0.8rem' }}>
@@ -248,7 +248,7 @@ function DashboardControl() {
         <div className="ps-hdr">
           <div>
             <h3 className="ps-title"><svg className="ico"><use href="#i-grid" /></svg> Catalogs</h3>
-            <p className="ps-sub">What is renderable and grantable — the authored widget &amp; filter catalogs behind every placement above.</p>
+            <p className="ps-sub">What is renderable and grantable: the authored widget &amp; filter catalogs behind every placement above.</p>
           </div>
         </div>
         <WidgetCatalogPanel catalog={catalog} />
@@ -370,7 +370,7 @@ function FilterCatalogPanel({ catalog }: { catalog: api.Catalog | null }) {
       </div>
       <p className="text-xs muted" style={{ marginBottom: '0.5rem' }}>
         e.g. "RHB-Oromia can only see <code>region=Oromia</code>". The <code>source</code> enum
-        tells the resolver where canonical values come from — static enum, live mart, or ops-DB lookup.
+        tells the resolver where canonical values come from: static enum, live mart, or ops-DB lookup.
       </p>
       <TableToolbar kit={kit} placeholder="Search filter id, title, source…" unit="filters" />
       <div className="tk-scroll">

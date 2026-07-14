@@ -52,10 +52,10 @@ async function draw(ctx: WidgetCtx) {
     let files: FileRow[] = [], folders: string[] = [];
     try {
       const r = await authFetch(`/gw/projects/${encodeURIComponent(projectId)}/files`);
-      if (!r.ok) { ctx.el.innerHTML = shell(`<div class="widget-empty">Could not list files — ${esc(await errText(r))}</div>`); wireTools(); return; }
+      if (!r.ok) { ctx.el.innerHTML = shell(`<div class="widget-empty">Could not list files: ${esc(await errText(r))}</div>`); wireTools(); return; }
       const j = await r.json();
       files = j.files || []; folders = j.folders || [];
-    } catch (e: any) { ctx.el.innerHTML = shell(`<div class="widget-empty">Could not list files — ${esc(e?.message || String(e))}</div>`); wireTools(); return; }
+    } catch (e: any) { ctx.el.innerHTML = shell(`<div class="widget-empty">Could not list files: ${esc(e?.message || String(e))}</div>`); wireTools(); return; }
 
     // Build a nested tree from the flat folder + file path lists.
     const root = makeFolder('', '');
@@ -118,7 +118,7 @@ async function draw(ctx: WidgetCtx) {
       : `<div class="prj-files-empty">
            <svg class="ico"><use href="#i-folder"/></svg>
            <p>This project is empty. Use <strong>New</strong> to add a folder or
-           upload a file — JupyterLab writes here too, and linked datasets appear
+           upload a file. JupyterLab writes here too, and linked datasets appear
            under <code>datasets/</code>.</p>
          </div>`;
     ctx.el.innerHTML = shell(body);

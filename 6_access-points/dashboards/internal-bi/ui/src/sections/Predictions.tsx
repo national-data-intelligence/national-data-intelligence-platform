@@ -133,7 +133,7 @@ export default function Predictions() {
   return (
     <section>
       <p className="muted" style={{ margin: '0 0 1.4rem' }}>
-        Live output from NHDW's batch ML models — EARS endemic-channel alarms, Farrington-style outbreak detection, seasonal-profile forecasts, an EWARS-style negative-binomial model with climate drivers, and stockout forecasts. All are runner Jobs scheduled by the weekly Airflow DAG; predictions are persisted under <code>ops_ml.ml_predictions</code> (flat forecast schema) and surfaced here. Refreshes every minute.
+        Live output from NHDW's batch ML models: EARS endemic-channel alarms, Farrington-style outbreak detection, seasonal-profile forecasts, an EWARS-style negative-binomial model with climate drivers, and stockout forecasts. All are runner Jobs scheduled by the weekly Airflow DAG; predictions are persisted under <code>ops_ml.ml_predictions</code> (flat forecast schema) and surfaced here. Refreshes every minute.
       </p>
 
       {err && (
@@ -264,7 +264,7 @@ export default function Predictions() {
                     <td>{wk(r)}</td>
                     <td>{num(r.pred_cases_median ?? r.pred_cases_mean, 1)}</td>
                     <td className="muted">
-                      {num(r.pred_cases_lwr95, 1)} – {num(r.pred_cases_upr95, 1)}
+                      {num(r.pred_cases_lwr95, 1)} to {num(r.pred_cases_upr95, 1)}
                     </td>
                   </tr>
                 ))}

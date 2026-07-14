@@ -237,7 +237,7 @@ function adminApp() {
       }
       return `Dear ${r.name},\n\n`
            + `Thank you for your access request to the NHDW (${r.id}). Before we can complete the review, we need additional information:\n\n`
-           + `  ${this.reviewNote || '— please confirm your institutional affiliation and intended use.'}\n\n`
+           + `  ${this.reviewNote || 'Please confirm your institutional affiliation and intended use.'}\n\n`
            + `Please reply to this email with the requested details. We will resume the review on receipt.\n\n`
            + `Federal Ministry of Health · NHDW\n`;
     },

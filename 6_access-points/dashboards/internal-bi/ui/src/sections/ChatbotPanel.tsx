@@ -195,7 +195,7 @@ export default function ChatbotPanel() {
             {turns.length === 0 && (
               <>
                 <div className="ai-msg bot">
-                  Hi — I can read what's on the dashboard, run SQL within your
+                  Hi, I can read what's on the dashboard, run SQL within your
                   permitted scope, and interact with widgets on your behalf.
                   What would you like to look at?
                 </div>

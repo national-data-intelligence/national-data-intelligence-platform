@@ -75,7 +75,7 @@ const def: WidgetDef = {
       <div class="ov-rt-tbl"></div>
       <div style="display:flex;align-items:center;gap:1rem;margin-top:.7rem;padding-top:.6rem;border-top:1px solid ${t.line}">
         ${dot(t.status.alert, 'Low (&lt;60)')}
-        ${dot(t.status.watch, 'Moderate (60–70)')}
+        ${dot(t.status.watch, 'Moderate (60 to 70)')}
         ${dot(t.status.good, 'Strong (&gt;70)')}
       </div>`;
     const mount = ctx.el.querySelector<HTMLElement>('.ov-rt-tbl')!;

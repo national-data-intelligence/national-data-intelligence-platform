@@ -20,7 +20,7 @@ async function draw(ctx: WidgetCtx): Promise<void> {
 
   if (!invites.length && !requests.length) {
     ctx.el.innerHTML = `<div style="padding:1.2rem;text-align:center;color:${theme.ink[2]};font-size:.85rem">
-      Nothing needs your attention — no pending invitations or join-requests.</div>`;
+      Nothing needs your attention: no pending invitations or join-requests.</div>`;
     return;
   }
   const row = (icon: string, title: string, sub: string, meta: string, actions: string) => `
@@ -34,7 +34,7 @@ async function draw(ctx: WidgetCtx): Promise<void> {
 
   const invHtml = invites.map(i => row('i-users',
     `Invitation to <strong>${esc(i.group_name)}</strong>`,
-    `from ${esc(i.invited_by || 'an owner')}${i.message ? ` — "${esc(i.message)}"` : ''}`,
+    `from ${esc(i.invited_by || 'an owner')}${i.message ? `: "${esc(i.message)}"` : ''}`,
     relTime(i.created_at),
     `<button class="btn btn-sm btn-primary" data-act="inv-accept" data-id="${esc(i.id)}">Accept</button>
      <button class="btn btn-sm btn-ghost" data-act="inv-decline" data-id="${esc(i.id)}">Decline</button>`)).join('');

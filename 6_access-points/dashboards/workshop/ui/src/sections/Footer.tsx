@@ -23,7 +23,7 @@ export default function Footer() {
       <div className="foot-coc">
         <svg className="ico"><use href="#i-policy" /></svg>
         <span>
-          Contribute responsibly. Personal data — even when k-anonymised — must be handled with care and never combined with other sources to re-identify individuals.
+          Contribute responsibly. Personal data, even when k-anonymised, must be handled with care and never combined with other sources to re-identify individuals.
         </span>
         <a href="#coc"><svg className="ico"><use href="#i-policy" /></svg> Code of conduct</a>
         <a href="#data-use"><svg className="ico"><use href="#i-list" /></svg> Data use agreement</a>

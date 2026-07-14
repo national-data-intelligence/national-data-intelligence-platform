@@ -255,8 +255,8 @@ function DQ() {
   return (
     <section className="dq-page">
       <p className="page-lede">
-        Live pipeline-health headline for every ingested source — dbt build health, per-source
-        freshness &amp; quality in one view, cross-source reconciliation, and lineage — read straight
+        Live pipeline-health headline for every ingested source: dbt build health, per-source
+        freshness &amp; quality in one view, cross-source reconciliation, and lineage, read straight
         from each run's artifacts and the marts. The full interactive DAG lives in dbt Docs.
       </p>
 
@@ -306,7 +306,7 @@ function DQ() {
           <div>
             <h3 className="ps-title"><svg className="ico"><use href="#i-pulse" /></svg> Source health</h3>
             <p className="ps-sub">
-              One row per ingested system — ingestion freshness and data quality together.
+              One row per ingested system: ingestion freshness and data quality together.
             </p>
           </div>
           <div className="ps-meta">
@@ -376,7 +376,7 @@ function DQ() {
             {sources?.note && <span className="muted"><svg className="ico ico-sm"><use href="#i-info" /></svg> Quality: {sources.note}</span>}
             {ingestion?.note && <span className="muted"><svg className="ico ico-sm"><use href="#i-info" /></svg> Freshness: {ingestion.note}</span>}
             {!sources?.note && !ingestion?.note && (
-              <span className="muted">Blank quality cells mean the source carries no honest signal for that dimension yet — never a fabricated score.</span>
+              <span className="muted">Blank quality cells mean the source carries no honest signal for that dimension yet, never a fabricated score.</span>
             )}
           </div>
         </div>
@@ -503,7 +503,7 @@ function DQ() {
           {failingTests.length === 0 ? (
             <p className="dq-allgreen">
               <svg className="ico"><use href="#i-check-circle" /></svg>
-              No failing or warning tests in the latest <code>dbt build</code> — pipeline green.
+              No failing or warning tests in the latest <code>dbt build</code>. Pipeline green.
             </p>
           ) : (
             <div className="dq-table-scroll">

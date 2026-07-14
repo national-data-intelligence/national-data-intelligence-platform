@@ -66,7 +66,7 @@ const def: ModalDef = {
             then approves or requests changes.</li>
       </ul>
       <p class="muted" style="font-size:.85rem;margin:0 0 .6rem">
-        You can submit even if some essentials are missing — the checklist just warns,
+        You can submit even if some essentials are missing; the checklist just warns,
         and the reviewer decides.</p>
       <div class="ws-submit-result"></div>
       <div class="ws-submit-err"></div>
@@ -105,7 +105,7 @@ const def: ModalDef = {
         // Show the outcome + checklist; the submit action is done.
         resultBox.innerHTML = `
           <div class="alert-banner" style="background:var(--good-50);color:var(--good)">
-            <span>Submitted — this project is now <strong>in review</strong>. A reviewer will
+            <span>Submitted. This project is now <strong>in review</strong>. A reviewer will
             open it, run its notebooks, and decide.</span></div>
           ${!ok ? `
             <div class="alert-banner" style="background:var(--watch-50);color:var(--watch);margin-top:.4rem">

@@ -48,7 +48,7 @@ const def: WidgetDef = {
       rows = await r.json();
     } catch { ctx.empty('Could not load your export history.'); return; }
     if (!Array.isArray(rows) || !rows.length) {
-      ctx.empty('No exports yet — run a query or template export and it will be logged here.');
+      ctx.empty('No exports yet. Run a query or template export and it will be logged here.');
       return;
     }
 

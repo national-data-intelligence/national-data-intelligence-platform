@@ -186,7 +186,7 @@ function ReviewActions({ detail, onDone }: {
       const note = res.integration && res.integration.integrated === false && res.integration.reason
         ? ` (model integration: ${res.integration.reason})`
         : '';
-      onDone(`Approved "${detail.project.name}" — it is now ${res.visibility || 'public'}${note}`);
+      onDone(`Approved "${detail.project.name}". It is now ${res.visibility || 'public'}${note}`);
     } catch (e: any) {
       setErr(actionError(e, 'Approval'));
       setBusy(false);
@@ -201,7 +201,7 @@ function ReviewActions({ detail, onDone }: {
         changes_requested: changesRequested,
       });
       onDone(changesRequested
-        ? `Changes requested on "${detail.project.name}" — the owner can fix and re-submit.`
+        ? `Changes requested on "${detail.project.name}". The owner can fix and re-submit.`
         : `Rejected "${detail.project.name}".`
         + (res.review_status ? ` (status: ${reviewStatusLabel(res.review_status)})` : ''));
     } catch (e: any) {
@@ -216,7 +216,7 @@ function ReviewActions({ detail, onDone }: {
       const res = await spawnReviewerLab(id, 'Small');
       if (res.url) {
         window.open(res.url, '_blank', 'noreferrer');
-        setLabMsg('Lab opening in a new tab — it may take a moment to finish starting.');
+        setLabMsg('Lab opening in a new tab. It may take a moment to finish starting.');
       } else {
         setLabMsg(`Lab spawn requested (status: ${res.status || 'spawning'}); reopen once the pod is up.`);
       }
@@ -311,7 +311,7 @@ function ReviewActions({ detail, onDone }: {
               checked={changesRequested}
               onChange={e => setChangesRequested(e.target.checked)}
             />
-            <span>Request changes (owner can re-submit) — untick to reject outright</span>
+            <span>Request changes (owner can re-submit): untick to reject outright</span>
           </label>
           <div className="field-group">
             <label>Note (optional)</label>
@@ -409,8 +409,8 @@ function ReviewDetail({ id, onDone }: {
         <ChecklistReport items={detail.checklist} />
         {!detail.all_essentials_present && (
           <p className="rv-hint muted">
-            Some required essentials are missing. This does not block approval — the
-            human reviewer decides — but the owner may want to add them first.
+            Some required essentials are missing. This does not block approval; the
+            human reviewer decides, but the owner may want to add them first.
           </p>
         )}
       </div>
@@ -501,7 +501,7 @@ export default function Review() {
       <p className="page-lede">
         Projects submitted to become <strong>public</strong>. Inspect each project's
         essential-files checklist and file listing, optionally open a lab to run its
-        notebooks, then <strong>approve &amp; publish</strong> it — or <strong>reject /
+        notebooks, then <strong>approve &amp; publish</strong> it, or <strong>reject /
         request changes</strong> back to the owner with a note.
       </p>
 

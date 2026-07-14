@@ -57,7 +57,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
     if (me?.kc_sub) myKcSub = me.kc_sub;
   } catch { /* isOwner stays conservative */ }
 
-  if (!project) { ctx.empty(`Could not load this project — ${loadErr}`); return; }
+  if (!project) { ctx.empty(`Could not load this project: ${loadErr}`); return; }
 
   // Hub availability decides the open-in-lab affordance's honest state.
   let hubReason: string | null = null;   // non-null ⇒ hub unusable, reason verbatim
@@ -133,7 +133,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
       <div class="prj-actions">
         ${!canOpenLab
           ? `<button class="btn btn-sm btn-ghost" disabled aria-disabled="true"
-               title="Public project you don't own — clone it to open a lab on your own copy.">
+               title="Public project you don't own. Clone it to open a lab on your own copy.">
                <svg class="ico ico-sm"><use href="#i-external"/></svg> Open in JupyterLab</button>
              <button class="btn btn-sm btn-primary" data-act="clone">
                <svg class="ico ico-sm"><use href="#i-plus"/></svg> Clone to my workspace</button>
@@ -145,7 +145,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
           : `<button class="btn btn-sm btn-primary" data-act="open-lab">
                <svg class="ico ico-sm"><use href="#i-external"/></svg> Open in JupyterLab</button>
              <span class="prj-actions-hint muted">${hubRunningUrl
-               ? 'Your lab is running — opens it on this project.'
+               ? 'Your lab is running; opens it on this project.'
                : 'Spawns your lab pod on this project’s file space.'}</span>`}
         <button class="btn btn-sm btn-ghost" data-act="link-datasets">
           <svg class="ico ico-sm"><use href="#i-database"/></svg> Link datasets</button>
@@ -199,7 +199,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
         btn.innerHTML = '<svg class="ico ico-sm"><use href="#i-check"/></svg>';
         toast('Project ID copied');
         window.setTimeout(() => { btn.innerHTML = '<svg class="ico ico-sm"><use href="#i-copy"/></svg>'; }, 1400);
-      } catch { toast('Copy failed — select and copy the ID manually'); }
+      } catch { toast('Copy failed; select and copy the ID manually'); }
     });
 
   // ── Download the project as a role-protected ZIP ──
@@ -244,7 +244,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
           ? `<span class="pill good">linked</span>`
           : `<button class="btn btn-sm btn-primary" data-act="do-link" data-did="${esc(d.id)}">Link</button>`}
       </div>`;
-    }).join('') : `<p class="muted" style="margin:.4rem 0">You have no datasets yet — generate one on the Datasets page.</p>`;
+    }).join('') : `<p class="muted" style="margin:.4rem 0">You have no datasets yet. Generate one on the Datasets page.</p>`;
     linkSlot.innerHTML = `
       <div class="prj-panel" style="margin:.6rem 0 0">
         <div class="prj-panel-hdr"><svg class="ico"><use href="#i-database"/></svg><h3>Link datasets to this project</h3>
@@ -282,7 +282,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
         });
         if (!r.ok) { showErr(`Could not clone: ${await errText(r)}`); btn.disabled = false; return; }
         const nw = await r.json().catch(() => ({} as any));
-        toast(`Cloned to "${nw.name || 'a new project'}" — ${nw.files_copied ?? 0} file(s) copied`);
+        toast(`Cloned to "${nw.name || 'a new project'}" (${nw.files_copied ?? 0} file(s) copied)`);
         if (nw.id) { ctx.filters.ws_project = nw.id; ctx.bus.set('ws_project', nw.id); await draw(ctx); }
       } catch (err: any) {
         showErr(`Could not clone: ${err?.message || String(err)}`); btn.disabled = false;
@@ -305,7 +305,7 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
         const body = await r.json().catch(() => ({} as any));
         const url = body?.url || hubRunningUrl;
         if (url) window.open(url, '_blank', 'noreferrer');
-        else toast('Lab spawn requested — the pod is starting; reopen once it is up');
+        else toast('Lab spawn requested. The pod is starting; reopen once it is up');
         btn.disabled = false;
       } catch (err: any) {
         showErr(`Could not open the lab: ${err?.message || String(err)}`);
@@ -358,14 +358,14 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
         groupHtml = `<p class="muted">Loading your groups…</p>`;
       } else if (vs.groups.length === 0) {
         groupHtml = `<p class="muted" style="font-size:.82rem;margin:0">
-          You're not a member of any group yet — join one from the Community
+          You're not a member of any group yet. Join one from the Community
           section to share a project with it.</p>`;
       } else {
         groupHtml = `
           <label class="prj-vis-group-label">
             <span>Share with group</span>
             <select class="ws-vis-group">
-              <option value="">— choose a group —</option>
+              <option value="">Choose a group</option>
               ${vs.groups.map(g =>
                 `<option value="${esc(g.id)}"${vs.pendingGroup === g.id ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}
             </select>

@@ -160,7 +160,7 @@ function showAuthError() {
     window.location.protocol + '//' +
     window.location.host.replace(/^[^.]+/, 'public');
   document.documentElement.innerHTML = `
-  <head><meta charset="utf-8"><title>Sign-in didn't complete — NHDW</title>
+  <head><meta charset="utf-8"><title>Sign-in didn't complete: NHDW</title>
   <style>
     body{font-family:Inter,system-ui,sans-serif;background:#f5efe6;color:#3a2c1e;
          display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
@@ -175,7 +175,7 @@ function showAuthError() {
   <body><div class="card">
     <h1>Sign-in didn't complete</h1>
     <p>We returned from the sign-in page without an active session. This is
-       usually temporary — please try again.</p>
+       usually temporary. Please try again.</p>
     <button class="btn" onclick="location.reload()">Try again</button>
     <a class="btn secondary" href="${publicUrl}">Back to public portal</a>
   </div></body>`;

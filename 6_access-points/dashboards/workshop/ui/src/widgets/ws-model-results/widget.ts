@@ -45,7 +45,7 @@ function latestByMetric(rows: PerfRow[]): PerfRow[] {
 
 function perfHtml(rows: PerfRow[]): string {
   if (!rows.length) {
-    return `<p class="mdl-note">No performance rows yet — the actuals scorer writes
+    return `<p class="mdl-note">No performance rows yet; the actuals scorer writes
             accuracy-vs-actuals windows after each scheduled/triggered scoring run.</p>`;
   }
   return `<div class="ws-perf-stats">
@@ -62,7 +62,7 @@ function perfHtml(rows: PerfRow[]): string {
 
 function predHtml(rows: Record<string, unknown>[]): string {
   if (!rows.length) {
-    return `<p class="mdl-note">No inference rows yet — trigger the batch DAG
+    return `<p class="mdl-note">No inference rows yet. Trigger the batch DAG
             (ml_batch_predict) or run the model on your data to populate results.</p>`;
   }
   // Render a compact table from a stable subset of the flat forecast columns
@@ -86,7 +86,7 @@ function predHtml(rows: Record<string, unknown>[]): string {
 async function draw(ctx: WidgetCtx): Promise<void> {
   const model = ctx.filters.ws_model || '';
   if (!model) {
-    ctx.empty('Select a model in the catalogue above to see its latest results — scored metrics and recent inference output.');
+    ctx.empty('Select a model in the catalogue above to see its latest results: scored metrics and recent inference output.');
     return;
   }
 
@@ -110,14 +110,14 @@ async function draw(ctx: WidgetCtx): Promise<void> {
   ctx.el.innerHTML = `
     <div class="ws-model-results">
       <div>
-        <div class="mdl-section-h">Latest scored metrics — <code>${esc(model)}</code></div>
-        ${perfErr ? `<p class="mdl-note">Performance endpoint unavailable — ${esc(perfErr)}</p>`
+        <div class="mdl-section-h">Latest scored metrics: <code>${esc(model)}</code></div>
+        ${perfErr ? `<p class="mdl-note">Performance endpoint unavailable: ${esc(perfErr)}</p>`
                   : perfHtml(latestByMetric(perf))}
       </div>
       <div>
         <div class="mdl-section-h">Recent inference results${
           preds.length ? ` <span class="muted">(${preds.length} rows, latest run)</span>` : ''}</div>
-        ${predErr ? `<p class="mdl-note">Predictions endpoint unavailable — ${esc(predErr)}</p>`
+        ${predErr ? `<p class="mdl-note">Predictions endpoint unavailable: ${esc(predErr)}</p>`
                   : predHtml(preds)}
       </div>
     </div>`;

@@ -223,7 +223,7 @@ function SSO() {
                   <label>Protocol</label>
                   <select value={editor.form.protocol || ''}
                           onChange={(e) => setEditor(s => ({ ...s, form: { ...s.form, protocol: (e.target.value || null) as any } }))}>
-                    <option value="">— none —</option>
+                    <option value="">(none)</option>
                     <option value="oidc">OIDC</option>
                     <option value="saml">SAML 2.0</option>
                   </select>

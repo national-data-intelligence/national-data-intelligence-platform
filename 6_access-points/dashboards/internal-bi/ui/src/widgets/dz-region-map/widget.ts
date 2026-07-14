@@ -181,7 +181,7 @@ const def: WidgetDef = {
       </style>
       <div class="dzm">
         <div class="dzm-head">
-          <div class="dzm-sub">Explore health burden and system readiness across Ethiopia's regions${focusName ? ` — focused on <b>${esc(focusName)}</b>` : ''}.</div>
+          <div class="dzm-sub">Explore health burden and system readiness across Ethiopia's regions${focusName ? `, focused on <b>${esc(focusName)}</b>` : ''}.</div>
           <div class="seg dzm-seg">
             <button data-metric="burden" class="active"><svg class="ico ico-sm"><use href="#i-chart-bar"/></svg>Burden</button>
             <button data-metric="readiness"><svg class="ico ico-sm"><use href="#i-shield-check"/></svg>Readiness</button>
@@ -271,7 +271,7 @@ const def: WidgetDef = {
       if (nums.length < 2) { svgHost.innerHTML = ''; cap.innerHTML = `<span style="color:${t.ink[4]}">Weekly series unavailable</span>`; return; }
       svgHost.innerHTML = sparklineSvg(nums, t, { color: t.status.alert, w: 300, h: 26 });
       const peak = Math.max(...nums);
-      cap.innerHTML = `<span>${esc(fmtDate((pts[0] as any).week, true))} – ${esc(fmtDate((pts[pts.length - 1] as any).week, true))}</span><span>peak ${peak.toLocaleString()} cases/wk</span>`;
+      cap.innerHTML = `<span>${esc(fmtDate((pts[0] as any).week, true))} to ${esc(fmtDate((pts[pts.length - 1] as any).week, true))}</span><span>peak ${peak.toLocaleString()} cases/wk</span>`;
     };
 
     const selectRegion = (name: string) => {

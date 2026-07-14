@@ -14,7 +14,7 @@ async function draw(ctx: WidgetCtx): Promise<void> {
 
   if (!owned.length) {
     ctx.el.innerHTML = `<div style="padding:1.2rem;text-align:center;color:${theme.ink[2]};font-size:.85rem">
-      You don't own any groups yet — create one in <strong>Discover</strong>, then invite people here.</div>`;
+      You don't own any groups yet. Create one in <strong>Discover</strong>, then invite people here.</div>`;
     return;
   }
   ctx.el.innerHTML = `

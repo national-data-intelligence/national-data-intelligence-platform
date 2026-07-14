@@ -300,7 +300,7 @@ const def: WidgetDef = {
     saveBtn?.addEventListener('click', async () => {
       const sql = ta.value.trim();
       if (!sql) return;
-      const title = window.prompt('Save this query as a template — name it:');
+      const title = window.prompt('Save this query as a template. Name it:');
       if (!title || title.trim().length < 2) return;
       const orig = saveBtn.innerHTML;
       saveBtn.disabled = true;

@@ -28,8 +28,8 @@ const def: ModalDef = {
             placeholder="What is this project about? What data and models does it use?"></textarea></label>
         <label><span>Visibility</span>
           <select name="visibility">
-            <option value="private">Private — only you</option>
-            <option value="public">Public — everyone in the workshop</option>
+            <option value="private">Private (only you)</option>
+            <option value="public">Public (everyone in the workshop)</option>
           </select></label>
         <p class="muted ws-vis-hint" style="font-size:.8rem;margin:0"></p>
         <div class="ws-create-err"></div>

@@ -64,7 +64,7 @@ async function draw(ctx: WidgetCtx) {
     if (me?.kc_sub) myKcSub = me.kc_sub;
   } catch { /* fall back to the private-is-mine invariant */ }
 
-  if (projects === null) { ctx.empty(`Could not load projects — ${loadErr}`); return; }
+  if (projects === null) { ctx.empty(`Could not load projects: ${loadErr}`); return; }
 
   // "My" = anything I own; a private project is only ever returned to its owner,
   // so it's mine even if /auth/me hasn't resolved a sub.
@@ -103,7 +103,7 @@ async function draw(ctx: WidgetCtx) {
           <select class="ws-flt-sort" aria-label="Sort projects">
             <option value="updated">Last updated</option>
             <option value="created">Recently created</option>
-            <option value="name">Name A–Z</option>
+            <option value="name">Name A to Z</option>
           </select>
         </span>
       </div>
@@ -179,7 +179,7 @@ async function draw(ctx: WidgetCtx) {
     // Footer count + numbered pager.
     if (total === 0) { countEl.textContent = 'No projects'; pagerEl.innerHTML = ''; return; }
     const from = start + 1, to = Math.min(start + PER_PAGE, total);
-    countEl.textContent = `Showing ${from}–${to} of ${total} project${total === 1 ? '' : 's'}`;
+    countEl.textContent = `Showing ${from} to ${to} of ${total} project${total === 1 ? '' : 's'}`;
     if (pages <= 1) { pagerEl.innerHTML = ''; return; }
     // Windowed page numbers (max 5) around the current page.
     let lo = Math.max(1, state.page - 2), hi = Math.min(pages, lo + 4);

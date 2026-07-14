@@ -22,7 +22,7 @@ async function draw(ctx: WidgetCtx): Promise<void> {
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.9rem;margin-bottom:.7rem">
       <p style="font-size:.83rem;color:${theme.ink[2]};margin:0;max-width:60ch;line-height:1.45">
         Groups share artifacts at the <strong style="color:${theme.ink[1]}">shared</strong> tier. Joining is
-        invite-only — <strong>request to join</strong> and the owner approves you.</p>
+        invite-only. <strong>Request to join</strong> and the owner approves you.</p>
       <button class="btn btn-sm btn-primary" data-act="new" style="flex:none"><svg class="ico ico-sm"><use href="#i-plus"/></svg> Create a group</button>
     </div>
     <form class="grp-create" style="display:none;flex-direction:column;gap:.5rem;border:1px solid var(--line);border-radius:10px;padding:.9rem 1rem;background:var(--paper-2);margin-bottom:.7rem">
@@ -68,7 +68,7 @@ async function draw(ctx: WidgetCtx): Promise<void> {
       try {
         const r = await authFetch(`/gw/groups/${encodeURIComponent(btn.dataset.gid!)}/request-join`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
         if (!r.ok) { toast(`Request failed: ${await errText(r)}`); btn.disabled = false; return; }
-        toast('Join request sent — the owner will review it'); await draw(ctx);
+        toast('Join request sent; the owner will review it'); await draw(ctx);
       } catch (e: any) { toast(`Request failed: ${e?.message || e}`); btn.disabled = false; }
     });
   });
