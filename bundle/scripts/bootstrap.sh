@@ -75,6 +75,37 @@ rm -f /tmp/nhdw-fast-boot.flag   # restore-state writes it iff the snapshot rest
 step() { echo; echo "── $* ──"; }
 need() { command -v "$1" >/dev/null 2>&1 || { echo "FATAL: missing $1" >&2; exit 1; }; }
 
+# Self-heal Cilium node-IP drift (idempotent; a no-op on a healthy cluster).
+# ROOT ISSUE: k3d/Docker Desktop can reassign the node CONTAINER IPs across a
+# daemon or host restart. Cilium caches each node's IP in its CiliumNode CR and
+# keys its cross-node VXLAN tunnel on it, so an IP reshuffle silently black-holes
+# ALL cross-node pod traffic (Keycloak↔postgres-vault, gateway↔DB, ML jobs) while
+# the cluster still reports "up". This is a k3d-on-Docker-Desktop limitation, not
+# an app bug — real nodes have stable IPs, so the class of failure can't occur in
+# production and can't be reliably PREVENTED here. So the ONE canonical bring-up
+# DETECTS the drift (k8s InternalIP != CiliumNode IP) and reconciles it in place;
+# the stuck pods then self-heal once cross-node networking is restored.
+heal_cilium_node_ip_drift() {
+  kubectl get crd ciliumnodes.cilium.io >/dev/null 2>&1 || return 0   # Cilium not installed (yet)
+  local n k8s cil drift=0
+  for n in $(kubectl get nodes -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+    k8s=$(kubectl get node "$n" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+    cil=$(kubectl get ciliumnode "$n" -o jsonpath='{.spec.addresses[?(@.type=="InternalIP")].ip}' 2>/dev/null)
+    if [ -n "$k8s" ] && [ "$k8s" != "$cil" ]; then
+      echo "  ! Cilium node-IP drift on $n (k8s=$k8s cilium=${cil:-none})"; drift=1
+    fi
+  done
+  if [ "$drift" = 1 ]; then
+    echo "  ▸ reconciling Cilium to the current node IPs (drop stale CiliumNode CRs + restart agents)"
+    kubectl delete ciliumnode --all >/dev/null 2>&1 || true
+    kubectl -n kube-system delete pod -l k8s-app=cilium >/dev/null 2>&1 || true
+    kubectl -n kube-system rollout status ds/cilium --timeout=180s >/dev/null 2>&1 || true
+    echo "  ✓ Cilium reconciled — cross-node networking restored (dependent pods self-heal)"
+  else
+    echo "  ✓ Cilium node IPs consistent — no cross-node drift"
+  fi
+}
+
 # ─── 1. tools ──────────────────────────────────────────────────────────────
 step "1 · tools"
 need docker; need kubectl; need python3
@@ -93,6 +124,10 @@ fi
 step "2 · k3d cluster ${CLUSTER}"
 if k3d cluster list 2>/dev/null | awk '{print $1}' | grep -qx "$CLUSTER"; then
   echo "  cluster exists — reusing"
+  # A reused cluster may be recovering from a host/Docker restart that reshuffled
+  # the node IPs — reconcile Cilium so cross-node pod traffic is actually alive
+  # before we trust the cluster (see heal_cilium_node_ip_drift above).
+  heal_cilium_node_ip_drift
 else
   # Pass the host GPU into the cluster when one is present. NOTE: the assistant LLM
   # is EXTERNAL now (0_external/llm/) and gets its GPU from its OWN container
