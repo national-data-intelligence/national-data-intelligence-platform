@@ -24,7 +24,7 @@ try:
 except Exception:                                       # pragma: no cover
     yaml = None
 
-KINDS = {"mysql-dump", "sqlserver-bak", "pg-dump", "sql", "kcadm", "mc", "api", "csv"}
+KINDS = {"mysql-dump", "sqlserver-bak", "pg-dump", "sql", "kcadm", "mc", "api", "csv", "loader"}
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 

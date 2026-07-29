@@ -44,8 +44,12 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["mysql-dump", "sqlserver-bak", "pg-dump", "sql", "kcadm", "mc", "api", "csv"],
-            "description": "Adapter that applies this entry. mysql-dump/sqlserver-bak/pg-dump = load a source-DB dump; sql = ordered SQL files into an app DB; kcadm = Keycloak realm/clients/users; mc = MinIO objects; api = call a system REST endpoint; csv = bulk-load CSV."
+            "enum": ["mysql-dump", "sqlserver-bak", "pg-dump", "sql", "kcadm", "mc", "api", "csv", "loader"],
+            "description": "Adapter that applies this entry. mysql-dump/sqlserver-bak/pg-dump = load a source-DB dump; sql = ordered SQL files into an app DB; loader = run a system loader script (e.g. load_security_seed.py) over pack data files; kcadm = Keycloak realm/clients/users; mc = MinIO objects; api = call a system REST endpoint; csv = bulk-load CSV. NOTE: schema DDL / migrations are NOT seeds — they stay with the system (3_storage/*/init), never in a pack."
+          },
+          "loader": {
+            "type": "string",
+            "description": "For kind=loader: the system loader script that consumes this entry's data (repo-relative, e.g. 7_security/scripts/load_security_seed.py). The loader is system code; only its DATA lives in the pack."
           },
           "file": { "type": "string", "description": "Single data file, relative to the pack root. Mutually exclusive with glob/dir." },
           "glob": { "type": "string", "description": "Glob of data files, relative to the pack root. Use 'order' to pin sequence. Mutually exclusive with file/dir." },

@@ -109,10 +109,15 @@ def _api(entry, files, ctx):
     src = entry.get("dir") or entry.get("file") or "inline"
     return [Action(f"gateway-api[{entry['target']}] ← {src}")]
 
+def _loader(entry, files, ctx):
+    ldr = entry.get("loader", "?loader?")
+    src = entry.get("dir") or entry.get("glob") or entry.get("file") or "?"
+    return [Action(f"loader[{entry['target']}] {Path(ldr).name} over {src} ({len(files)} data files)")]
+
 ADAPTERS = {
     "sql": _sql, "mysql-dump": _mysql_dump, "pg-dump": _pg_dump,
     "sqlserver-bak": _sqlserver_bak, "csv": _csv, "mc": _mc,
-    "kcadm": _kcadm, "api": _api,
+    "kcadm": _kcadm, "api": _api, "loader": _loader,
 }
 
 
