@@ -431,7 +431,7 @@ bash "$SCRIPTS/seed-model-projects.sh" || { echo; echo "✗ model-projects seed 
 # seeded users (step 7 — owner/reviewer are FK'd to ops_identity.user).
 # Convergent (keys off each project's actual review_status); a failure means the
 # review flow + community-model catalogue are not demoable, so gate the boot.
-step "7.6 · graduation seed (bundle/seeds/project-review → real submit/approve/reject API)"
+step "7.6 · graduation seed (bundle/seed-pack/app/project-review → real submit/approve/reject API)"
 bash "$SCRIPTS/seed-graduation.sh" || { echo; echo "✗ graduation seed FAILED — the review flow / model catalogue is not demoable. See the errors above."; exit 1; }
 
 # (7.7 demo widget-plugin RETIRED 2026-07-06 — the runtime-swappable-plugin

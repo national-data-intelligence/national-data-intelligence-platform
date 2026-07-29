@@ -34,7 +34,7 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS=nhdw
-SEEDS="$REPO/bundle/seeds/project-review"
+SEEDS="$REPO/bundle/seed-pack/app/project-review"
 GW_LOCAL_PORT="${GRADUATION_GW_PORT:-18082}"
 RUNNER_IMAGE="${ML_RUNNER_IMAGE:-nhdw/ml-runner:dev}"
 export PATH="$HOME/.local/bin:$PATH"
