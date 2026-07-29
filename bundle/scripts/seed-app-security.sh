@@ -133,8 +133,8 @@ fi
 
 # ── 1b. public-dashboard articles CMS (ops_governance.public_article) ─────────
 ART_LOADER="$REPO/7_security/scripts/load_public_articles.py"
-ART_DIR="$REPO/bundle/seeds/articles"
-echo "▸ [public-articles] load_public_articles.py over bundle/seeds/articles/"
+ART_DIR="$REPO/bundle/seed-pack/app/articles"
+echo "▸ [public-articles] load_public_articles.py over bundle/seed-pack/app/articles/"
 if [ ! -f "$ART_LOADER" ] || [ ! -f "$ART_DIR/articles.yaml" ]; then
   echo "  ! articles loader or seed missing — skipping"
 else

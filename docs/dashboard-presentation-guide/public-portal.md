@@ -527,7 +527,7 @@ that as a UI promise pending confirmation (see Requires confirmation).
 ## 6. Articles / newsroom (where content is stored and how it renders)
 
 - **Where it lives:** the `ops_governance.public_article` table, **seeded from**
-  `bundle/seeds/articles/articles.yaml` by the security
+  `bundle/seed-pack/app/articles/articles.yaml` by the security
   seed job (`7_security/scripts/load_public_articles.py`,
   `managed_by='seed'`), and editable at runtime. The seed ships **10** curated
   articles across PHEM / Press / Advisory / Programme / Research; 3 set an optional

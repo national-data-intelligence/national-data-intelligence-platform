@@ -3,7 +3,7 @@
 The public dashboard's Newsroom (top 3) + Articles list + ArticleView read
 these anonymously (no Bearer token), exactly like the public access-request
 router. Content lives in ops_governance.public_article, seeded from
-bundle/seeds/articles/*.yaml by the security-seed job and editable at runtime.
+bundle/seed-pack/app/articles/*.yaml by the security-seed job and editable at runtime.
 
 Only PUBLISHED, curated content is served here — body_html is trusted authored
 HTML, never visitor input.
