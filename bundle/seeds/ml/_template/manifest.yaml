@@ -21,7 +21,7 @@
 #   tests/              self-tests the validators run       (≥ 1 smoke test)
 #
 # NO widgets in a package: binding a model to a widget is a widget-catalog
-# act (bundle/seeds/security/widgets.yaml references a model by name).
+# act (bundle/seed-pack/app/security/widgets.yaml references a model by name).
 # NO model binaries in a package: fitted models live only in MLflow/MinIO.
 # ══════════════════════════════════════════════════════════════════════════
 

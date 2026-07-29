@@ -81,7 +81,7 @@ function adminApp() {
     // Owner consolidation 2026-07-06: Data = Quality & Lineage · Models ·
     // Review Queue; System & Access = Users and Access · Roles and
     // Permissions · SSO · Environment · Documentation. Titles mirror the
-    // ops_perm page catalog (bundle/seeds/security/pages.yaml).
+    // ops_perm page catalog (bundle/seed-pack/app/security/pages.yaml).
     pageInfo: {
       infra:               { group: 'Infrastructure',   title: 'Health & topology' },
       alerts:              { group: 'Infrastructure',   title: 'Alert routing' },

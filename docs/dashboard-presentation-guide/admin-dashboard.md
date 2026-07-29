@@ -46,7 +46,7 @@ reads Postgres / Trino / MinIO / the k8s API.
 **4. Access is capability-gated at the gateway, per page.** The admin SPA loads
 for any signed-in operator, but each backend route enforces a capability. The
 relevant capabilities and the roles that hold them (from
-`bundle/seeds/security/roles.yaml`):
+`bundle/seed-pack/app/security/roles.yaml`):
 
 | Capability | Roles that hold it | Gates (admin pages) |
 |---|---|---|
@@ -804,7 +804,7 @@ alias, and a raw `config_json` JSON textarea. Writes: `POST` / `PUT
 /{id}` / `DELETE /{id}` under `/api/perm-admin/identity-sources`.
 
 **Which cards appear (seeded).** From
-`bundle/seeds/security/identity_sources.yaml`, seven
+`bundle/seed-pack/app/security/identity_sources.yaml`, seven
 sources load: **FMoH Direct (Keycloak)** `moh-staff-direct` — direct, active ·
 **Fayda (Ethiopian National ID)** `fayda` — oidc, active (verification-only, not a
 login realm) · **Google** `google` — social/oidc, active · **Microsoft**

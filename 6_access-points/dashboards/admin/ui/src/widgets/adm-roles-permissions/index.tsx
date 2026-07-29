@@ -32,7 +32,7 @@ import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKi
 
 // Curated capability vocabulary. The gateway catalog does NOT expose a
 // capability list, so this mirrors the codes actually used across
-// bundle/seeds/security/roles.yaml + the gateway's _require_capability
+// bundle/seed-pack/app/security/roles.yaml + the gateway's _require_capability
 // checks. HONEST: this list is curated in the SPA, not backend-driven — a
 // role can still hold a capability code not shown here (it round-trips
 // untouched because we never delete unknown codes we didn't render).

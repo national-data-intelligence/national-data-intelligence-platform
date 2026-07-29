@@ -7,7 +7,7 @@
 > `_archive/2026-07-10/authz-foundation/flat-catalog-seeds/`. This directory keeps the
 > NON-catalog seeds: filters, mart_attrs, identity_sources, roles, role_grants, users.
 
-# `bundle/seeds/security/` — convention guide
+# `bundle/seed-pack/app/security/` — convention guide
 
 All seed YAML for the NHDW permission system lives here. The
 loader at `7_security/scripts/load_security_seed.py` reads these

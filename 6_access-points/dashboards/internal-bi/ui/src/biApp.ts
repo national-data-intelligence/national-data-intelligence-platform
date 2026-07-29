@@ -85,7 +85,7 @@ const PERIOD_OPTS = { 'all':'All time','last_4wk':'Last 4 weeks','last_12wk':'La
 // Commodity filter values are the EXACT mart commodity_name strings — the code IS
 // the name because the supply marts (bi_supply.mart_supply_region_stock /
 // mart_resource_allocation) key on commodity_name directly. Kept in sync with the
-// filter catalog (bundle/seeds/security/filters.yaml, id: commodity) and the
+// filter catalog (bundle/seed-pack/app/security/filters.yaml, id: commodity) and the
 // fetchers' commodity_col narrowing. A PLAIN narrowing filter (like period): no
 // role scope, always the full list.
 const COMMODITIES = [

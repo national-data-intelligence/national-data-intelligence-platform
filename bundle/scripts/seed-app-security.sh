@@ -22,7 +22,7 @@ NS=nhdw
 for a in "$@"; do case "$a" in --namespace=*) NS="${a#--namespace=}";; esac; done
 
 OPS_DB=nhdw_ops
-SEC_DIR="$REPO/bundle/seeds/security"
+SEC_DIR="$REPO/bundle/seed-pack/app/security"
 LOADER="$REPO/7_security/scripts/load_security_seed.py"
 PGADMIN_PW=$(kubectl -n "$NS" get secret postgres-vault-secrets -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
 
@@ -52,7 +52,7 @@ done
 # The host has no pip and the postgres pod has no python, so run the loader as a
 # K8s Job: python:3.12-slim, the loader + security YAML mounted from a configMap,
 # talking to the postgres-vault Service over cluster DNS. Idempotent (ON CONFLICT).
-echo "▸ [security-rbac] load_security_seed.py over bundle/seeds/security/"
+echo "▸ [security-rbac] load_security_seed.py over bundle/seed-pack/app/security/"
 if [ ! -f "$LOADER" ] || [ ! -d "$SEC_DIR" ]; then
   echo "  ! loader or seed dir missing — skipping"
 else

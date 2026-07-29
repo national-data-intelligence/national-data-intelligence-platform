@@ -2,7 +2,7 @@
 """
 load_security_seed.py — permission seed loader.
 
-Reads YAMLs from `bundle/seeds/security/` and idempotently
+Reads YAMLs from `bundle/seed-pack/app/security/` and idempotently
 upserts them into the `nhdw_ops` database. Run by
 `3_storage/postgres/init/18_security_seed.sh` on first container start;
 re-runnable against an existing DB for upgrades.
@@ -755,7 +755,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed-dir", default=os.environ.get(
         "NHDW_SEED_DIR",
-        str(Path(__file__).resolve().parents[2] / "bundle/seeds/security")))
+        str(Path(__file__).resolve().parents[2] / "bundle/seed-pack/app/security")))
     parser.add_argument("--pg-host", default=os.environ.get("POSTGRES_HOST", "localhost"))
     parser.add_argument("--pg-port", default=os.environ.get("POSTGRES_PORT", "5432"))
     parser.add_argument("--pg-user", default=os.environ.get("POSTGRES_USER", "postgres"))

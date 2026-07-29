@@ -390,7 +390,7 @@ def _dz_region_woreda_sql(t: str, w: str, p: dict) -> str:
 
 # ── the registry ──────────────────────────────────────────────────────────
 # Grows as widgets are bound to marts. Keyed by the canonical widget id
-# (bundle/seeds/security/widgets.yaml).
+# (bundle/seed-pack/app/security/widgets.yaml).
 FETCHERS: dict[str, Fetcher] = {
     # ── internal-bi · disease — EWARS-style surveillance (LIVE model-fed) ────
     # Observed epi data (bi_idsr marts) joined with the latest successful run's

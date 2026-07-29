@@ -74,7 +74,7 @@ def _load_catalog(force: bool = False) -> dict:
         return _catalog
 
 
-# Stable per-role mock UUIDs — MUST match bundle/seeds/security/users.yaml
+# Stable per-role mock UUIDs — MUST match bundle/seed-pack/app/security/users.yaml
 # (keeps audit trails coherent, and hard inserts like PAT issuance FK onto
 # ops_identity."user".kc_sub, so a drifted uuid = 500). The retired in-cluster demo
 # backend carried a0eebc99-* uuids that had drifted out of users.yaml (its R-DEC

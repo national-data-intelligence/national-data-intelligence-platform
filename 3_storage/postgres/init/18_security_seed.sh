@@ -1,7 +1,7 @@
 #!/bin/bash
 # 18_security_seed.sh — calls the Python loader at
 # 7_security/scripts/load_security_seed.py to populate ops_perm.* and the
-# ops_identity additions from YAML in bundle/seeds/security/.
+# ops_identity additions from YAML in bundle/seed-pack/app/security/.
 #
 # Runs INSIDE the Postgres init container, after 17_perm_schemas.sql has
 # created the tables. Idempotent (the loader uses ON CONFLICT UPDATE).
@@ -18,7 +18,7 @@ OPS_DB="${OPS_DB_NAME:-nhdw_ops}"
 
 if [ ! -d "$SEED_DIR" ]; then
     echo "[18_security_seed] WARN: seed dir not present at $SEED_DIR — skipping"
-    echo "[18_security_seed] (mount bundle/seeds/security/ to /opt/seeds/security in compose)"
+    echo "[18_security_seed] (mount bundle/seed-pack/app/security/ to /opt/seeds/security in compose)"
     exit 0
 fi
 

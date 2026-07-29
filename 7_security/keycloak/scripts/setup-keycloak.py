@@ -46,7 +46,7 @@ REPO_ROOT = _parents[3] if len(_parents) > 3 else Path("/")
 # from a k8s Job that mounts users.yaml at a fixed path.
 USERS_YAML = Path(os.environ.get(
     "NHDW_USERS_YAML",
-    str(REPO_ROOT / "bundle/seeds/security/users.yaml")))
+    str(REPO_ROOT / "bundle/seed-pack/app/security/users.yaml")))
 KC_BASE = os.environ.get("KEYCLOAK_BASE", "http://127.0.0.1:8090")
 ADMIN_USERNAME = os.environ["KC_BOOTSTRAP_ADMIN_USERNAME"]
 ADMIN_PASSWORD = os.environ["KC_BOOTSTRAP_ADMIN_PASSWORD"]

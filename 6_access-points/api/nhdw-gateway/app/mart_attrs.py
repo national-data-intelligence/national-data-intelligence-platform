@@ -45,7 +45,7 @@ class MartAttrsMissing(Exception):
     """Raised when a mart isn't cataloged. Means we cannot enforce OPA on it."""
     def __init__(self, schema: str, table: str):
         super().__init__(f"mart_attrs catalog has no entry for {schema}.{table} — "
-                         f"add a row to bundle/seeds/security/mart_attrs.yaml")
+                         f"add a row to bundle/seed-pack/app/security/mart_attrs.yaml")
         self.schema = schema
         self.table  = table
 
