@@ -44,8 +44,8 @@ entries:
   - id: app-program-demo
     target: nhdw_vault
     kind: sql
-    file: app/program-demo/03_program_demo.sql
-    description: "directly-seeded facility-detail demo DATA (programme_metrics/submission_funnel/stock_status; TRUNCATE+INSERT)"
+    file: app/program-demo/program_demo_data.sql
+    description: "directly-seeded facility-detail demo DATA (programme_metrics/submission_funnel/stock_status; TRUNCATE+INSERT). Schema+views stay in 3_storage/postgres/init/03_program_demo.sql (system)."
   # NOTE: workshop-group rosters (15_/34_ *.sh in init) are data-bearing SHELL wrappers;
   # they get converted to pure SQL/CSV data + a generic adapter during migration (P1.5).
 

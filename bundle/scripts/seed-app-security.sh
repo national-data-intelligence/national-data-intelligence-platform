@@ -201,15 +201,19 @@ else
   FAILED=1
 fi
 
-# ── 3. program-demo tables (03) — directly-seeded APP data, NOT pipeline-derivable ─
-# programme_metrics / submission_funnel / stock_status back the facility-detail BI
-# components. 03_program_demo.sql lives in the initdb configMap too, but initdb only
-# fires on a VIRGIN data dir — re-running it here (TRUNCATE + INSERT, idempotent)
-# guarantees the tables are populated on every boot in BOTH modes.
-echo "▸ [program-demo] 03_program_demo.sql (facility-detail demo tables)"
-if kubectl -n "$NS" exec -i postgres-vault-0 -- \
-      env PGPASSWORD="$PGADMIN_PW" psql -U vault_admin -d nhdw_vault -v ON_ERROR_STOP=1 -q \
-      < "$REPO/3_storage/postgres/init/03_program_demo.sql" >/dev/null 2>&1; then
+# ── 3. program-demo SCHEMA (init) + DATA (seed-pack) — directly-seeded APP data ─
+# programme_metrics / submission_funnel / stock_status + the bi_programme views back
+# the facility-detail BI components. The SCHEMA (tables + views + grants) lives in
+# 3_storage/postgres/init/03_program_demo.sql (also in the initdb configMap); the DEMO
+# DATA is the swappable seed pack (bundle/seed-pack/app/program-demo). initdb only
+# fires on a VIRGIN data dir, so re-apply BOTH here — schema (CREATE OR REPLACE) then
+# data (idempotent TRUNCATE + INSERT) — so tables/views stay current and populated on
+# every boot in BOTH modes.
+echo "▸ [program-demo] schema (init) + data (seed-pack)"
+if cat "$REPO/3_storage/postgres/init/03_program_demo.sql" \
+       "$REPO/bundle/seed-pack/app/program-demo/program_demo_data.sql" \
+     | kubectl -n "$NS" exec -i postgres-vault-0 -- \
+       env PGPASSWORD="$PGADMIN_PW" psql -U vault_admin -d nhdw_vault -v ON_ERROR_STOP=1 -q >/dev/null 2>&1; then
   pm=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGADMIN_PW" \
         psql -U vault_admin -d nhdw_vault -At -c "SELECT count(*) FROM bi_facility.programme_metrics" 2>/dev/null)
   echo "  ✓ program-demo tables seeded (programme_metrics=${pm})"
