@@ -8,7 +8,7 @@
 # these five rows REPLACE the four retired hardcoded ml-* CronJobs.
 #
 # Loaded by the bootstrap ML-seed step (upsert on model_name — the column is
-# UNIQUE) after the seed packages under bundle/seeds/ml/<name>/ are trained.
+# UNIQUE) after the seed packages under bundle/seed-pack/app/ml/<name>/ are trained.
 #
 # Columns → ops_ml.model_deployment:
 #   model_name       registry key (MLflow registered model)

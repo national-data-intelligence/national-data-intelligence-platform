@@ -1,7 +1,7 @@
 """Model-package handling — fetch, parse, dependency install, train import.
 
 A package is a directory (or tarball) following the PACKAGE CONTRACT
-(bundle/seeds/ml/_template/ is the annotated reference):
+(bundle/seed-pack/app/ml/_template/ is the annotated reference):
 
     manifest.yaml       name/version/kind/deployment_kind/engine/…
     feature_spec.yaml   input.query + input.signature

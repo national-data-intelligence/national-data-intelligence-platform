@@ -22,7 +22,7 @@ scaled by a leave-one-out level ratio so the expectation is never trivially equa
 to the observed week. The multi-year branch self-activates per series once enough
 ISO-years exist.
 
-Package contract (bundle/seeds/ml/_template): NEVER emits alarm_flag (platform
+Package contract (bundle/seed-pack/app/ml/_template): NEVER emits alarm_flag (platform
 derives alarm_prob >= 0.5) and NEVER serializes attrs (extras folded by runner).
 Reference: docs/ewars-reference-models.md (Seasonal row). Re-authored from the
 published spec — no code copied.

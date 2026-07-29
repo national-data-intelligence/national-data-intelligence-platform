@@ -631,7 +631,7 @@ def make_ml() -> Diagram:
     d.title("m_t", "ML pipeline · package → runner train Job → @champion → predict → widgets", 400, 20)
 
     # Train leg (top)
-    d.node("m_pkg", "Model packages\nbundle/seeds/ml/<name> + uploads\nmanifest · feature_spec · train.py", STY_SOURCE, 60, 110, 300, 80)
+    d.node("m_pkg", "Model packages\nbundle/seed-pack/app/ml/<name> + uploads\nmanifest · feature_spec · train.py", STY_SOURCE, 60, 110, 300, 80)
     d.node("m_mart","postgres-vault\nbi_idsr.mart_ml_disease_input", STY_STORE, 60,  230, 300, 70)
     d.node("m_tr",  "runner Job · train\nnhdw/ml-runner (ephemeral)",  STY_PROC, 440, 150, 280, 80)
     d.node("m_mlf", "MLflow tracking + registry :5000",  STY_STORE,  800, 150, 280, 80)

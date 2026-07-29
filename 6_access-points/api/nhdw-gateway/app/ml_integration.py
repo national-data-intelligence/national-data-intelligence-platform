@@ -62,7 +62,7 @@ log = logging.getLogger("gateway.ml_integration")
 ARTIFACTS_BUCKET = os.environ.get("ARTIFACTS_BUCKET", "nhdw-artifacts")
 ML_PACKAGES_PREFIX = "ml-packages"          # <bucket>/ml-packages/<name>/current/
 
-# The five bundle-seeded models (bundle/seeds/ml/deployments.yaml). A community
+# The five bundle-seeded models (bundle/seed-pack/app/ml/deployments.yaml). A community
 # model whose manifest name collides with one of these is namespaced with the
 # project slug so approval can NEVER clobber a seeded model's registry entry,
 # deployment row or predictions.

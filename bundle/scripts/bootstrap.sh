@@ -389,7 +389,7 @@ bash "$SCRIPTS/seed-docs.sh" || { echo; echo "✗ docs seed FAILED — the Docum
 # Convergent like every other seed: models already @champion (restored state /
 # re-boots) are skipped, so this is cheap on warm boots and complete on cold.
 # Forecast widgets have data from day one (no empty-until-first-schedule gap).
-step "7.5 · ML seed (bundle/seeds/ml → MLflow registry → ops_ml.ml_predictions)"
+step "7.5 · ML seed (bundle/seed-pack/app/ml → MLflow registry → ops_ml.ml_predictions)"
 bash "$SCRIPTS/seed-ml.sh" || { echo; echo "✗ ML seed FAILED — forecast widgets will be empty. See the errors above."; exit 1; }
 
 # ─── 7.55 · projects + datasets seed (real /api/projects + /api/datasets) ────
@@ -418,7 +418,7 @@ bash "$SCRIPTS/seed-resource-requests.sh" || { echo; echo "✗ resource-request 
 # re-trains). Runs AFTER the ML (7.5) + projects (7.55) seeds so the models +
 # project APIs exist, and BEFORE the community graduation demo (7.6). Convergent;
 # a failure means the platform models have no project home, so gate the boot.
-step "7.58 · model-projects seed (bundle/seeds/ml → real adopt-model API)"
+step "7.58 · model-projects seed (bundle/seed-pack/app/ml → real adopt-model API)"
 bash "$SCRIPTS/seed-model-projects.sh" || { echo; echo "✗ model-projects seed FAILED — the platform models have no project home. See the errors above."; exit 1; }
 
 # ─── 7.6 · graduation seed (PROJECT-centric review flow, real gateway API) ───

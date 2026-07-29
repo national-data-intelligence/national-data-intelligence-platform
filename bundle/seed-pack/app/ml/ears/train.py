@@ -21,7 +21,7 @@ rolling PRECEDING-8-WEEK window (the `mart_idsr_outbreaks` convention). The
 multi-year branch self-activates per series the moment >= `min_history_years`
 ISO-years of history exist (e.g. once seed history #40 extends the range).
 
-Package contract (bundle/seeds/ml/_template): train(df, params) returns a fitted
+Package contract (bundle/seed-pack/app/ml/_template): train(df, params) returns a fitted
 mlflow.pyfunc.PythonModel; predict(context, model_input, params) emits the flat
 forecast schema. The package NEVER emits alarm_flag (the platform derives it,
 alarm_prob >= 0.5) and NEVER serializes attrs (extra columns are folded into the

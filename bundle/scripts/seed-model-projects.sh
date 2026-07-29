@@ -6,7 +6,7 @@
 # The 5 platform models (ewars_lite, ears, seasonal, outbreak, stockout_forecast)
 # are already TRAINED + INTEGRATED by seed-ml.sh (MLflow @champion registry +
 # ops_ml.model_deployment + first predictions). They live as seed packages under
-# bundle/seeds/ml/<model>/ (train.py, manifest.yaml, feature_spec.yaml,
+# bundle/seed-pack/app/ml/<model>/ (train.py, manifest.yaml, feature_spec.yaml,
 # model_card.md, params.yaml, requirements.txt, tests/). What they were NOT is a
 # workshop project. This seed gives each one a project home:
 #   • a project row (created via POST /api/projects as the model steward),
@@ -32,7 +32,7 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS=nhdw
-ML_SEEDS="$REPO/bundle/seeds/ml"
+ML_SEEDS="$REPO/bundle/seed-pack/app/ml"
 GW_LOCAL_PORT="${MODEL_PROJECTS_GW_PORT:-18083}"
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -132,7 +132,7 @@ upload_files_from() { # <src_dir> <project_id> <sub> <role>
   ok "uploaded model files → projects/$pid/files/model/"
 }
 
-# ── the 5 platform models: model_key (folder under bundle/seeds/ml) | project
+# ── the 5 platform models: model_key (folder under bundle/seed-pack/app/ml) | project
 #    name | one-line description ────────────────────────────────────────────
 MODELS=$(cat <<'EOF'
 ewars_lite|EWARS-lite Malaria Early-Warning|Climate-driven early-warning for malaria over the weekly IDSR mart.

@@ -3,7 +3,7 @@
 #
 # This _template/ directory IS the package contract documentation: copy it,
 # rename it, fill it in. The SAME layout is used by
-#   * bundle seeds        bundle/seeds/ml/<name>/     (trained at boot)
+#   * bundle seeds        bundle/seed-pack/app/ml/<name>/     (trained at boot)
 #   * community uploads   a .tar.gz of this layout, uploaded through the
 #                         workshop → stored at
 #                         minio://nhdw-artifacts/ml-packages/<name>/<vN>/

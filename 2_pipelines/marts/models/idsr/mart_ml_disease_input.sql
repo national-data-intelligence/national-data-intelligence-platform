@@ -28,7 +28,7 @@
     indicator × monthly vs this mart's woreda × disease × weekly grain).
 
     Grain: (woreda_uid, disease_code, year, week) — unique, tested.
-    Consumed by: ml-runner feature_spec queries (the bundle/seeds/ml packages).
+    Consumed by: ml-runner feature_spec queries (the bundle/seed-pack/app/ml packages).
     (NB: no slash-star sequences in this header — Postgres block comments nest.)
 */
 WITH ou AS (                                   -- woreda org-units (level 4)
