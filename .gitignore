@@ -53,6 +53,10 @@ yarn-error.log*
 
 # --- Large re-downloadable third-party app (excluded per backup plan) ---
 0_external/sources/DHIS2/war/
+# QAT (Quantification Analytics Tool) evaluation bundle — external tool studied
+# for the supply-chain integration plan (docs/qat-integration-plan.md); large,
+# not part of NHDW.
+qat-full-stack.zip
 
 # --- Runtime pids / sockets ---
 *.pid
