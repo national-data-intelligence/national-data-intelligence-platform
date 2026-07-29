@@ -190,7 +190,7 @@ fi
 echo "▸ [workshop-groups] 15_workshop_groups_seed.sh"
 if kubectl -n "$NS" exec -i postgres-vault-0 -- \
       env POSTGRES_USER=vault_admin OPS_DB_NAME="$OPS_DB" PGPASSWORD="$PGADMIN_PW" \
-      bash -s < "$REPO/3_storage/postgres/init/15_workshop_groups_seed.sh" >/dev/null 2>&1; then
+      bash -s < "$REPO/bundle/seed-pack/app/workshop-groups/15_workshop_groups_seed.sh" >/dev/null 2>&1; then
   n=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGADMIN_PW" \
         psql -U vault_admin -d "$OPS_DB" -At -c "SELECT count(*) FROM ops_artifact.workshop_group" 2>/dev/null)
   m=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGADMIN_PW" \
@@ -261,7 +261,7 @@ done
 echo "▸ [workshop-group-flows] 34_workshop_group_flows_seed.sh"
 if kubectl -n "$NS" exec -i postgres-vault-0 -- \
       env POSTGRES_USER=vault_admin OPS_DB_NAME="$OPS_DB" PGPASSWORD="$PGADMIN_PW" \
-      bash -s < "$REPO/3_storage/postgres/init/34_workshop_group_flows_seed.sh" >/dev/null 2>&1; then
+      bash -s < "$REPO/bundle/seed-pack/app/workshop-groups/34_workshop_group_flows_seed.sh" >/dev/null 2>&1; then
   echo "  ✓ group invite/request demo content seeded"
 else
   echo "  ! group-flow demo seed skipped (non-fatal)"
