@@ -1,0 +1,51 @@
+# NHDW seed pack — example/baseline manifest (conforms to seed-pack-engine/manifest.schema.json)
+#
+# This is the DATA side of the seed decoupling: it declares WHAT gets seeded, in WHAT order,
+# and WHICH system versions it is compatible with. The seed ENGINE
+# (bundle/scripts/seed-pack-engine/) reads it and applies each entry via the matching adapter.
+# To change the demo's data, ship a new pack (bump seed_pack_version) — never edit the apps.
+#
+# NOTE: this baseline was extracted from the current bash seeders (seed-app-security.sh,
+# seed-realistic.sh, seed-ml/projects/graduation/docs, sources restore.sh) to prove the
+# manifest captures today's reality. The DATA files are physically migrated into this pack in
+# tasks P1.4–P1.6; until then the paths below are the target layout.
+apiVersion: nhdw.seed/v1
+seed_pack_version: "2026.07.1-baseline"
+targets_system: ">=1.0.0 <2.0.0"
+description: "NHDW demo seed pack — Ethiopia synthetic health data (sources) + RBAC/identity/ML/projects (app)."
+
+entries:
+  # ── 1. SOURCE-LAYER seeds (loaded into the external replicas; may run in parallel) ──
+  - {id: src-dhis2,     target: dhis2,     kind: pg-dump,       dir: sources/dhis2,     group: sources, description: "DHIS2 aggregate/tracker demo DB"}
+  - {id: src-ethioemr,  target: ethioemr,  kind: mysql-dump,    file: sources/ethioemr/clean_openmrs.sql, group: sources, description: "EthioEMR (OpenMRS) clinical records"}
+  - {id: src-hcmiswdm,  target: hcmiswdm,  kind: sqlserver-bak, file: sources/hcmiswdm/hcmis.bak, group: sources, description: "HCMIS/EPSS logistics (stock, consumption, shipments)"}
+  - {id: src-mbrana,    target: mbrana,    kind: pg-dump,       dir: sources/mbrana,    group: sources, description: "mBrana community data"}
+  - {id: src-climate,   target: climate,   kind: csv,           dir: sources/climate,   group: sources, description: "Climate/weather feed"}
+  - {id: src-mfr,       target: mfr,       kind: csv,           dir: sources/mfr,        group: sources, description: "Master Facility Registry"}
+
+  # ── 2. APP SECURITY / RBAC (ops DB; strict order — mirrors seed-app-security.sh) ──
+  - id: app-permission-store
+    target: ops_perm
+    kind: sql
+    glob: app/security/*.sql
+    order: [17_perm_schemas.sql, 23_perm_admin_grants.sql, 25_perm_scope_migration.sql, 32_permission_store.sql]
+    description: "Permission-store schema + admin grants + scope migration + normalized store"
+  - {id: app-rbac-catalog, target: ops_perm, kind: sql, glob: app/security/*.yaml, description: "role_grants / mart_attrs / role_scope catalog (loaded via loader)"}
+  - {id: app-program-demo, target: ops_governance, kind: sql, file: app/security/03_program_demo.sql, description: "program-demo tables (explicit-landing)"}
+  - {id: app-articles,     target: ops_governance, kind: api, description: "public-dashboard CMS articles (ops_governance.public_article)"}
+
+  # ── 3. IDENTITY + POLICY ──
+  - {id: app-keycloak, target: keycloak, kind: kcadm, dir: app/keycloak, description: "realms, clients, roles, demo users (moh-staff + privileged-ops)"}
+  - {id: app-opa,      target: opa,      kind: api,   description: "compile + deliver role_r_*.rego from the permission store (regen-opa-policy)"}
+
+  # ── 4. ML tier ──
+  - {id: app-ml, target: mlflow, kind: api, dir: app/ml, description: "platform ML models → MLflow registry + ops_ml.ml_predictions"}
+
+  # ── 5. PROJECT-centric app state (via real gateway APIs; ordered) ──
+  - {id: app-projects,          target: gateway-api, kind: api, dir: app/projects,   description: "demo projects + datasets"}
+  - {id: app-model-projects,    target: gateway-api, kind: api, dir: app/ml,          description: "adopt the 5 platform models as workshop projects"}
+  - {id: app-resource-requests, target: gateway-api, kind: api, dir: app/resource,    description: "seed compute resource-requests"}
+  - {id: app-graduation,        target: gateway-api, kind: api, dir: app/graduation,  description: "project-review submit/approve/reject"}
+
+  # ── 6. Served docs ──
+  - {id: app-docs, target: minio, kind: mc, dir: app/docs, description: "curated operator docs → MinIO nhdw-docs"}
