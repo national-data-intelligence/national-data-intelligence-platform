@@ -28,6 +28,23 @@ PGADMIN_PW=$(kubectl -n "$NS" get secret postgres-vault-secrets -o jsonpath='{.d
 
 echo "== APP/SECURITY seeding (→ ${OPS_DB}) =="
 
+# ── compat gate (P1.7): refuse a seed pack that targets a different system ────
+# The pack declares targets_system; the system stamps VERSION. If they disagree,
+# refuse BEFORE writing anything — the fail-closed "seeds can't break the system"
+# guarantee. Gracefully skipped if VERSION / manifest / validator is absent.
+_VER_FILE="$REPO/VERSION"; _MANIFEST="$REPO/bundle/seed-pack/manifest.yaml"
+_VALIDATE="$REPO/bundle/scripts/seed-pack-engine/validate.py"
+if [ -f "$_VER_FILE" ] && [ -f "$_MANIFEST" ] && [ -f "$_VALIDATE" ]; then
+  _SYSVER="$(cat "$_VER_FILE")"
+  if python3 "$_VALIDATE" "$_MANIFEST" --system-version "$_SYSVER" >/dev/null 2>&1; then
+    echo "▸ [compat-gate] seed pack compatible with system ${_SYSVER} ✓"
+  else
+    echo "== FATAL: seed pack incompatible with system ${_SYSVER} — refusing to seed =="
+    python3 "$_VALIDATE" "$_MANIFEST" --system-version "$_SYSVER" 2>&1 | sed 's/^/  /'
+    exit 1
+  fi
+fi
+
 # ── 0. reconcile the ops_perm / ops_identity SCHEMA before the RBAC loader ────
 # restore-state (bootstrap) `pg_restore --clean`s an OLDER packed nhdw_ops dump
 # over the fresh initdb schema, so post-dump column/table additions are silently
