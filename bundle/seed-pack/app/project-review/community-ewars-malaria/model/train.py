@@ -26,7 +26,7 @@ other-years when >= `min_history_years` ISO-years exist, else a rolling
 preceding-8-week window. Where the GLM cannot be fit (too few rows / singular
 design) each disease falls back to its endemic mean.
 
-provenance = ewars. Package contract (bundle/seeds/ml/_template): NEVER emits
+provenance = ewars. Package contract (bundle/seed-pack/app/ml/_template): NEVER emits
 alarm_flag (platform derives alarm_prob >= 0.5) and NEVER serializes attrs
 (extras folded by runner). Reference: docs/ewars-reference-models.md
 (EWARS-CSD row). Re-authored from the published spec — no R/INLA code copied.

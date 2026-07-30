@@ -20,7 +20,7 @@ prior-years has no data, so we FALL BACK to a rolling PRECEDING-8-WEEK window
 (the `mart_idsr_outbreaks` convention). The multi-year branch self-activates per
 series once enough ISO-years of history exist.
 
-Package contract (bundle/seeds/ml/_template): the package NEVER emits alarm_flag
+Package contract (bundle/seed-pack/app/ml/_template): the package NEVER emits alarm_flag
 (platform derives alarm_prob >= 0.5) and NEVER serializes attrs (extra columns
 are folded into attrs jsonb by the runner). Reference:
 docs/ewars-reference-models.md (Outbreak row) + WHO EWARS Phase-3 outbreak
