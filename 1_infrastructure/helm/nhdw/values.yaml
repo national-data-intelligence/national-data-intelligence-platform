@@ -1,0 +1,27 @@
+# NHDW Helm values — the per-environment knobs. The topology profiles
+# (values-single.yaml / values-fleet.yaml) override these; "laptop → fleet" is a
+# `-f values-fleet.yaml` swap, no template changes. See README.md.
+namespace: nhdw
+
+image:
+  # dev (k3d-loaded images): "nhdw" → nhdw/<component>:<tag>.
+  # prod: a real registry, e.g. "registry.example.com/nhdw".
+  repository: nhdw
+  tag: dev                     # P2.1 will move this to an immutable version (e.g. 1.0.0)
+  pullPolicy: IfNotPresent
+
+# Consistent-hostname base for OIDC redirects + ingress hosts (the OIDC consistent-hostname contract).
+hostBase: 127.0.0.1.nip.io
+keycloak:
+  publicBase: https://keycloak.127.0.0.1.nip.io
+  internalBase: http://keycloak.nhdw.svc.cluster.local:8080
+
+storageClass: local-path
+
+# Per-component replicas + resources. Fleet profile raises these.
+components:
+  internal-bi:      { replicas: 1, resources: {} }
+  public-dashboard: { replicas: 1, resources: {} }
+  admin:            { replicas: 1, resources: {} }
+  workshop:         { replicas: 1, resources: {} }
+  gateway:          { replicas: 1, resources: {} }

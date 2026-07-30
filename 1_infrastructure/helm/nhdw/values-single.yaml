@@ -1,0 +1,9 @@
+# SINGLE-NODE profile (laptop). One replica each, local-path storage.
+# Pairs with inventory/single-node.yml (nhdw_topology: single).
+storageClass: local-path
+components:
+  internal-bi:      { replicas: 1 }
+  public-dashboard: { replicas: 1 }
+  admin:            { replicas: 1 }
+  workshop:         { replicas: 1 }
+  gateway:          { replicas: 1 }
