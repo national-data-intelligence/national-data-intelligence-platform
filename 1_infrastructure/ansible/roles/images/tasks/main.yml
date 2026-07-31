@@ -1,0 +1,13 @@
+---
+# Load every pre-baked image tar (bundle/images/*.tar) into the node's container runtime so
+# an OFFLINE boot never pulls. Wraps the canonical cache-images.sh --load-only (k3d image
+# import today). P2.2/P5 extend this to the k3s `ctr images import` + a registries.yaml
+# mirror / pull-through cache for the fleet case — same role, different runtime target.
+
+- name: Load + import the pre-baked image tars (offline-first)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/cache-images.sh --load-only"
+  args:
+    chdir: "{{ nhdw_repo_root }}"
+  register: nhdw_images_load
+  changed_when: true
+  when: nhdw_load_images | default(true) | bool

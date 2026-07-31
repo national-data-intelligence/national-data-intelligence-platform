@@ -1,0 +1,79 @@
+---
+# CNI = Cilium + Hubble, plus the node-IP-drift self-heal that keeps cross-node traffic alive
+# after a host/Docker restart. P4 form (k3d) mirrors bundle/scripts/bootstrap.sh; P5 folds this
+# into the k3s path (P5.3) where Cilium spans real nodes. The install + heal are cluster-wide
+# and idempotent, so they no-op after the first pass.
+
+- name: Prepare BPF + cgroup2 mounts on each k3d node (the Cilium agent needs them)
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      for n in $(docker ps --format '{% raw %}{{.Names}}{% endraw %}' | grep "k3d-{{ nhdw_cluster_name }}-" | grep -v serverlb); do
+        docker exec "$n" sh -c \
+          'mount bpffs -t bpf /sys/fs/bpf 2>/dev/null; mount --make-shared /sys/fs/bpf 2>/dev/null; \
+           mkdir -p /run/cilium/cgroupv2; mount -t cgroup2 none /run/cilium/cgroupv2 2>/dev/null; \
+           mount --make-shared /run/cilium/cgroupv2 2>/dev/null' || true
+      done
+    executable: /bin/bash
+  changed_when: false
+
+- name: Pre-import the bundled Cilium image tars (an offline boot never pulls)
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      for t in {{ nhdw_repo_root }}/bundle/images/cilium_*.tar; do
+        [ -f "$t" ] || continue
+        docker load -i "$t" >/dev/null 2>&1 || true
+      done
+      imgs=$(docker images --format '{% raw %}{{.Repository}}:{{.Tag}}{% endraw %}' | grep -E '^(quay.io/)?cilium/' | head -6)
+      [ -n "$imgs" ] && k3d image import $imgs -c {{ nhdw_cluster_name }} >/dev/null 2>&1 || true
+    executable: /bin/bash
+  changed_when: false
+
+- name: Locate the bundled Cilium chart
+  ansible.builtin.find:
+    paths: "{{ nhdw_repo_root }}/bundle/charts"
+    patterns: "cilium-*.tgz"
+  register: nhdw_cilium_chart
+
+- name: Fail if the bundled Cilium chart is missing
+  ansible.builtin.fail:
+    msg: "No bundle/charts/cilium-*.tgz — cannot install the CNI (fix the bundle)."
+  when: nhdw_cilium_chart.files | length == 0
+
+- name: Install / upgrade Cilium + Hubble (bundled chart, offline-friendly values)
+  ansible.builtin.command: >-
+    {{ nhdw_helm }} upgrade --install cilium
+    {{ (nhdw_cilium_chart.files | first).path }}
+    -n kube-system
+    -f {{ role_path }}/files/cilium-values.yaml
+  register: nhdw_cilium
+  changed_when: "'has been' in nhdw_cilium.stdout"
+
+- name: Wait for the Cilium agent DaemonSet to roll out (a true cold boot needs up to 10 min)
+  ansible.builtin.command: "kubectl -n kube-system rollout status ds/cilium --timeout=600s"
+  changed_when: false
+
+# A host/Docker restart reshuffles k3d node IPs while CiliumNode CRs keep the old ones, killing
+# all cross-node pod traffic. Reconcile when the k8s InternalIP != the CiliumNode IP.
+- name: Detect + reconcile Cilium node-IP drift (drop stale CiliumNode CRs + bounce agents)
+  ansible.builtin.shell:
+    cmd: |
+      set -e
+      drift=0
+      for n in $(kubectl get nodes -o jsonpath='{.items[*].metadata.name}'); do
+        k8s=$(kubectl get node "$n" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
+        cil=$(kubectl get ciliumnode "$n" -o jsonpath='{.spec.addresses[?(@.type=="InternalIP")].ip}' 2>/dev/null || true)
+        if [ -n "$k8s" ] && [ "$k8s" != "$cil" ]; then drift=1; fi
+      done
+      if [ "$drift" = 1 ]; then
+        kubectl delete ciliumnode --all >/dev/null 2>&1 || true
+        kubectl -n kube-system delete pod -l k8s-app=cilium >/dev/null 2>&1 || true
+        kubectl -n kube-system rollout status ds/cilium --timeout=180s >/dev/null 2>&1 || true
+        echo reconciled
+      else
+        echo consistent
+      fi
+    executable: /bin/bash
+  register: nhdw_cilium_heal
+  changed_when: "'reconciled' in nhdw_cilium_heal.stdout"

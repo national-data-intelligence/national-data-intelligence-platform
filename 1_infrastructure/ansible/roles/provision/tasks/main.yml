@@ -1,0 +1,38 @@
+---
+# Provision the cluster. P4 form: k3d on the target Docker host, mirroring
+# bundle/scripts/bootstrap.sh steps 1-2. P5 swaps this role's internals for k3s
+# (server on control_plane, agents on workers) read from the inventory — the playbook,
+# the cni/images/deploy/seed/verify roles, and the Helm chart all stay unchanged.
+# NOTE: k3d nodes are containers on ONE host, so a genuine multi-machine FLEET needs the
+# P5 k3s path; single-node here reproduces today's laptop boot (P4.3).
+
+- name: Assert required host tools are on PATH
+  ansible.builtin.command: "command -v {{ item }}"
+  changed_when: false
+  loop: [docker, kubectl, k3d, python3]
+
+- name: Assert the Docker daemon is reachable
+  ansible.builtin.command: docker info
+  changed_when: false
+
+- name: List existing k3d clusters
+  ansible.builtin.command: k3d cluster list -o json
+  register: nhdw_k3d_list
+  changed_when: false
+
+- name: Create the k3d cluster (host 80/443 -> Traefik; flannel off, Cilium is the CNI)
+  ansible.builtin.command: >-
+    k3d cluster create {{ nhdw_cluster_name }}
+    --servers 1 --agents {{ nhdw_k3d_agents }}
+    --port 80:80@loadbalancer --port 443:443@loadbalancer
+    --k3s-arg --disable=metrics-server@server:0
+    --k3s-arg --flannel-backend=none@server:0
+    --k3s-arg --disable-network-policy@server:0
+    --wait
+  when: nhdw_cluster_name not in (nhdw_k3d_list.stdout | from_json | map(attribute='name') | list)
+  register: nhdw_k3d_create
+
+- name: Reused-cluster note (the cni role reconciles any Cilium node-IP drift)
+  ansible.builtin.debug:
+    msg: "k3d cluster '{{ nhdw_cluster_name }}' already existed — reusing; the cni role heals Cilium node IPs."
+  when: nhdw_k3d_create is skipped

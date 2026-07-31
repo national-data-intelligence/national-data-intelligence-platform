@@ -1,0 +1,35 @@
+---
+# Shared config for every NHDW deploy play. Paths derive from the repo checkout so the
+# same playbook runs from any clone; override nhdw_repo_root to deploy an out-of-tree copy.
+# nhdw_topology + nhdw_cluster_name come from the INVENTORY (single-node.yml / fleet.example.yml).
+nhdw_repo_root: "{{ (playbook_dir ~ '/../..') | realpath }}"
+nhdw_namespace: nhdw
+# Ingress host base (must match the Helm chart's hostBase for the values profile in use). The
+# verify role probes https://<sub>.{{ nhdw_host_base }}/. Fleet installs override this.
+nhdw_host_base: 127.0.0.1.nip.io
+
+# Topology (single|fleet, from inventory) → the matching Helm values profile (P3.2).
+nhdw_values_file: "{{ nhdw_repo_root }}/1_infrastructure/helm/nhdw/values-{{ nhdw_topology }}.yaml"
+
+# Canonical, reused artifacts — the roles ORCHESTRATE these; they never reimplement seeding
+# or image logic (repo change-protocol: one canonical implementation, thin orchestration).
+nhdw_scripts_dir: "{{ nhdw_repo_root }}/bundle/scripts"
+nhdw_chart_dir: "{{ nhdw_repo_root }}/1_infrastructure/helm/nhdw"
+nhdw_overlay_dir: "{{ nhdw_repo_root }}/1_infrastructure/k8s/overlays/dev"
+nhdw_helm: "{{ nhdw_repo_root }}/bundle/bin/helm"
+
+# k3d shape for the P4 single-node path (mirrors bootstrap.sh: 1 server + 1 agent).
+# P5 replaces the provision/cni roles with k3s server+agents from the inventory.
+nhdw_k3d_agents: 1
+
+# ConfigMaps the Helm chart OWNS (inline in the manifests — opa/trino/observability config).
+# The deploy role must NOT re-apply these from the overlay, or it would collide with Helm.
+# Everything else the overlay generates (the 7 external-file configMaps + all Secrets) IS
+# applied by the deploy role. Keep in sync with the chart README's deploy-role contract.
+nhdw_chart_owned_configmaps:
+  - opa-config
+  - trino-catalog
+  - trino-etc
+  - prometheus-config
+  - loki-config
+  - promtail-config

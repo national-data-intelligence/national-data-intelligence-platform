@@ -1,0 +1,69 @@
+---
+# Seed the running cluster. Wraps the canonical seed scripts UNCHANGED, in bootstrap.sh's
+# step-7 order — no seeding logic is reimplemented here. The ONE seeding principle holds: only
+# the external source replicas are seeded; the REAL pipeline populates everything downstream;
+# app/security state (never pipeline-derivable) is seeded from the seed-pack. The seed-pack
+# compatibility gate (P1.7) fires inside seed-app-security.sh and aborts on a system/pack mismatch.
+#
+# KEEP IN LOCKSTEP with bundle/scripts/bootstrap.sh steps 6-7.x: if a seed step is added there,
+# add it here too (a future refactor may extract a shared seed-all.sh both callers invoke).
+
+- name: Bring up the external source replicas (dhis2/openmrs/hcmis/mbrana/mfr/fayda)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/sources-up.sh up"
+  args: { chdir: "{{ nhdw_repo_root }}" }
+  changed_when: true
+
+- name: DATA seed — source replicas + the real pipeline (sources -> lake -> CH -> vault -> marts)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-realistic.sh"
+  args: { chdir: "{{ nhdw_repo_root }}" }
+  changed_when: true
+
+- name: APP/SECURITY seed — ops DB, Keycloak, roles, OPA, program-demo (seed-pack, compat-gated)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-app-security.sh"
+  args: { chdir: "{{ nhdw_repo_root }}" }
+  changed_when: true
+
+- name: Regenerate + load the OPA policy from the permission store (opa test gated, fail-closed)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/regen-opa-policy.sh"
+  args: { chdir: "{{ nhdw_repo_root }}" }
+  changed_when: true
+
+# The gateway is deployed with an OPA self-test that needs the catalog the APP seed just wrote;
+# restart it and gate the gateway-driven seeds below on it being Ready (else they race it).
+- name: Restart the gateway so its OPA self-test picks up the seeded catalog
+  ansible.builtin.command: "kubectl -n {{ nhdw_namespace }} rollout restart deploy/nhdw-gateway"
+  changed_when: true
+
+- name: Wait for the gateway to be Ready after the restart
+  ansible.builtin.command: "kubectl -n {{ nhdw_namespace }} rollout status deploy/nhdw-gateway --timeout=180s"
+  changed_when: false
+
+- name: Docs seed (docs/*.md -> MinIO nhdw-docs, served via /gw/docs)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-docs.sh"
+  args: { chdir: "{{ nhdw_repo_root }}" }
+  changed_when: true
+
+- name: ML seed (seed-pack/app/ml -> MLflow registry -> ops_ml.ml_predictions)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-ml.sh"
+  args: { chdir: "{{ nhdw_repo_root }}" }
+  changed_when: true
+
+- name: Projects + datasets seed (real /api/projects + /api/datasets)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-projects.sh"
+  args: { chdir: "{{ nhdw_repo_root }}" }
+  changed_when: true
+
+- name: Resource-request seed (real /api/workspace/resource-request + decide)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-resource-requests.sh"
+  args: { chdir: "{{ nhdw_repo_root }}" }
+  changed_when: true
+
+- name: Model-projects seed (platform models -> real adopt-model API)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-model-projects.sh"
+  args: { chdir: "{{ nhdw_repo_root }}" }
+  changed_when: true
+
+- name: Graduation seed (seed-pack/app/project-review -> real submit/approve/reject API)
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-graduation.sh"
+  args: { chdir: "{{ nhdw_repo_root }}" }
+  changed_when: true
