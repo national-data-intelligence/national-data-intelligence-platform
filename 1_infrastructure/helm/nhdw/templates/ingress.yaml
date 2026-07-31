@@ -1,0 +1,57 @@
+{{- $ns := .Values.namespace -}}
+{{- $h  := .Values.hostBase -}}
+# Ingress — consistent HTTPS hostnames via the hostBase (dev: *.127.0.0.1.nip.io,
+# which resolves to 127.0.0.1 with no hosts-file edits). TLS terminates at Traefik
+# with the wildcard cert in secret nhdw-wildcard-tls (created by the deploy role /
+# gen-tls.sh — external material, referenced by name). HTTPS is required so
+# Keycloak's cross-origin session cookies (SameSite=None;Secure) survive the
+# dashboard<->Keycloak OIDC handshake. Hosts + namespace are values-driven so the
+# same chart re-hosts on any domain (fleet profile → real hostBase).
+{{- range $ing := list
+  (dict "name" "ing-keycloak"      "sub" "keycloak"      "svc" "keycloak"          "port" 8080)
+  (dict "name" "ing-internal-bi"   "sub" "internal-bi"   "svc" "internal-bi"       "port" 80)
+  (dict "name" "ing-dbt-docs"      "sub" "dbt-docs"      "svc" "dbt-docs"          "port" 80)
+  (dict "name" "ing-superset"      "sub" "superset"      "svc" "superset"          "port" 8088)
+  (dict "name" "ing-mlflow"        "sub" "mlflow"        "svc" "mlflow-gate"       "port" 80)
+  (dict "name" "ing-admin"         "sub" "admin"         "svc" "admin"             "port" 80)
+  (dict "name" "ing-workshop"      "sub" "workshop"      "svc" "workshop"          "port" 80)
+  (dict "name" "ing-public"        "sub" "public"        "svc" "public-dashboard"  "port" 80)
+  (dict "name" "ing-gateway"       "sub" "gateway"       "svc" "nhdw-gateway"      "port" 8000)
+  (dict "name" "ing-airflow"       "sub" "airflow"       "svc" "airflow"           "port" 8080)
+  (dict "name" "ing-minio"         "sub" "minio"         "svc" "minio-datalake"    "port" 9000)
+  (dict "name" "ing-minio-console" "sub" "minio-console" "svc" "minio-datalake"    "port" 9001)
+  (dict "name" "ing-prometheus"    "sub" "prometheus"    "svc" "prometheus-gate"   "port" 80)
+  (dict "name" "ing-alertmanager"  "sub" "alertmanager"  "svc" "alertmanager-gate" "port" 80)
+  (dict "name" "ing-jupyter"       "sub" "jupyter"       "svc" "jupyterhub"        "port" 8000)
+}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: {{ $ing.name }}, namespace: {{ $ns }} }
+spec:
+  ingressClassName: traefik
+  tls: [ { hosts: [ {{ $ing.sub }}.{{ $h }} ], secretName: nhdw-wildcard-tls } ]
+  rules:
+    - host: {{ $ing.sub }}.{{ $h }}
+      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: {{ $ing.svc }}, port: { number: {{ $ing.port }} } } } } ] }
+{{- end }}
+---
+# Headlamp (cluster console) — /k8s + /oauth2gate on the ADMIN host so the
+# dashboard's relative link works over TLS. headlamp-gate (nhdw/tool-gate) does
+# BOTH per-role OIDC enforcement (R-OPS-* / R-SUPER) AND SA-bearer injection.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: ing-headlamp, namespace: {{ $ns }} }
+spec:
+  ingressClassName: traefik
+  tls: [ { hosts: [ admin.{{ $h }} ], secretName: nhdw-wildcard-tls } ]
+  rules:
+    - host: admin.{{ $h }}
+      http:
+        paths:
+          - path: /k8s
+            pathType: Prefix
+            backend: { service: { name: headlamp-gate, port: { number: 80 } } }
+          - path: /oauth2gate
+            pathType: Prefix
+            backend: { service: { name: headlamp-gate, port: { number: 80 } } }

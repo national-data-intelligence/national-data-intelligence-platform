@@ -16,6 +16,8 @@ spec:
           env:
             # Public portal is anonymous (no OIDC). Fayda identity verification (email-OTP) is
             # owned by the external Fayda replica; /api/proxy/fayda/* forwards there. Prod → real Fayda.
+            # NHDW_BASE_DOMAIN is prepended (overlay strategic-merge order) to stay byte-identical to kustomize.
+            - { name: NHDW_BASE_DOMAIN,    value: {{ .Values.hostBase | quote }} }
             - { name: FAYDA_INTERNAL_BASE, value: {{ .Values.fayda.internalBase | quote }} }
           {{- with $c.resources }}
           resources: {{ toYaml . | nindent 12 }}

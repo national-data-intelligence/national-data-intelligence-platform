@@ -1,0 +1,79 @@
+# Postgres engine that hosts every NHDW schema: nhdw_vault, nhdw_ops,
+# keycloak_metadata, bi_*, fhir_resources, etc. Single engine, many
+# databases (per project preferences §storage-folder-per-engine).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-vault-data
+  namespace: {{ .Values.namespace }}
+spec:
+  accessModes: [ ReadWriteOnce ]
+  storageClassName: {{ .Values.storageClass }}
+  resources:
+    requests: { storage: 10Gi }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-vault
+  namespace: {{ .Values.namespace }}
+  labels: { app: postgres-vault, tier: storage }
+spec:
+  serviceName: postgres-vault
+  replicas: 1
+  selector: { matchLabels: { app: postgres-vault } }
+  template:
+    metadata:
+      labels: { app: postgres-vault, tier: storage }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [ { containerPort: 5432, name: pg } ]
+          env:
+            - { name: POSTGRES_DB,       value: "nhdw_vault" }
+            - { name: POSTGRES_USER,     value: "vault_admin" }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: POSTGRES_PASSWORD } } }
+            - { name: PGDATA,            value: "/var/lib/postgresql/data/pgdata" }
+            # Envs consumed by the init .sh scripts.
+            - { name: LANDING_WRITER_PASSWORD, valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: LANDING_WRITER_PASSWORD } } }
+            - { name: VAULT_WRITER_PASSWORD,   valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: VAULT_WRITER_PASSWORD   } } }
+            - { name: BI_READER_PASSWORD,      valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: BI_READER_PASSWORD      } } }
+            - { name: OPS_GATEWAY_PASSWORD,    valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: OPS_GATEWAY_PASSWORD    } } }
+            - { name: OPS_WRITER_PASSWORD,     valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: OPS_WRITER_PASSWORD     } } }
+            - { name: OPS_READER_PASSWORD,     valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: OPS_READER_PASSWORD     } } }
+            - { name: GRAFANA_DB_PASSWORD,     valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: GRAFANA_DB_PASSWORD     } } }
+            - { name: MLFLOW_DB_PASSWORD,      valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: MLFLOW_DB_PASSWORD      } } }
+            - { name: KEYCLOAK_DB_PASSWORD,    valueFrom: { secretKeyRef: { name: keycloak-secrets,       key: KC_DB_PASSWORD          } } }
+            - { name: AIRFLOW_DB_PASSWORD,     valueFrom: { secretKeyRef: { name: airflow-secrets,        key: AIRFLOW_DB_PASSWORD     } } }
+            - { name: SUPERSET_DB_PASSWORD,    valueFrom: { secretKeyRef: { name: superset-secrets,       key: DB_PASSWORD, optional: true } } }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: initdb, mountPath: /docker-entrypoint-initdb.d }
+          readinessProbe:
+            exec: { command: [ "pg_isready", "-U", "vault_admin", "-d", "nhdw_vault" ] }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: 5432 }
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: postgres-vault-data }
+        - name: initdb
+          configMap:
+            name: postgres-vault-init
+            defaultMode: 493   # 0755 — .sh scripts need exec bit
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-vault
+  namespace: {{ .Values.namespace }}
+  labels: { app: postgres-vault, tier: storage }
+spec:
+  type: ClusterIP
+  selector: { app: postgres-vault }
+  ports: [ { port: 5432, targetPort: pg, name: pg } ]

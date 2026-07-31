@@ -27,6 +27,8 @@ spec:
           env:
             - { name: KEYCLOAK_ALLOWED_ISSUERS, value: "{{ .Values.keycloak.publicBase }}/realms/moh-staff,{{ .Values.keycloak.publicBase }}/realms/privileged-ops" }
             - { name: KEYCLOAK_PUBLIC_BASE,     value: {{ .Values.keycloak.publicBase | quote }} }
+            # ML_RUNNER_IMAGE sits at index 2 (overlay strategic-merge prepends it) — keep here for kustomize parity.
+            - { name: ML_RUNNER_IMAGE,          value: {{ include "nhdw.image" (dict "name" "ml-runner" "ctx" .) | quote }} }
             - { name: KEYCLOAK_INTERNAL_BASE,   value: {{ .Values.keycloak.internalBase | quote }} }
             - { name: KEYCLOAK_ADMIN_USER,      value: "keycloak_admin" }
             - { name: KEYCLOAK_ADMIN_PASSWORD,  valueFrom: { secretKeyRef: { name: keycloak-secrets, key: KC_BOOTSTRAP_ADMIN_PASSWORD } } }
@@ -52,7 +54,6 @@ spec:
             - { name: MINIO_SECRET_KEY,  valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MLFLOW_URL,        value: "http://mlflow.{{ $ns }}.svc.cluster.local:5000" }
             - { name: MINIO_PUBLIC_ENDPOINT, value: "https://minio.{{ .Values.hostBase }}" }
-            - { name: ML_RUNNER_IMAGE,   value: {{ include "nhdw.image" (dict "name" "ml-runner" "ctx" .) | quote }} }
             - { name: WORKSPACE_PROFILES_PATH, value: "/app/config/profiles.yaml" }
             - { name: JUPYTERHUB_URL, value: "http://jupyterhub.{{ $ns }}.svc.cluster.local:8081" }
             - name: JUPYTERHUB_API_TOKEN

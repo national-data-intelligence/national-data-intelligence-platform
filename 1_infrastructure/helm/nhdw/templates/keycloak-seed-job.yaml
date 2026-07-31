@@ -1,0 +1,118 @@
+# One-shot Job that runs setup-keycloak.py inside the cluster against
+# the in-cluster Keycloak instance. Creates realm roles, imports the 18
+# demo users from users.yaml with their explicit kc_sub UUIDs, configures
+# the Google + EHIA-SAML brokers + dashboard PKCE clients.
+#
+# Idempotent — safe to rerun. Reapply with:
+#   kubectl -n nhdw delete job/keycloak-seed --ignore-not-found
+#   ~/.local/bin/kustomize build --load-restrictor=LoadRestrictionsNone \
+#     1_infrastructure/k8s/overlays/dev | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-seed
+  namespace: {{ .Values.namespace }}
+  labels: { app: keycloak-seed, tier: security }
+spec:
+  backoffLimit: 3
+  template:
+    metadata: { labels: { app: keycloak-seed, tier: security } }
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-keycloak
+          image: curlimages/curl:8.10.1
+          command: [ "/bin/sh", "-c" ]
+          args:
+            - |
+              # First-boot Keycloak runs a full Liquibase schema migration
+              # before the master realm answers — be patient (24×10s = 240s) so
+              # the seed doesn't give up against a still-migrating Keycloak.
+              for i in $(seq 1 24); do
+                if curl -sf "$KC_URL/realms/master/.well-known/openid-configuration" >/dev/null; then
+                  echo "Keycloak ready"; exit 0
+                fi
+                echo "  not ready ($i/24) — sleeping 10s"
+                sleep 10
+              done
+              echo "Keycloak never came up"; exit 1
+          env: [ { name: KC_URL, value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080" } ]
+      containers:
+        - name: seed
+          image: python:3.12-alpine
+          command: [ "/bin/sh", "-c" ]
+          args:
+            - |
+              set -e
+              pip install --quiet --retries 5 --timeout 60 pyyaml
+              python3 /scripts/setup-keycloak.py
+          env:
+            # ── OIDC consistent-hostname wiring (dev overlay patch) — client
+            # redirect URIs + broker issuer pinned to the nip.io ingress hosts.
+            # kustomize's strategic merge hoists these patched vars to the front.
+            - { name: KC_PUBLIC_BASE,        value: {{ .Values.keycloak.publicBase | quote }} }
+            - { name: DASH_BASE_INTERNAL_BI, value: "https://internal-bi.{{ .Values.hostBase }}" }
+            - { name: DASH_BASE_WORKSHOP,    value: "https://workshop.{{ .Values.hostBase }}" }
+            - { name: DASH_BASE_ADMIN,       value: "https://admin.{{ .Values.hostBase }}" }
+            - { name: KEYCLOAK_BASE,               value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080" }
+            - { name: KC_BOOTSTRAP_ADMIN_USERNAME, value: "keycloak_admin" }
+            - { name: KC_BOOTSTRAP_ADMIN_PASSWORD, valueFrom: { secretKeyRef: { name: keycloak-secrets, key: KC_BOOTSTRAP_ADMIN_PASSWORD } } }
+            # Demo-user login password — secret-driven (single source of truth);
+            # optional:true → absent secret falls back to the setup-keycloak.py
+            # default (also NhdwDemo2026.OK), so a warm boot never breaks login.
+            - name: SEED_PASSWORD
+              valueFrom: { secretKeyRef: { name: demo-user-secrets, key: SEED_PASSWORD, optional: true } }
+            - { name: NHDW_USERS_YAML,             value: "/seeds/security/users.yaml" }
+            # Real Google OAuth client for the "Sign in with Google" broker.
+            # optional:true → absent secret ⇒ empty ⇒ Google broker skipped (no
+            # mock fallback), boot still succeeds (password + EHIA federation).
+            - name: GOOGLE_CLIENT_ID
+              valueFrom: { secretKeyRef: { name: keycloak-idp-secrets, key: GOOGLE_CLIENT_ID, optional: true } }
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: keycloak-idp-secrets, key: GOOGLE_CLIENT_SECRET, optional: true } }
+            # Confidential dbt-docs tool client secret — MUST match the value in
+            # the dbt-docs deployment's dbt-docs-secrets. optional:true → absent
+            # ⇒ setup-keycloak skips the dbt-docs client (tool SSO just off).
+            - name: DBT_DOCS_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: dbt-docs-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: AIRFLOW_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: airflow-oidc-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: SUPERSET_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: superset-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: JUPYTERHUB_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: jupyterhub-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            # Confidential minio-console client secret — MUST match the value in
+            # minio.yaml's minio-oidc-secrets. optional:true → absent ⇒ setup-
+            # keycloak skips the minio-console client (console SSO just off).
+            - name: MINIO_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: minio-oidc-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            # tool-gate confidential clients — one secret per gate, MUST match the
+            # gate Deployment's OIDC_CLIENT_SECRET (tool-gates.yaml). optional:true
+            # → absent ⇒ setup-keycloak skips that gate client (its SSO stays off).
+            - name: MLFLOW_GATE_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: mlflow-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: PROMETHEUS_GATE_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: prometheus-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: ALERTMANAGER_GATE_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: alertmanager-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: HEADLAMP_GATE_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: headlamp-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            # Realm SMTP (execute-actions-email) → external Google SMTP relay.
+            # HOST/PORT/TLS default to Gmail in setup-keycloak; USER/PASS are the
+            # app-password (Mailpit fallback retired 2026-07-06).
+            - name: SMTP_HOST
+              valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_HOST, optional: true } }
+            - name: SMTP_PORT
+              valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_PORT, optional: true } }
+            - name: SMTP_TLS
+              valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_TLS, optional: true } }
+            - name: SMTP_USER
+              valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_USER, optional: true } }
+            - name: SMTP_PASS
+              valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_PASS, optional: true } }
+          volumeMounts:
+            - { name: scripts,   mountPath: /scripts }
+            - { name: users-seed, mountPath: /seeds/security }
+      volumes:
+        - { name: scripts,    configMap: { name: keycloak-seed-script, defaultMode: 493 } }   # 0755
+        - { name: users-seed, configMap: { name: keycloak-users-seed } }

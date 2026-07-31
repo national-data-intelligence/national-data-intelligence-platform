@@ -13,14 +13,16 @@ spec:
           image: {{ include "nhdw.image" (dict "name" "workshop" "ctx" .) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports: [ { containerPort: 80, name: http } ]
+          # env order matches the kustomize strategic-merge result (overlay prepends the
+          # nip.io OIDC vars ahead of the base env) so helm/kustomize stay byte-identical.
           env:
-            - { name: DEV_AUTH,             value: "false" }
-            - { name: KEYCLOAK_BASE,        value: {{ .Values.keycloak.internalBase | quote }} }
             - { name: KEYCLOAK_PUBLIC_BASE, value: {{ .Values.keycloak.publicBase | quote }} }
-            - { name: OIDC_REALM,           value: "moh-staff" }
-            - { name: OIDC_CLIENT_ID,       value: "workshop" }
             - { name: OIDC_REDIRECT_URI,    value: "https://workshop.{{ .Values.hostBase }}/" }
             - { name: APP_BASE,             value: "https://workshop.{{ .Values.hostBase }}" }
+            - { name: DEV_AUTH,             value: "false" }
+            - { name: KEYCLOAK_BASE,        value: {{ .Values.keycloak.internalBase | quote }} }
+            - { name: OIDC_REALM,           value: "moh-staff" }
+            - { name: OIDC_CLIENT_ID,       value: "workshop" }
             - { name: GATEWAY_URL,          value: "http://nhdw-gateway.{{ .Values.namespace }}.svc.cluster.local:8000" }
           {{- with $c.resources }}
           resources: {{ toYaml . | nindent 12 }}
