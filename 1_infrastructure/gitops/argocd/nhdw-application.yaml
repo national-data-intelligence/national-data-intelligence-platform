@@ -1,0 +1,54 @@
+# ArgoCD Application for the NHDW app tier (P6.2 — optional day-2 GitOps).
+#
+# ArgoCD reconciles the SAME Helm chart the Ansible deploy role installs
+# (1_infrastructure/helm/nhdw) — so a git push becomes a declarative, self-healing upgrade.
+# It owns ONLY the chart (workloads + Services + RBAC + Ingress + inline configMaps).
+#
+# It deliberately does NOT own:
+#   * the 7 external-file configMaps + the Secrets  — bootstrap prerequisites (deploy role /
+#     a secret store); they are not rendered by the chart, so ArgoCD never touches them.
+#   * the seed-pack  — a one-time data load, not a git-reconciled resource.
+# So the flow is: Ansible bootstrap ONCE (cluster + CNI + configMaps + secrets + first seed),
+# then hand the chart off to ArgoCD for continuous reconciliation. See ../README.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nhdw
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: nhdw
+  source:
+    # Set to your repo (must match the AppProject's sourceRepos).
+    repoURL: https://github.com/YOUR-ORG/nhdw.git
+    # main tracks latest; a PRODUCTION install should PIN an immutable tag/commit (aligns with
+    # the versioned-image-ref philosophy — P2.1) so a sync is a deliberate, reviewable bump.
+    targetRevision: main
+    path: 1_infrastructure/helm/nhdw
+    helm:
+      # Topology is a values choice, same as the Ansible path. Fleet: values-fleet.yaml.
+      valueFiles:
+        - values-single.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nhdw
+  syncPolicy:
+    # Day-2 self-healing: ArgoCD corrects drift back to git. prune removes objects deleted from
+    # the chart. CreateNamespace is harmless (the chart also renders the Namespace).
+    automated:
+      selfHeal: true
+      prune: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }
+  # Don't fight the gateway HPA: it owns the workload replica count, not git.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: nhdw-gateway
+      jsonPointers:
+        - /spec/replicas
