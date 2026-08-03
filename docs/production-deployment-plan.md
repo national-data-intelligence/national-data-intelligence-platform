@@ -93,6 +93,16 @@ Keep image refs **canonical + immutable** (`registry/nhdw/<x>:<version>` or `@sh
   drop mutable `:dev` tags for versioned refs (also needed by the Helm-values story).
 
 ## 7. Phased plan (each phase independently shippable; demo never breaks)
+
+> **Progress.** ✅ P1 seed-pack (manifest + engine + compat gate + migrated seeds; cold-boot
+> verified) — only P1.6 source-loader deferred (dumps already decoupled). ✅ P3.1 Helm chart
+> (all workloads + observability + ingress) **byte-parity-verified** vs `kustomize build`, +
+> P3.2 values-single/fleet. ✅ P4.1 inventory + P4.2 Ansible roles (playbook + provision/cni/
+> images/deploy/seed/verify, YAML-valid, config-selector verified). ✅ P6.2 GitOps (ArgoCD
+> Application for the chart). **Gated on a live boot / real hosts / tooling (do next):** P3.3
+> live `helm upgrade` + P4.3 end-to-end Ansible boot (both need one clean ~50-min boot — do them
+> together), P2.1–2.4 image versioning (re-tag + re-pack the tars, boot-test), P5.x k3s fleet
+> (needs real hosts).
 - **P1 — Seed-pack** (highest value, lowest risk, no topology change): manifest schema + generic
   engine + compatibility gate; migrate existing seed data + logic into the pack; keep `bootstrap.sh`
   working by having it call the engine. Verify a full boot still seeds identically.
