@@ -13,7 +13,7 @@
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/gen-tls.sh"
   args:
     chdir: "{{ nhdw_repo_root }}"
-  register: nhdw_tls
+  register: deploy_tls
   failed_when: false
   changed_when: true
 
@@ -29,17 +29,17 @@
       | python3 {{ role_path }}/files/select-external-config.py '{{ nhdw_chart_owned_configmaps | join(",") }}'
       | kubectl apply -f -
     executable: /bin/bash
-  register: nhdw_config_apply
-  changed_when: "'created' in nhdw_config_apply.stdout or 'configured' in nhdw_config_apply.stdout"
+  register: deploy_config_apply
+  changed_when: "'created' in deploy_config_apply.stdout or 'configured' in deploy_config_apply.stdout"
 
-- name: Deploy / upgrade the NHDW Helm chart ({{ nhdw_topology }} profile)
+- name: Deploy / upgrade the NHDW Helm chart for topology {{ nhdw_topology }}
   ansible.builtin.command: >-
     {{ nhdw_helm }} upgrade --install nhdw {{ nhdw_chart_dir }}
     -n {{ nhdw_namespace }} --create-namespace
     -f {{ nhdw_values_file }}
     --wait --timeout 10m
-  register: nhdw_helm_apply
-  changed_when: "'has been' in nhdw_helm_apply.stdout"
+  register: deploy_helm_apply
+  changed_when: "'has been' in deploy_helm_apply.stdout"
 
 - name: Point the gateway at the host's assistant model (GPU=14b / CPU=3b); best-effort
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/gpu-detect.sh {{ nhdw_namespace }}"
@@ -53,5 +53,5 @@
 # cluster infra like the CNI, so it may move to the provision role.
 - name: Apply metrics-server (kube-system; the chart does not own it)
   ansible.builtin.command: "kubectl apply -f {{ nhdw_repo_root }}/1_infrastructure/k8s/base/metrics-server.yaml"
-  register: nhdw_metrics
-  changed_when: "'created' in nhdw_metrics.stdout or 'configured' in nhdw_metrics.stdout"
+  register: deploy_metrics
+  changed_when: "'created' in deploy_metrics.stdout or 'configured' in deploy_metrics.stdout"

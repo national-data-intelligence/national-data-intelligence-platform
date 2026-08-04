@@ -8,6 +8,6 @@
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/cache-images.sh --load-only"
   args:
     chdir: "{{ nhdw_repo_root }}"
-  register: nhdw_images_load
+  register: images_load
   changed_when: true
   when: nhdw_load_images | default(true) | bool

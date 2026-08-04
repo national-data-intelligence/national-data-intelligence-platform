@@ -14,18 +14,18 @@
     validate_certs: false
     status_code: [200, 301, 302, 303, 401, 403]
   loop: [internal-bi, admin, workshop, public, gateway, keycloak]
-  register: nhdw_probe
+  register: verify_probe
   retries: 10
   delay: 15
-  until: nhdw_probe is succeeded
+  until: verify_probe is succeeded
 
 - name: Assert the gateway ENFORCES OPA (fail-closed, not fail-open)
   ansible.builtin.command: >-
     kubectl -n {{ nhdw_namespace }} get deploy nhdw-gateway
     -o jsonpath={.spec.template.spec.containers[0].env[?(@.name=="OPA_ENFORCE")].value}
-  register: nhdw_opa
+  register: verify_opa
   changed_when: false
-  failed_when: nhdw_opa.stdout != "true"
+  failed_when: verify_opa.stdout != "true"
 
 - name: Run the canonical regression gate (verify-system.sh — same as bootstrap step 7.9)
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/verify-system.sh"
