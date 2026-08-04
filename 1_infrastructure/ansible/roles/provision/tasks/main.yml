@@ -7,7 +7,7 @@
 # P5 k3s path; single-node here reproduces today's laptop boot (P4.3).
 
 - name: Assert required host tools are on PATH
-  ansible.builtin.command: "command -v {{ item }}"
+  ansible.builtin.shell: "command -v {{ item }}"   # noqa: command-instead-of-shell
   changed_when: false
   loop: [docker, kubectl, k3d, python3]
 
