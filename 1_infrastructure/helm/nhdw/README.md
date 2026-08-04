@@ -36,6 +36,10 @@ duplicate those files into the chart, the chart references them **by name** and 
 role (P4.2) creates them as a pre-step** from their canonical source. `disableNameSuffixHash: true`
 in the base means these names are stable (no hash), so name references are safe.
 
+The **namespace** is a deploy-role dependency too (not a chart resource): the deploy role creates it
+before anything lands in it, so Helm never contends with `kubectl` over its ownership — the
+conventional pattern. (`helm install` therefore runs without `--create-namespace`.)
+
 **ConfigMaps the deploy role must create (from external files) before `helm upgrade`:**
 
 | ConfigMap | Source |

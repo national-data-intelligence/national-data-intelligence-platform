@@ -8,6 +8,17 @@
 # KEEP IN LOCKSTEP with bundle/scripts/bootstrap.sh steps 6-7.x: if a seed step is added there,
 # add it here too (a future refactor may extract a shared seed-all.sh both callers invoke).
 
+# The in-cluster ingestors reach the host-published source ports via host.k3d.internal — an entry
+# k3d injects into CoreDNS at cluster creation. Verify-only (orchestration must not mutate system
+# config): if it is missing the cluster is malformed and the boot must stop.
+- name: Verify host.k3d.internal is present in CoreDNS NodeHosts (ingestors need it)
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      kubectl -n kube-system get cm coredns -o jsonpath='{.data.NodeHosts}' | grep -q 'host\.k3d\.internal'
+    executable: /bin/bash
+  changed_when: false
+
 - name: Bring up the external source replicas (dhis2/openmrs/hcmis/mbrana/mfr/fayda)
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/sources-up.sh up"
   args: { chdir: "{{ nhdw_repo_root }}" }
