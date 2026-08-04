@@ -55,10 +55,16 @@ spec:
             exec: { command: [ "pg_isready", "-U", "vault_admin", "-d", "nhdw_vault" ] }
             initialDelaySeconds: 10
             periodSeconds: 5
+            timeoutSeconds: 5
+          # A 1s tcp timeout (the default) false-positives under cold-boot CPU contention and
+          # kills a healthy DB — cascading to every dependent (keycloak-seed, gateway, marts).
+          # 5s timeout + 6 failures (~3min of REAL unresponsiveness) before a restart.
           livenessProbe:
             tcpSocket: { port: 5432 }
             initialDelaySeconds: 60
             periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
       volumes:
         - name: data
           persistentVolumeClaim: { claimName: postgres-vault-data }
