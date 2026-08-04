@@ -22,6 +22,11 @@ nhdw_helm: "{{ nhdw_repo_root }}/bundle/bin/helm"
 # P5 replaces the provision/cni roles with k3s server+agents from the inventory.
 nhdw_k3d_agents: 1
 
+# Pinned k3s node image (immutability). The bundled k3s SYSTEM images
+# (bundle/images/system/, via fetch-system-images.sh) are the versions THIS k3s ships, so an
+# offline boot imports them instead of pulling pause/coredns/traefik from a registry (P2.2).
+nhdw_k3s_image: rancher/k3s:v1.35.5-k3s1
+
 # ConfigMaps the Helm chart OWNS (inline in the manifests — opa/trino/observability config).
 # The deploy role must NOT re-apply these from the overlay, or it would collide with Helm.
 # Everything else the overlay generates (the 7 external-file configMaps + all Secrets) IS

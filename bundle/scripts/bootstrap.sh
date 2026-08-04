@@ -145,11 +145,33 @@ else
   # per-pod flow metrics, incl. controller-less lab pods coroot could not see).
   # k3d --wait is satisfied by the k3s process (node stays NotReady until the
   # Cilium install right below; coredns/traefik Pend briefly and then recover).
-  k3d cluster create "$CLUSTER" --servers 1 --agents 1 $GPU_FLAG \
+  # P2.2: pin k3s + load the bundled node image so cluster-create works OFFLINE.
+  K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.35.5-k3s1}"
+  for t in "$REPO"/bundle/images/system/node-*.tar; do
+    [ -f "$t" ] && docker load -i "$t" >/dev/null 2>&1 || true
+  done
+  k3d cluster create "$CLUSTER" --image "$K3S_IMAGE" --servers 1 --agents 1 $GPU_FLAG \
     --port "80:80@loadbalancer" --port "443:443@loadbalancer" \
     --k3s-arg "--disable=metrics-server@server:0" \
     --k3s-arg "--flannel-backend=none@server:0" \
     --k3s-arg "--disable-network-policy@server:0" --wait
+
+  # P2.2: import the bundled k3s SYSTEM images (pause/coredns/traefik/klipper/local-path/busybox)
+  # BEFORE anything schedules, so an OFFLINE boot never pulls them (a fresh k3d node embeds none —
+  # this is what stalled a boot during the 2026-08-04 docker.io outage). Import FROM THE TARS
+  # (sanitized by fetch-system-images.sh); a name-import fatals in-node ctr.
+  SYS_TARS=()
+  for t in "$REPO"/bundle/images/system/*.tar; do
+    case "$t" in */node-*) continue ;; esac
+    [ -f "$t" ] && SYS_TARS+=("$t")
+  done
+  if [ ${#SYS_TARS[@]} -gt 0 ]; then
+    k3d image import "${SYS_TARS[@]}" -c "$CLUSTER" --mode direct >/dev/null 2>&1 \
+      && echo "  ✓ imported ${#SYS_TARS[@]} bundled k3s system images (offline-ready)" \
+      || echo "  ! system-image import had errors — offline boot may pull pause/coredns"
+  else
+    echo "  ! no bundled system-image tars — run bundle/scripts/fetch-system-images.sh for offline boot"
+  fi
 
   # ── Cilium CNI + Hubble (#38) — from the BUNDLED chart + image tars ────────
   echo "  ▸ installing Cilium CNI + Hubble (bundled chart)"
