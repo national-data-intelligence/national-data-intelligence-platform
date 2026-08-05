@@ -34,40 +34,40 @@ done
 # images first, then pipeline (dbt/ingestor/ml) images.
 IMAGES=(
   # --- platform / access ---
-  "nhdw/keycloak:dev|7_security/keycloak|Dockerfile"
-  "nhdw/mlflow:dev|2_pipelines/ml/registry|Dockerfile"
+  "nhdw/keycloak:1.0.0|7_security/keycloak|Dockerfile"
+  "nhdw/mlflow:1.0.0|2_pipelines/ml/registry|Dockerfile"
   # NOTE: the LLM is an EXTERNAL component now (0_external/llm/) — the default path
   # runs stock ollama/ollama:0.6.8 (a bundled public image) with the weights in
   # 0_external/llm/models mounted directly, so there is NO custom LLM image to build
   # here. The baked-weights nhdw/ollama-model image is for the BARE-METAL in-cluster
   # recipe ONLY; build it by hand when using that recipe:
-  #   docker build -t nhdw/ollama-model:dev -f 0_external/llm/image/Dockerfile 0_external/llm/models
-  "nhdw/airflow:dev|5_orchestrator|Dockerfile"
-  "nhdw/fayda-replica:dev|0_external/fayda|Dockerfile"
-  "nhdw/gateway:dev|6_access-points/api/nhdw-gateway|Dockerfile"
-  "nhdw/fhir-mediator:dev|6_access-points/api/openhim/mediator|Dockerfile"
-  "nhdw/jupyterhub:dev|6_access-points/jupyterhub|Dockerfile"
-  "nhdw/jupyterlab:dev|6_access-points/jupyterhub/singleuser|Dockerfile"
-  "nhdw/public-dashboard:dev|6_access-points/dashboards/public|Dockerfile"
-  "nhdw/dbt-docs:dev|6_access-points/dashboards/dbt-docs|Dockerfile"
-  "nhdw/superset:dev|6_access-points/dashboards/superset|Dockerfile"
-  "nhdw/tool-gate:dev|6_access-points/api/tool-gate|Dockerfile"
-  "nhdw/admin:dev|6_access-points/dashboards|admin/Dockerfile"
-  "nhdw/workshop:dev|6_access-points/dashboards|workshop/Dockerfile"
-  "nhdw/internal-bi:dev|6_access-points/dashboards|internal-bi/Dockerfile"
+  #   docker build -t nhdw/ollama-model:1.0.0 -f 0_external/llm/image/Dockerfile 0_external/llm/models
+  "nhdw/airflow:1.0.0|5_orchestrator|Dockerfile"
+  "nhdw/fayda-replica:1.0.0|0_external/fayda|Dockerfile"
+  "nhdw/gateway:1.0.0|6_access-points/api/nhdw-gateway|Dockerfile"
+  "nhdw/fhir-mediator:1.0.0|6_access-points/api/openhim/mediator|Dockerfile"
+  "nhdw/jupyterhub:1.0.0|6_access-points/jupyterhub|Dockerfile"
+  "nhdw/jupyterlab:1.0.0|6_access-points/jupyterhub/singleuser|Dockerfile"
+  "nhdw/public-dashboard:1.0.0|6_access-points/dashboards/public|Dockerfile"
+  "nhdw/dbt-docs:1.0.0|6_access-points/dashboards/dbt-docs|Dockerfile"
+  "nhdw/superset:1.0.0|6_access-points/dashboards/superset|Dockerfile"
+  "nhdw/tool-gate:1.0.0|6_access-points/api/tool-gate|Dockerfile"
+  "nhdw/admin:1.0.0|6_access-points/dashboards|admin/Dockerfile"
+  "nhdw/workshop:1.0.0|6_access-points/dashboards|workshop/Dockerfile"
+  "nhdw/internal-bi:1.0.0|6_access-points/dashboards|internal-bi/Dockerfile"
   # --- pipeline: lake seed, dbt, bridge ---
-  "nhdw/staging-dbt:dev|2_pipelines/staging|Dockerfile"
-  "nhdw/vault-dbt:dev|2_pipelines/vault|Dockerfile"
-  "nhdw/vault-bridge:dev|2_pipelines/vault/bridge|Dockerfile"
-  "nhdw/marts-dbt:dev|2_pipelines/marts|Dockerfile"
-  "nhdw/ml-runner:dev|2_pipelines/ml/runner|Dockerfile"
+  "nhdw/staging-dbt:1.0.0|2_pipelines/staging|Dockerfile"
+  "nhdw/vault-dbt:1.0.0|2_pipelines/vault|Dockerfile"
+  "nhdw/vault-bridge:1.0.0|2_pipelines/vault/bridge|Dockerfile"
+  "nhdw/marts-dbt:1.0.0|2_pipelines/marts|Dockerfile"
+  "nhdw/ml-runner:1.0.0|2_pipelines/ml/runner|Dockerfile"
   # --- pipeline: source ingestors ---
-  "nhdw/dhis2-ingestor:dev|2_pipelines/ingestor/DHIS2|Dockerfile"
-  "nhdw/ethioemr-ingestor:dev|2_pipelines/ingestor/EthioEMR|Dockerfile"
-  "nhdw/hcmiswdm-ingestor:dev|2_pipelines/ingestor/HCMISWDM|Dockerfile"
-  "nhdw/mbrana-ingestor:dev|2_pipelines/ingestor/mBrana|Dockerfile"
-  "nhdw/mfr-ingestor:dev|2_pipelines/ingestor/MFR|Dockerfile"
-  "nhdw/climate-ingestor:dev|2_pipelines/ingestor/Climate|Dockerfile"
+  "nhdw/dhis2-ingestor:1.0.0|2_pipelines/ingestor/DHIS2|Dockerfile"
+  "nhdw/ethioemr-ingestor:1.0.0|2_pipelines/ingestor/EthioEMR|Dockerfile"
+  "nhdw/hcmiswdm-ingestor:1.0.0|2_pipelines/ingestor/HCMISWDM|Dockerfile"
+  "nhdw/mbrana-ingestor:1.0.0|2_pipelines/ingestor/mBrana|Dockerfile"
+  "nhdw/mfr-ingestor:1.0.0|2_pipelines/ingestor/MFR|Dockerfile"
+  "nhdw/climate-ingestor:1.0.0|2_pipelines/ingestor/Climate|Dockerfile"
 )
 
 BUILT=()
@@ -84,7 +84,7 @@ for entry in "${IMAGES[@]}"; do
   # canonical home is 2_pipelines/ml/registry/validators.py (single source of
   # truth). Docker COPY can't reach outside the build context, so stage it
   # into the context here (transient, gitignored) right before the build.
-  if [ "$img" = "nhdw/gateway:dev" ]; then
+  if [ "$img" = "nhdw/gateway:1.0.0" ]; then
     cp "$REPO/2_pipelines/ml/registry/validators.py" \
        "$REPO/6_access-points/api/nhdw-gateway/validators.py"
   fi

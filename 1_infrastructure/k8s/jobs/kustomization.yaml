@@ -14,16 +14,16 @@ resources:
   - ../base/ingestor-jobs.yaml
 
 images:
-  - { name: "nhdw-registry:5500/nhdw/staging-dbt",       newName: nhdw/staging-dbt,       newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/vault-dbt",         newName: nhdw/vault-dbt,         newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/vault-bridge",      newName: nhdw/vault-bridge,      newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/marts-dbt",         newName: nhdw/marts-dbt,         newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/dhis2-ingestor",    newName: nhdw/dhis2-ingestor,    newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/climate-ingestor",  newName: nhdw/climate-ingestor,  newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/ethioemr-ingestor", newName: nhdw/ethioemr-ingestor, newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/hcmiswdm-ingestor", newName: nhdw/hcmiswdm-ingestor, newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/mbrana-ingestor",   newName: nhdw/mbrana-ingestor,   newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/mfr-ingestor",      newName: nhdw/mfr-ingestor,      newTag: dev }
+  - { name: "nhdw-registry:5500/nhdw/staging-dbt",       newName: nhdw/staging-dbt,       newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/vault-dbt",         newName: nhdw/vault-dbt,         newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/vault-bridge",      newName: nhdw/vault-bridge,      newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/marts-dbt",         newName: nhdw/marts-dbt,         newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/dhis2-ingestor",    newName: nhdw/dhis2-ingestor,    newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/climate-ingestor",  newName: nhdw/climate-ingestor,  newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/ethioemr-ingestor", newName: nhdw/ethioemr-ingestor, newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/hcmiswdm-ingestor", newName: nhdw/hcmiswdm-ingestor, newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/mbrana-ingestor",   newName: nhdw/mbrana-ingestor,   newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/mfr-ingestor",      newName: nhdw/mfr-ingestor,      newTag: 1.0.0 }
 
 patches:
   # Local images are pre-imported into k3d — never pull from a registry.

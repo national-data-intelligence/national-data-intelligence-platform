@@ -22,7 +22,7 @@ spec:
       # ── init: run migrations, seed FAB roles, upsert the Trino connection ──
       initContainers:
         - name: superset-init
-          image: nhdw-registry:5500/nhdw/superset:dev
+          image: nhdw-registry:5500/nhdw/superset:1.0.0
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh
@@ -48,7 +48,7 @@ spec:
             - { name: SUPERSET_OIDC_ISSUER_INTERNAL, value: "http://keycloak.nhdw.svc.cluster.local:8080/realms/moh-staff" }
       containers:
         - name: superset
-          image: nhdw-registry:5500/nhdw/superset:dev
+          image: nhdw-registry:5500/nhdw/superset:1.0.0
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh

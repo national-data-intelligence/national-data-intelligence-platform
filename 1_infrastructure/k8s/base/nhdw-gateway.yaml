@@ -15,7 +15,7 @@ spec:
       serviceAccountName: nhdw-gateway
       containers:
         - name: gateway
-          image: nhdw-registry:5500/nhdw/gateway:v1782690525
+          image: nhdw-registry:5500/nhdw/gateway:1.0.0
           imagePullPolicy: Always
           ports: [ { containerPort: 8000, name: http } ]
           # Resource requests are the HPA's scaling baseline (target = % of the
@@ -86,9 +86,9 @@ spec:
             # Runner image for the ephemeral train / predict-adhoc Jobs the
             # gateway spawns (/api/ml/{model}/retrain + /predict). A kustomize
             # `images:` remap can't reach dynamically-created Jobs, so the dev
-            # overlay patches this env to nhdw/ml-runner:dev (same pattern as
+            # overlay patches this env to nhdw/ml-runner:1.0.0 (same pattern as
             # the airflow Deployment — keep the three in sync).
-            - { name: ML_RUNNER_IMAGE,   value: "nhdw-registry:5500/nhdw/ml-runner:v1" }
+            - { name: ML_RUNNER_IMAGE,   value: "nhdw-registry:5500/nhdw/ml-runner:1.0.0" }
             # Workspace profile catalogue (Small/Medium/Large pod specs) —
             # authoritative file is 6_access-points/jupyterhub/profiles.yaml,
             # mounted via the workspace-profiles configMap. Without it,

@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: dashboard
-          image: nhdw-registry:5500/nhdw/admin:v1782690463
+          image: nhdw-registry:5500/nhdw/admin:1.0.0
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 80, name: http } ]
           env:
@@ -48,7 +48,7 @@ spec:
     spec:
       containers:
         - name: dashboard
-          image: nhdw-registry:5500/nhdw/workshop:dev
+          image: nhdw-registry:5500/nhdw/workshop:1.0.0
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 80, name: http } ]
           env:
@@ -82,7 +82,7 @@ spec:
     spec:
       containers:
         - name: dashboard
-          image: nhdw-registry:5500/nhdw/public-dashboard:dev
+          image: nhdw-registry:5500/nhdw/public-dashboard:1.0.0
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 80, name: http } ]
           env:

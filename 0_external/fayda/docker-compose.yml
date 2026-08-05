@@ -10,7 +10,7 @@
 services:
   fayda:
     build: .
-    image: nhdw/fayda-replica:dev
+    image: nhdw/fayda-replica:1.0.0
     container_name: fayda-replica
     restart: unless-stopped
     # Fayda's OWN isolated SMTP — the OTP mailer for the access-request identity

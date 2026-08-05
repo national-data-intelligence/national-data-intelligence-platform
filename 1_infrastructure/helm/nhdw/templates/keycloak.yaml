@@ -34,7 +34,7 @@ spec:
         - name: keycloak
           # Custom image = stock keycloak:26.0.7 + the baked-in "nhdw" login theme
           # (7_security/keycloak/Dockerfile). Local k3d remaps this to
-          # nhdw/keycloak:dev via the overlay images: block.
+          # nhdw/keycloak:1.0.0 via the overlay images: block.
           image: {{ include "nhdw.image" (dict "name" "keycloak" "ctx" .) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: [ "start-dev", "--import-realm" ]

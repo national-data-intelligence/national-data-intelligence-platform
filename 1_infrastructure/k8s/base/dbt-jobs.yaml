@@ -87,7 +87,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: apply-raw-views
-          image: nhdw-registry:5500/nhdw/staging-dbt:v1
+          image: nhdw-registry:5500/nhdw/staging-dbt:1.0.0
           imagePullPolicy: Always
           command: ["python", "/dbt/scripts/apply_raw_views.py"]
           env:
@@ -132,7 +132,7 @@ spec:
             - { name: MINIO_ROOT_PASSWORD, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
       containers:
         - name: build-processed-zone
-          image: nhdw-registry:5500/nhdw/staging-dbt:v1
+          image: nhdw-registry:5500/nhdw/staging-dbt:1.0.0
           imagePullPolicy: Always
           command: ["python", "/dbt/scripts/build_processed_zone.py"]
           env:
@@ -156,7 +156,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: bridge
-          image: nhdw-registry:5500/nhdw/vault-bridge:dev
+          image: nhdw-registry:5500/nhdw/vault-bridge:1.0.0
           imagePullPolicy: Always
           env:
             - { name: CH_HOST,     value: "clickhouse.nhdw.svc.cluster.local" }
@@ -190,7 +190,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: dbt
-          image: nhdw-registry:5500/nhdw/staging-dbt:dev
+          image: nhdw-registry:5500/nhdw/staging-dbt:1.0.0
           imagePullPolicy: Always
           # ENTRYPOINT is entrypoint.py; these args forward to `dbt build`, then
           # the wrapper uploads artifacts + generates docs (see section note).
@@ -227,7 +227,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: dbt
-          image: nhdw-registry:5500/nhdw/vault-dbt:v1782686372
+          image: nhdw-registry:5500/nhdw/vault-dbt:1.0.0
           imagePullPolicy: Always
           # HISTORY-PRESERVING conditional refresh (DV2 upgrade, 2026-07-03):
           # the vault is insert-only (append strategy), so a COLD schema needs
@@ -284,7 +284,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: dbt
-          image: nhdw-registry:5500/nhdw/marts-dbt:v1782687883
+          image: nhdw-registry:5500/nhdw/marts-dbt:1.0.0
           imagePullPolicy: Always
           # Same conditional refresh as dbt-vault. Marts are table-materialized
           # (they rebuild from the current vault, reading v_*_current for the
@@ -338,7 +338,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: publish
-          image: nhdw-registry:5500/nhdw/marts-dbt:dev
+          image: nhdw-registry:5500/nhdw/marts-dbt:1.0.0
           imagePullPolicy: IfNotPresent
           command: [ "python3", "/dbt/publish_public_datasets.py" ]
           env:

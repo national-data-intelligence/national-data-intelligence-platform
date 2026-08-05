@@ -96,7 +96,7 @@ spec:
           env:
             # Runner image launched by ml_batch_predict (KubernetesPodOperator).
             # kustomize image remaps can't reach into the DAG's python, so the dev
-            # overlay patches THIS env var to nhdw/ml-runner:dev (the strategic
+            # overlay patches THIS env var to nhdw/ml-runner:1.0.0 (the strategic
             # merge hoists the patched var to the front of the env list).
             - { name: ML_RUNNER_IMAGE, value: {{ include "nhdw.image" (dict "name" "ml-runner" "ctx" .) | quote }} }
             - { name: AIRFLOW__CORE__EXECUTOR, value: "LocalExecutor" }
@@ -136,7 +136,7 @@ spec:
           env:
             # Runner image launched by ml_batch_predict (KubernetesPodOperator).
             # kustomize image remaps can't reach into the DAG's python, so the dev
-            # overlay patches THIS env var to nhdw/ml-runner:dev (the strategic
+            # overlay patches THIS env var to nhdw/ml-runner:1.0.0 (the strategic
             # merge hoists the patched var to the front of the env list).
             - { name: ML_RUNNER_IMAGE, value: {{ include "nhdw.image" (dict "name" "ml-runner" "ctx" .) | quote }} }
             - { name: AIRFLOW__CORE__EXECUTOR, value: "LocalExecutor" }

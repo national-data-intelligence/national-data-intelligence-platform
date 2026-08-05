@@ -36,7 +36,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS=nhdw
 SEEDS="$REPO/bundle/seed-pack/app/project-review"
 GW_LOCAL_PORT="${GRADUATION_GW_PORT:-18082}"
-RUNNER_IMAGE="${ML_RUNNER_IMAGE:-nhdw/ml-runner:dev}"
+RUNNER_IMAGE="${ML_RUNNER_IMAGE:-nhdw/ml-runner:1.0.0}"
 export PATH="$HOME/.local/bin:$PATH"
 
 # Real seeded principals (ops_identity.user.kc_sub). Owner columns + the reviewer

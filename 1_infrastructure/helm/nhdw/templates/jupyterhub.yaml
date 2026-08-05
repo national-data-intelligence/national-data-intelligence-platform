@@ -66,7 +66,7 @@ spec:
             - { containerPort: 8000, name: proxy-public }
             - { containerPort: 8081, name: hub-api }
           env:
-            # Spawned-lab image (overlay remaps to nhdw/jupyterlab:dev — env refs
+            # Spawned-lab image (overlay remaps to nhdw/jupyterlab:1.0.0 — env refs
             # are NOT covered by the images: transform, so the dev overlay patches
             # this value like ML_RUNNER_IMAGE; the strategic merge hoists it to the
             # front of the env list).

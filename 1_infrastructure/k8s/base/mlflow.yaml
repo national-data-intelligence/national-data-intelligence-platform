@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: mlflow
-          image: nhdw-registry:5500/nhdw/mlflow:dev
+          image: nhdw-registry:5500/nhdw/mlflow:1.0.0
           imagePullPolicy: Always
           ports: [ { containerPort: 5000, name: http } ]
           env:

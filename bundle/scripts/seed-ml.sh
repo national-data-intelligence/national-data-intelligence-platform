@@ -16,12 +16,12 @@
 # don't retrain); pass --retrain to force.
 #
 # Runner Jobs mirror the gateway's job builder (routes/ml.py _runner_env) —
-# same env contract, same image seam (nhdw/ml-runner:dev locally; prod remaps).
+# same env contract, same image seam (nhdw/ml-runner:1.0.0 locally; prod remaps).
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS=nhdw
 SEEDS="$REPO/bundle/seed-pack/app/ml"
-RUNNER_IMAGE="${ML_RUNNER_IMAGE:-nhdw/ml-runner:dev}"
+RUNNER_IMAGE="${ML_RUNNER_IMAGE:-nhdw/ml-runner:1.0.0}"
 FORCE_RETRAIN=false
 [ "${1:-}" = "--retrain" ] && FORCE_RETRAIN=true
 export PATH="$HOME/.local/bin:$PATH"

@@ -101,7 +101,7 @@ if [ "$INGEST" = 1 ]; then
   # so a broken host route fails loudly here instead of as 0-row marts later.
   echo "▸ [preflight] source reachability from inside the cluster (host.k3d.internal)"
   if kubectl -n "$NS" run src-preflight --rm -i --restart=Never \
-      --image=nhdw/dhis2-ingestor:dev --image-pull-policy=IfNotPresent --quiet \
+      --image=nhdw/dhis2-ingestor:1.0.0 --image-pull-policy=IfNotPresent --quiet \
       --command -- python3 -c '
 import socket, sys
 ports = {"dhis2": 8080, "climate": 8095, "mfr": 8093,
