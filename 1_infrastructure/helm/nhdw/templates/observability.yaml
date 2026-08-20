@@ -383,7 +383,10 @@ spec:
             - |
               set -eu
               OUT=/rendered/alertmanager.yml
-              if [ -n "${SMTP_HOST:-}" ] && [ -n "${SMTP_USER:-}" ]; then
+              # Email is opt-IN via .Values.alertmanager.email (default false). Even with SMTP
+              # creds present, a rebuild stays SILENT unless email is explicitly enabled — so a
+              # from-bare deploy never surprises a real inbox with alerts.
+              if [ "${AM_EMAIL_ENABLED:-0}" = "1" ] && [ -n "${SMTP_HOST:-}" ] && [ -n "${SMTP_USER:-}" ]; then
                 echo "render-config: SMTP relay ${SMTP_HOST}:${SMTP_PORT:-587} → ${SMTP_USER}"
                 cat > "$OUT" <<EOF
               global:
@@ -434,6 +437,8 @@ spec:
               EOF
               fi
           env:
+            # Opt-in email switch (default false) — see .Values.alertmanager.email. Off ⇒ null receiver.
+            - { name: AM_EMAIL_ENABLED, value: "{{ if .Values.alertmanager.email }}1{{ else }}0{{ end }}" }
             - { name: SMTP_HOST, valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_HOST, optional: true } } }
             - { name: SMTP_PORT, valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_PORT, optional: true } } }
             - { name: SMTP_USER, valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_USER, optional: true } } }

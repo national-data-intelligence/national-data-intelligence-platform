@@ -1,81 +1,12 @@
 ---
-# Provision the cluster. P4 form: k3d on the target Docker host, mirroring
-# bundle/scripts/bootstrap.sh steps 1-2. P5 swaps this role's internals for k3s
-# (server on control_plane, agents on workers) read from the inventory — the cni/images/deploy/
-# seed/verify roles and the Helm chart all stay unchanged.
+# Provision the cluster. ONE config-driven path selected by `nhdw_runtime` (group_vars/all.yml,
+# overridable per inventory):
+#   k3s  → real k3s on the host: installs docker + k3s + kubectl/helm/kustomize + kernel/sysctl
+#          + the host.k3d.internal CoreDNS alias (+ optional signed-GPU). The remote/production
+#          form; installs everything from a near-bare Ubuntu host. (tasks/k3s.yml)
+#   k3d  → legacy Docker-in-Docker laptop form; asserts pre-installed tools. Slated for removal
+#          once k3s is proven on the laptop too. (tasks/k3d.yml)
+# The cni / images / deploy / seed / verify roles + the Helm chart are runtime-agnostic.
 
-- name: Assert required host tools are on PATH
-  ansible.builtin.shell: "command -v {{ item }}"   # noqa: command-instead-of-shell
-  changed_when: false
-  loop: [docker, kubectl, k3d, python3]
-
-- name: Assert the Docker daemon is reachable
-  ansible.builtin.command: docker info
-  changed_when: false
-
-# Offline-first (P2.2): load the bundled k3s node image so `k3d cluster create --image` never
-# reaches a registry. No-op if the bundle carries none (falls back to a pull).
-- name: Load the bundled k3s node image if present (offline cluster-create)
-  ansible.builtin.shell:
-    cmd: |
-      set -eo pipefail
-      shopt -s nullglob
-      for t in {{ nhdw_repo_root }}/bundle/images/system/node-*.tar; do
-        docker load -i "$t" >/dev/null
-      done
-    executable: /bin/bash
-  changed_when: false
-
-- name: List existing k3d clusters
-  ansible.builtin.command: k3d cluster list -o json
-  register: provision_k3d_list
-  changed_when: false
-
-- name: Create the k3d cluster (pinned k3s; host 80/443 -> Traefik; flannel off, Cilium is the CNI)
-  ansible.builtin.command: >-
-    k3d cluster create {{ nhdw_cluster_name }}
-    --image {{ nhdw_k3s_image }}
-    --servers 1 --agents {{ nhdw_k3d_agents }}
-    --port 80:80@loadbalancer --port 443:443@loadbalancer
-    --k3s-arg --disable=metrics-server@server:0
-    --k3s-arg --flannel-backend=none@server:0
-    --k3s-arg --disable-network-policy@server:0
-    --wait
-  when: nhdw_cluster_name not in (provision_k3d_list.stdout | from_json | map(attribute='name') | list)
-  register: provision_k3d_create
-  changed_when: true
-
-- name: Reused-cluster note (the cni role reconciles any Cilium node-IP drift)
-  ansible.builtin.debug:
-    msg: "k3d cluster '{{ nhdw_cluster_name }}' already existed — reusing; the cni role heals Cilium node IPs."
-  when: provision_k3d_create is skipped
-
-# P2.2: import the bundled k3s SYSTEM images (pause/coredns/traefik/klipper/local-path/busybox)
-# right after create, so an OFFLINE boot never pulls them — the gap that stalled a boot during a
-# docker.io outage (a fresh k3d node embeds none of them). Idempotent on a reused cluster.
-- name: Pre-import the bundled k3s system images (offline boot needs no registry)
-  ansible.builtin.shell:
-    # Import FROM THE TARS, never by name: a name-import makes k3d re-save from the daemon, whose
-    # store emits attestation refs that in-node ctr fatals on ("content digest not found") — see
-    # cache-images.sh. Bulk import, then per-tar fallback to isolate a bad one. (No ${{ '{' }}#..} —
-    # ansible renders cmd through Jinja and {{ '{' }}# would start a comment.)
-    cmd: |
-      set -eo pipefail
-      shopt -s nullglob
-      sys=""
-      for t in {{ nhdw_repo_root }}/bundle/images/system/*.tar; do
-        case "$t" in */node-*) continue ;; esac
-        sys="$sys $t"
-      done
-      if [ -z "$sys" ]; then
-        echo "no system tars — run bundle/scripts/fetch-system-images.sh (boot will pull from a registry)"
-        exit 0
-      fi
-      if ! k3d image import $sys -c {{ nhdw_cluster_name }} --mode direct >/dev/null 2>&1; then
-        for t in $sys; do
-          k3d image import "$t" -c {{ nhdw_cluster_name }} --mode direct >/dev/null 2>&1 \
-            && echo "  imported $(basename "$t")" || echo "  ! import FAILED: $(basename "$t")"
-        done
-      fi
-    executable: /bin/bash
-  changed_when: true
+- name: Select the runtime provisioning path
+  ansible.builtin.include_tasks: "{{ nhdw_runtime }}.yml"

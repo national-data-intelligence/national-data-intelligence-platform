@@ -7,9 +7,13 @@
 # hint). The leaf cert is (re)issued each run and loaded into the k8s TLS
 # secret nhdw-wildcard-tls, which every ingress references. Idempotent.
 #
-# Usage: bundle/scripts/gen-tls.sh [--cluster nhdw] [--namespace nhdw]
+# Usage: bundle/scripts/gen-tls.sh [--namespace nhdw]
+#   HOST_BASE=<host>   wildcard host base for the cert (default 127.0.0.1.nip.io).
+#                      The deploy role passes the inventory's nhdw_host_base so the
+#                      cert matches the ingress hostnames on a public re-home.
 set -euo pipefail
 NS="nhdw"
+HOST_BASE="${HOST_BASE:-127.0.0.1.nip.io}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CERTDIR="$REPO/bundle/tls"
 mkdir -p "$CERTDIR"
@@ -21,7 +25,7 @@ if [ ! -f "$CERTDIR/rootCA.pem" ]; then
   echo "  ✓ created local CA — import ONCE: $CERTDIR/rootCA.pem"
 fi
 
-cat > "$CERTDIR/wild.cnf" <<'CNF'
+cat > "$CERTDIR/wild.cnf" <<CNF
 [req]
 distinguished_name = dn
 [dn]
@@ -31,12 +35,12 @@ basicConstraints = CA:FALSE
 keyUsage = digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
 [alt]
-DNS.1 = *.127.0.0.1.nip.io
-DNS.2 = 127.0.0.1.nip.io
+DNS.1 = *.${HOST_BASE}
+DNS.2 = ${HOST_BASE}
 CNF
 openssl genrsa -out "$CERTDIR/wild.key" 2048 2>/dev/null
 openssl req -new -key "$CERTDIR/wild.key" -out "$CERTDIR/wild.csr" \
-  -subj "/CN=*.127.0.0.1.nip.io" 2>/dev/null
+  -subj "/CN=*.${HOST_BASE}" 2>/dev/null
 openssl x509 -req -in "$CERTDIR/wild.csr" -CA "$CERTDIR/rootCA.pem" -CAkey "$CERTDIR/rootCA.key" \
   -CAcreateserial -out "$CERTDIR/wild.crt" -days 825 -sha256 \
   -extensions ext -extfile "$CERTDIR/wild.cnf" 2>/dev/null

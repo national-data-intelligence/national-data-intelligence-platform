@@ -25,12 +25,18 @@ import * as ml from '../../api/ml';
 import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKit';
 import '../../styles/mlhealth.css';
 
-const WORKSHOP_MODELS_URL = 'https://workshop.127.0.0.1.nip.io/';
+// Operator-tool hosts follow the host this admin SPA is served on (admin.<base> -> <sub>.<base>),
+// so the whole system re-homes on a single hostBase with no rebuild. No window (SSR) -> dev fallback.
+const HOST_BASE = (typeof window !== 'undefined' ? window.location.host.replace(/^admin\./, '') : '127.0.0.1.nip.io');
+const toolUrl = (sub: string, path = ''): string => `https://${sub}.${HOST_BASE}${path}`;
+
+
+const WORKSHOP_MODELS_URL = toolUrl('workshop', '/');
 // tool-gate-fronted registry: enter via the gate sign-in leg so the existing
 // privileged-ops session admits silently and lands on the MLflow home; the gate
 // enforces the role too (R-CONS-*, R-OPS-ADM, R-SUPER — a non-permitted role
 // gets the gate's friendly 403, never a broken page).
-const MLFLOW_URL = 'https://mlflow.127.0.0.1.nip.io/oauth2gate/login?realm=privileged-ops&rd=/';
+const MLFLOW_URL = toolUrl('mlflow', '/oauth2gate/login?realm=privileged-ops&rd=/');
 
 /* ── formatting (real values only; '—' when absent) ─────────────────── */
 

@@ -12,7 +12,7 @@
 # Secrets     : airflow-secrets (admin user, fernet key, webserver key, DB
 #               password) — dev values live in overlays/dev/secrets.yaml.
 # UI          : Service :8080; the dev overlay adds the
-#               airflow.127.0.0.1.nip.io ingress (operator-facing).
+#               airflow.{{ .Values.hostBase }} ingress (operator-facing).
 #
 # ServiceAccount/Role: the scheduler needs to create + watch pods in this
 # namespace for KubernetesPodOperator (pattern mirrors gateway-rbac.yaml).
@@ -163,11 +163,11 @@ spec:
             # DNS (k3d maps the public nip.io host to the pod itself). BASE_URL
             # makes FAB build the https redirect_uri behind traefik. The secret is
             # optional: absent → webserver_config falls back to AUTH_DB (break-glass).
-            - { name: AIRFLOW__WEBSERVER__BASE_URL, value: "https://airflow.127.0.0.1.nip.io" }
+            - { name: AIRFLOW__WEBSERVER__BASE_URL, value: "https://airflow.{{ .Values.hostBase }}" }
             - { name: AIRFLOW_OIDC_CLIENT_ID,       value: "airflow" }
             - name: AIRFLOW_OIDC_CLIENT_SECRET
               valueFrom: { secretKeyRef: { name: airflow-oidc-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
-            - { name: AIRFLOW_OIDC_ISSUER_PUBLIC,   value: "https://keycloak.127.0.0.1.nip.io/realms/privileged-ops" }
+            - { name: AIRFLOW_OIDC_ISSUER_PUBLIC,   value: "https://keycloak.{{ .Values.hostBase }}/realms/privileged-ops" }
             - { name: AIRFLOW_OIDC_ISSUER_INTERNAL, value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080/realms/privileged-ops" }
           volumeMounts:
             # Shared with the scheduler so the UI can serve task logs

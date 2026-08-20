@@ -14,20 +14,53 @@
 #   cache-images.sh --save-only     # pull+save to bundle/images, no cluster import
 #   cache-images.sh --load-only     # OFFLINE: docker load from bundle/images + import
 #   cache-images.sh --cluster=nhdw
+#   cache-images.sh --runtime=k3s   # import into REAL k3s (containerd) instead of k3d
+#
+# Runtime target: k3d (laptop, Docker-in-Docker) imports via `k3d image import`; k3s (a real
+# host, e.g. palladium2) imports straight into the node's containerd via `k3s ctr images
+# import`. Selected by --runtime= / NHDW_RUNTIME, else autodetected (an existing k3d cluster
+# named $CLUSTER → k3d; a running k3s service → k3s). Saving (docker save → bundle/images) is
+# runtime-agnostic; only the cluster-import leg differs.
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IMGDIR="$REPO/bundle/images"
 CLUSTER=nhdw
 MODE=full
+RUNTIME="${NHDW_RUNTIME:-}"
 for arg in "$@"; do
   case "$arg" in
     --save-only) MODE=save ;;
     --load-only) MODE=load ;;
     --cluster=*) CLUSTER="${arg#--cluster=}" ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    --runtime=*) RUNTIME="${arg#--runtime=}" ;;
+    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
   esac
 done
 mkdir -p "$IMGDIR"
+
+# Autodetect the cluster runtime when not pinned: prefer an existing k3d cluster of this name,
+# else a running k3s, else legacy k3d default. (Save-only never imports, so runtime is moot.)
+if [ -z "$RUNTIME" ]; then
+  if command -v k3d >/dev/null 2>&1 && k3d cluster list "$CLUSTER" >/dev/null 2>&1; then
+    RUNTIME=k3d
+  elif command -v k3s >/dev/null 2>&1 || systemctl is-active --quiet k3s 2>/dev/null; then
+    RUNTIME=k3s
+  else
+    RUNTIME=k3d
+  fi
+fi
+
+# Import one image into k3s' containerd (k3s ctr defaults to the k8s.io namespace). Prefer the
+# sanitized tar; fall back to streaming a fresh `docker save`. Try rootless first, then sudo.
+k3s_import() {  # $1 = image ref, $2 = tar path (may be missing)
+  local img="$1" tar="$2"
+  if [ -f "$tar" ]; then
+    k3s ctr images import "$tar" >/dev/null 2>&1 || sudo k3s ctr images import "$tar" >/dev/null 2>&1
+  else
+    docker save "$img" | k3s ctr images import - >/dev/null 2>&1 \
+      || docker save "$img" | sudo k3s ctr images import - >/dev/null 2>&1
+  fi
+}
 
 # Every third-party image the deploy needs. ALL are required and cached.
 # Ordered smallest-first only so the storage/security core lands while the
@@ -171,7 +204,20 @@ done
 
 echo "==> cached $(ls "$IMGDIR"/*.tar 2>/dev/null | wc -l) tarballs in $IMGDIR ($(du -sh "$IMGDIR" 2>/dev/null | cut -f1))"
 
-if [ "$MODE" != save ] && [ ${#IMPORT[@]} -gt 0 ]; then
+if [ "$MODE" != save ] && [ ${#IMPORT[@]} -gt 0 ] && [ "$RUNTIME" = k3s ]; then
+  # REAL k3s: import each sanitized tar straight into the node's containerd (k8s.io namespace).
+  # Per-image (ctr has no all-or-nothing bulk stream), loud on failure. Same sanitized-tar
+  # rationale as the k3d path below (multi-arch/attestation refs break a name-based import).
+  echo "==> importing ${#IMPORT[@]} images into k3s containerd (node '$CLUSTER')..."
+  for img in "${IMPORT[@]}"; do
+    tar="$(tarname "$img")"
+    if k3s_import "$img" "$tar"; then
+      echo "    ✓ $img"
+    else
+      echo "    ✗ IMPORT FAILED: $img (corrupt tar? regenerate: rm the tar + cache-images.sh --save-only)"
+    fi
+  done
+elif [ "$MODE" != save ] && [ ${#IMPORT[@]} -gt 0 ]; then
   echo "==> importing ${#IMPORT[@]} images into k3d cluster '$CLUSTER'..."
   # Import FROM THE SANITIZED TAR whenever one exists. Importing by NAME makes
   # k3d `docker save` from the daemon on the fly — and the daemon's containerd

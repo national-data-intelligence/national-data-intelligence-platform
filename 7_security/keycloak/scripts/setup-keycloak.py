@@ -201,6 +201,11 @@ _DASH_BASE = {
     "admin":       os.environ.get("DASH_BASE_ADMIN",       "http://127.0.0.1:8086"),
 }
 
+# The single public host base (e.g. 127.0.0.1.nip.io for dev, 20.84.70.78.nip.io live). Every
+# tool/gate client's redirect base derives from it, so ONE value (the Helm hostBase, passed as
+# PUBLIC_HOST_BASE by the seed job) moves the whole OIDC surface — matching the ingress + SPA envs.
+_HOST_BASE = os.environ.get("PUBLIC_HOST_BASE", "127.0.0.1.nip.io")
+
 
 def _client(realm, client_id, base, convert):
     return {
@@ -224,7 +229,7 @@ DASHBOARD_CLIENTS = [
 # Keycloak SSO cookie. dbt-docs is seeded in BOTH staff realms so the redirect
 # works whichever realm the user's session is in; Airflow is operator-only
 # (privileged-ops). Secret comes from env (matches the tool's k8s Secret).
-_DBT_DOCS_BASE = "https://dbt-docs.127.0.0.1.nip.io"
+_DBT_DOCS_BASE = f"https://dbt-docs.{_HOST_BASE}"
 TOOL_CLIENTS = [
     {"realm": "privileged-ops", "client_id": "dbt-docs", "base": _DBT_DOCS_BASE, "secret": DBT_DOCS_OIDC_SECRET},
     {"realm": "moh-staff",      "client_id": "dbt-docs", "base": _DBT_DOCS_BASE, "secret": DBT_DOCS_OIDC_SECRET},
@@ -233,23 +238,23 @@ TOOL_CLIENTS = [
     # Airflow native OIDC (privileged-ops). FAB's callback is
     # /oauth-authorized/keycloak (covered by base + /*).
     {"realm": "privileged-ops", "client_id": "airflow",
-     "base": "https://airflow.127.0.0.1.nip.io", "secret": AIRFLOW_OIDC_SECRET},
+     "base": f"https://airflow.{_HOST_BASE}", "secret": AIRFLOW_OIDC_SECRET},
     # JupyterHub (moh-staff — workshop-class users). Callback is
     # /hub/oauth_callback (covered by base + /*). Supersedes the stale
     # compose-era :8089 redirect in the realm-config JSON.
     {"realm": "moh-staff", "client_id": "jupyterhub",
-     "base": "https://jupyter.127.0.0.1.nip.io", "secret": JUPYTERHUB_OIDC_SECRET},
+     "base": f"https://jupyter.{_HOST_BASE}", "secret": JUPYTERHUB_OIDC_SECRET},
     # Superset native FAB OIDC (moh-staff — analyst audience). FAB's callback is
     # /oauth-authorized/keycloak (covered by base + /*). Same pattern as Airflow.
     {"realm": "moh-staff", "client_id": "superset",
-     "base": "https://superset.127.0.0.1.nip.io", "secret": SUPERSET_OIDC_SECRET},
+     "base": f"https://superset.{_HOST_BASE}", "secret": SUPERSET_OIDC_SECRET},
     # MinIO console native OIDC (privileged-ops — operator tool). The console's
     # callback is /oauth_callback (covered by base + /*). MinIO server exchanges
     # the code on the INTERNAL keycloak:8080 backchannel (KC_HOSTNAME_BACKCHANNEL_
     # DYNAMIC=true keeps token/jwks internal while auth stays on the public host)
     # and maps the identity to the consoleAdmin policy via ROLE_POLICY.
     {"realm": "privileged-ops", "client_id": "minio-console",
-     "base": "https://minio-console.127.0.0.1.nip.io", "secret": MINIO_OIDC_SECRET},
+     "base": f"https://minio-console.{_HOST_BASE}", "secret": MINIO_OIDC_SECRET},
 ]
 
 # tool-gate clients — the nhdw/tool-gate reverse proxies (main.py). Same
@@ -259,12 +264,12 @@ TOOL_CLIENTS = [
 # (an ops role can be in either realm — see the *_GATE_OIDC_SECRET note above).
 # The gate's OIDC_CLIENT_ID (tool-gates.yaml) MUST equal client_id here.
 _GATE_BASES = {
-    "mlflow":       "https://mlflow.127.0.0.1.nip.io",
-    "prometheus":   "https://prometheus.127.0.0.1.nip.io",
-    "alertmanager": "https://alertmanager.127.0.0.1.nip.io",
+    "mlflow":       f"https://mlflow.{_HOST_BASE}",
+    "prometheus":   f"https://prometheus.{_HOST_BASE}",
+    "alertmanager": f"https://alertmanager.{_HOST_BASE}",
     # Headlamp's gate lives at /oauth2gate + /k8s on the ADMIN host (path-routed
     # beside the admin SPA), so its redirect base is the admin host.
-    "headlamp":     "https://admin.127.0.0.1.nip.io",
+    "headlamp":     f"https://admin.{_HOST_BASE}",
 }
 _GATE_SECRETS = {
     "mlflow":       MLFLOW_GATE_OIDC_SECRET,

@@ -25,8 +25,8 @@ spec:
             requests: { cpu: "100m", memory: "256Mi" }
             limits:   { cpu: "1",    memory: "512Mi" }
           env:
-            - { name: KEYCLOAK_ALLOWED_ISSUERS, value: "{{ .Values.keycloak.publicBase }}/realms/moh-staff,{{ .Values.keycloak.publicBase }}/realms/privileged-ops" }
-            - { name: KEYCLOAK_PUBLIC_BASE,     value: {{ .Values.keycloak.publicBase | quote }} }
+            - { name: KEYCLOAK_ALLOWED_ISSUERS, value: "{{ include "nhdw.kcPublicBase" . }}/realms/moh-staff,{{ include "nhdw.kcPublicBase" . }}/realms/privileged-ops" }
+            - { name: KEYCLOAK_PUBLIC_BASE,     value: {{ include "nhdw.kcPublicBase" . | quote }} }
             # ML_RUNNER_IMAGE sits at index 2 (overlay strategic-merge prepends it) — keep here for kustomize parity.
             - { name: ML_RUNNER_IMAGE,          value: {{ include "nhdw.image" (dict "name" "ml-runner" "ctx" .) | quote }} }
             - { name: KEYCLOAK_INTERNAL_BASE,   value: {{ .Values.keycloak.internalBase | quote }} }

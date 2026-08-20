@@ -45,7 +45,7 @@ spec:
             # ── OIDC consistent-hostname wiring (dev overlay patch) — advertise the
             # external HTTPS URL + trust the edge proxy headers. kustomize's strategic
             # merge hoists these patched vars to the front of the env list.
-            - { name: KC_HOSTNAME,    value: {{ .Values.keycloak.publicBase | quote }} }
+            - { name: KC_HOSTNAME,    value: {{ include "nhdw.kcPublicBase" . | quote }} }
             - { name: KC_PROXY_HEADERS, value: "xforwarded" }
             - { name: KC_DB,         value: "postgres" }
             - { name: KC_DB_URL,     value: "jdbc:postgresql://postgres-vault.{{ .Values.namespace }}.svc.cluster.local:5432/nhdw_vault?currentSchema=keycloak_metadata" }

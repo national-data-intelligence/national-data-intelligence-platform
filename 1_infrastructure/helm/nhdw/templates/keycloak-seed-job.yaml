@@ -50,7 +50,9 @@ spec:
             # ── OIDC consistent-hostname wiring (dev overlay patch) — client
             # redirect URIs + broker issuer pinned to the nip.io ingress hosts.
             # kustomize's strategic merge hoists these patched vars to the front.
-            - { name: KC_PUBLIC_BASE,        value: {{ .Values.keycloak.publicBase | quote }} }
+            - { name: KC_PUBLIC_BASE,        value: {{ include "nhdw.kcPublicBase" . | quote }} }
+            # Single host base → every tool/gate client redirect URI (setup-keycloak.py _HOST_BASE).
+            - { name: PUBLIC_HOST_BASE,      value: {{ .Values.hostBase | quote }} }
             - { name: DASH_BASE_INTERNAL_BI, value: "https://internal-bi.{{ .Values.hostBase }}" }
             - { name: DASH_BASE_WORKSHOP,    value: "https://workshop.{{ .Values.hostBase }}" }
             - { name: DASH_BASE_ADMIN,       value: "https://admin.{{ .Values.hostBase }}" }

@@ -1,10 +1,15 @@
 ---
 # CNI = Cilium + Hubble, plus the node-IP-drift self-heal that keeps cross-node traffic alive
-# after a host/Docker restart. P4 form (k3d) mirrors bundle/scripts/bootstrap.sh; P5 folds this
-# into the k3s path (P5.3) where Cilium spans real nodes. The install + heal are cluster-wide
-# and idempotent, so they no-op after the first pass.
+# after a host/Docker restart. ONE role, runtime-aware (nhdw_runtime): the k3d form mirrors
+# bundle/scripts/bootstrap.sh; the k3s form (P5.3) folds the SAME heal into real k3s where
+# Cilium spans real host nodes. The Cilium install, the rollout wait, and the drift heal are
+# pure helm/kubectl — byte-identical on both runtimes; only the datapath-mount prep and the
+# offline image-import are runtime-specific, so those two steps branch on nhdw_runtime.
+# Every step is idempotent and no-ops after the first pass.
 
-- name: Prepare BPF + cgroup2 mounts on each k3d node (the Cilium agent needs them)
+# ── datapath mounts (the Cilium agent needs bpffs + a cgroup2 mount) ─────────────────────────
+- name: (k3d) Prepare BPF + cgroup2 mounts inside each k3d node container
+  when: nhdw_runtime == 'k3d'
   ansible.builtin.shell:
     cmd: |
       set -eo pipefail
@@ -17,7 +22,21 @@
     executable: /bin/bash
   changed_when: false
 
-- name: Pre-import the bundled Cilium image tars (an offline boot never pulls)
+- name: (k3s) Ensure bpffs is mounted on the host (real node → host-level datapath)
+  when: nhdw_runtime == 'k3s'
+  become: true
+  ansible.builtin.shell:
+    cmd: |
+      set -eo pipefail
+      mountpoint -q /sys/fs/bpf || mount bpffs -t bpf /sys/fs/bpf
+      mount --make-shared /sys/fs/bpf 2>/dev/null || true
+    executable: /bin/bash
+  changed_when: false
+  failed_when: false
+
+# ── offline Cilium images (a true air-gap boot never pulls) ─────────────────────────────────
+- name: (k3d) Pre-load + import the bundled Cilium image tars via docker + k3d
+  when: nhdw_runtime == 'k3d'
   ansible.builtin.shell:
     cmd: |
       set -eo pipefail
@@ -30,6 +49,20 @@
     executable: /bin/bash
   changed_when: false
 
+- name: (k3s) Import the bundled Cilium image tars straight into k3s containerd
+  when: nhdw_runtime == 'k3s'
+  become: true
+  ansible.builtin.shell:
+    cmd: |
+      set -eo pipefail
+      for t in {{ nhdw_repo_root }}/bundle/images/cilium_*.tar; do
+        [ -f "$t" ] || continue
+        k3s ctr images import "$t" >/dev/null 2>&1 || true   # k3s ctr defaults to the k8s.io namespace
+      done
+    executable: /bin/bash
+  changed_when: false
+
+# ── Cilium chart install (runtime-agnostic) ─────────────────────────────────────────────────
 - name: Locate the bundled Cilium chart
   ansible.builtin.find:
     paths: "{{ nhdw_repo_root }}/bundle/charts"
@@ -54,8 +87,11 @@
   ansible.builtin.command: "kubectl -n kube-system rollout status ds/cilium --timeout=600s"
   changed_when: false
 
-# A host/Docker restart reshuffles k3d node IPs while CiliumNode CRs keep the old ones, killing
-# all cross-node pod traffic. Reconcile when the k8s InternalIP != the CiliumNode IP.
+# ── node-IP-drift self-heal (runtime-agnostic — pure kubectl) ────────────────────────────────
+# A host/Docker restart reshuffles node IPs (k3d container IPs on the laptop; a re-IP'd VM or a
+# fleet rejoin on k3s) while the CiliumNode CRs keep the OLD addresses, silently killing ALL
+# cross-node pod traffic (Keycloak init hangs, gateway crashloops, dashboards go dark). Reconcile
+# whenever a node's k8s InternalIP no longer matches its CiliumNode InternalIP.
 - name: Detect + reconcile Cilium node-IP drift (drop stale CiliumNode CRs + bounce agents)
   ansible.builtin.shell:
     cmd: |

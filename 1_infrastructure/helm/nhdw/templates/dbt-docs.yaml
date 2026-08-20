@@ -2,7 +2,7 @@
 # dbt-generated static docs, with its OWN multi-realm Keycloak OIDC so a user
 # already logged into a dashboard (moh-staff OR privileged-ops) is admitted
 # silently off the shared Keycloak SSO cookie — the "redirect + inherit login"
-# pattern. Served on its own host dbt-docs.127.0.0.1.nip.io (overlay ingress).
+# pattern. Served on its own host dbt-docs.{{ .Values.hostBase }} (overlay ingress).
 #
 # Content: PROJECTS_ROOT holds each dbt project's target/ (dbt docs generate).
 # Delivered via the shared dbt-docs-content volume the dbt-staging, dbt-vault and
@@ -25,15 +25,15 @@ spec:
           ports: [ { containerPort: 80, name: http } ]
           env:
             - { name: KEYCLOAK_BASE,        value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080" }
-            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.127.0.0.1.nip.io" }
+            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.{{ .Values.hostBase }}" }
             # Multi-realm: default privileged-ops (the admin DQ button's realm);
             # moh-staff accepted too (staff lineage links pass ?realm=moh-staff).
             - { name: OIDC_REALMS,   value: "privileged-ops,moh-staff" }
             - { name: OIDC_CLIENT_ID, value: "dbt-docs" }
             - name: OIDC_CLIENT_SECRET
               valueFrom: { secretKeyRef: { name: dbt-docs-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
-            - { name: OIDC_REDIRECT_URI, value: "https://dbt-docs.127.0.0.1.nip.io/callback" }
-            - { name: APP_BASE,          value: "https://dbt-docs.127.0.0.1.nip.io" }
+            - { name: OIDC_REDIRECT_URI, value: "https://dbt-docs.{{ .Values.hostBase }}/callback" }
+            - { name: APP_BASE,          value: "https://dbt-docs.{{ .Values.hostBase }}" }
             - { name: PROJECTS_ROOT,     value: "/dbt-projects" }
             - { name: ALLOWED_PROJECTS,  value: "marts,vault,staging" }
             - { name: LOKI_URL,          value: "http://loki.{{ .Values.namespace }}.svc.cluster.local:3100" }

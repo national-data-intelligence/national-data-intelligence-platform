@@ -44,7 +44,7 @@ spec:
             - { name: SUPERSET_OIDC_CLIENT_ID,       value: "superset" }
             - name: SUPERSET_OIDC_CLIENT_SECRET
               valueFrom: { secretKeyRef: { name: superset-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
-            - { name: SUPERSET_OIDC_ISSUER_PUBLIC,   value: "https://keycloak.127.0.0.1.nip.io/realms/moh-staff" }
+            - { name: SUPERSET_OIDC_ISSUER_PUBLIC,   value: "https://keycloak.{{ .Values.hostBase }}/realms/moh-staff" }
             - { name: SUPERSET_OIDC_ISSUER_INTERNAL, value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080/realms/moh-staff" }
       containers:
         - name: superset
@@ -70,7 +70,7 @@ spec:
             - { name: SUPERSET_OIDC_CLIENT_ID,       value: "superset" }
             - name: SUPERSET_OIDC_CLIENT_SECRET
               valueFrom: { secretKeyRef: { name: superset-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
-            - { name: SUPERSET_OIDC_ISSUER_PUBLIC,   value: "https://keycloak.127.0.0.1.nip.io/realms/moh-staff" }
+            - { name: SUPERSET_OIDC_ISSUER_PUBLIC,   value: "https://keycloak.{{ .Values.hostBase }}/realms/moh-staff" }
             - { name: SUPERSET_OIDC_ISSUER_INTERNAL, value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080/realms/moh-staff" }
           readinessProbe:
             httpGet: { path: /health, port: http }

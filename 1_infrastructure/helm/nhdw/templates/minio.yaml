@@ -30,7 +30,7 @@ spec:
             # The console is fronted by traefik at the public https host but runs
             # http :9001 internally, so BROWSER_REDIRECT_URL pins its external URL
             # (used to build the OIDC redirect_uri /oauth_callback and TLS links).
-            - { name: MINIO_BROWSER_REDIRECT_URL, value: "https://minio-console.127.0.0.1.nip.io" }
+            - { name: MINIO_BROWSER_REDIRECT_URL, value: "https://minio-console.{{ .Values.hostBase }}" }
             # CONFIG_URL points at the INTERNAL keycloak:8080 — KC_HOSTNAME_
             # BACKCHANNEL_DYNAMIC=true makes discovery return a PUBLIC auth_endpoint
             # (browser-reachable) but INTERNAL token/jwks (server-reachable), so the
@@ -43,7 +43,7 @@ spec:
             # per-user claim mapper needed. Only R-OPS-* users can reach this realm.
             - { name: MINIO_IDENTITY_OPENID_ROLE_POLICY,  value: "consoleAdmin" }
             - { name: MINIO_IDENTITY_OPENID_SCOPES,       value: "openid,profile,email" }
-            - { name: MINIO_IDENTITY_OPENID_REDIRECT_URI, value: "https://minio-console.127.0.0.1.nip.io/oauth_callback" }
+            - { name: MINIO_IDENTITY_OPENID_REDIRECT_URI, value: "https://minio-console.{{ .Values.hostBase }}/oauth_callback" }
             - { name: MINIO_IDENTITY_OPENID_DISPLAY_NAME, value: "NHDW Single Sign-On" }
           volumeMounts: [ { name: data, mountPath: /data } ]
           readinessProbe:

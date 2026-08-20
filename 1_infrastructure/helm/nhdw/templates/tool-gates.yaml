@@ -29,10 +29,10 @@ spec:
             - { name: OIDC_CLIENT_ID,      value: "mlflow" }
             - name: OIDC_CLIENT_SECRET
               valueFrom: { secretKeyRef: { name: mlflow-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
-            - { name: OIDC_REDIRECT_URI,   value: "https://mlflow.127.0.0.1.nip.io/oauth2gate/callback" }
-            - { name: APP_BASE,            value: "https://mlflow.127.0.0.1.nip.io" }
+            - { name: OIDC_REDIRECT_URI,   value: "https://mlflow.{{ .Values.hostBase }}/oauth2gate/callback" }
+            - { name: APP_BASE,            value: "https://mlflow.{{ .Values.hostBase }}" }
             - { name: KEYCLOAK_BASE,        value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080" }
-            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.127.0.0.1.nip.io" }
+            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.{{ .Values.hostBase }}" }
             - { name: LOKI_URL,            value: "http://loki.{{ .Values.namespace }}.svc.cluster.local:3100" }
             - name: SESSION_SECRET
               valueFrom: { secretKeyRef: { name: mlflow-gate-secrets, key: SESSION_SECRET, optional: true } }
@@ -73,10 +73,10 @@ spec:
             - { name: OIDC_CLIENT_ID,       value: "prometheus" }
             - name: OIDC_CLIENT_SECRET
               valueFrom: { secretKeyRef: { name: prometheus-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
-            - { name: OIDC_REDIRECT_URI,    value: "https://prometheus.127.0.0.1.nip.io/oauth2gate/callback" }
-            - { name: APP_BASE,             value: "https://prometheus.127.0.0.1.nip.io" }
+            - { name: OIDC_REDIRECT_URI,    value: "https://prometheus.{{ .Values.hostBase }}/oauth2gate/callback" }
+            - { name: APP_BASE,             value: "https://prometheus.{{ .Values.hostBase }}" }
             - { name: KEYCLOAK_BASE,        value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080" }
-            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.127.0.0.1.nip.io" }
+            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.{{ .Values.hostBase }}" }
             - { name: LOKI_URL,             value: "http://loki.{{ .Values.namespace }}.svc.cluster.local:3100" }
             - name: SESSION_SECRET
               valueFrom: { secretKeyRef: { name: prometheus-gate-secrets, key: SESSION_SECRET, optional: true } }
@@ -114,10 +114,10 @@ spec:
             - { name: OIDC_CLIENT_ID,       value: "alertmanager" }
             - name: OIDC_CLIENT_SECRET
               valueFrom: { secretKeyRef: { name: alertmanager-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
-            - { name: OIDC_REDIRECT_URI,    value: "https://alertmanager.127.0.0.1.nip.io/oauth2gate/callback" }
-            - { name: APP_BASE,             value: "https://alertmanager.127.0.0.1.nip.io" }
+            - { name: OIDC_REDIRECT_URI,    value: "https://alertmanager.{{ .Values.hostBase }}/oauth2gate/callback" }
+            - { name: APP_BASE,             value: "https://alertmanager.{{ .Values.hostBase }}" }
             - { name: KEYCLOAK_BASE,        value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080" }
-            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.127.0.0.1.nip.io" }
+            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.{{ .Values.hostBase }}" }
             - { name: LOKI_URL,             value: "http://loki.{{ .Values.namespace }}.svc.cluster.local:3100" }
             - name: SESSION_SECRET
               valueFrom: { secretKeyRef: { name: alertmanager-gate-secrets, key: SESSION_SECRET, optional: true } }
@@ -166,10 +166,10 @@ spec:
             # Headlamp is path-routed at /k8s on the ADMIN host → the gate's OIDC
             # legs and APP_BASE are the admin host; the deep-link button passes
             # rd=/k8s/ so the post-login redirect lands in the console.
-            - { name: OIDC_REDIRECT_URI,    value: "https://admin.127.0.0.1.nip.io/oauth2gate/callback" }
-            - { name: APP_BASE,             value: "https://admin.127.0.0.1.nip.io" }
+            - { name: OIDC_REDIRECT_URI,    value: "https://admin.{{ .Values.hostBase }}/oauth2gate/callback" }
+            - { name: APP_BASE,             value: "https://admin.{{ .Values.hostBase }}" }
             - { name: KEYCLOAK_BASE,        value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080" }
-            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.127.0.0.1.nip.io" }
+            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.{{ .Values.hostBase }}" }
             - { name: LOKI_URL,             value: "http://loki.{{ .Values.namespace }}.svc.cluster.local:3100" }
             # SA bearer the upstream (Headlamp) needs — injected on every request.
             - { name: INJECT_BEARER_FILE,   value: "/var/run/headlamp/token" }

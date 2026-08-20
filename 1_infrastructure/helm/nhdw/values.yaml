@@ -13,10 +13,18 @@ image:
 # Consistent-hostname base for OIDC redirects + ingress hosts (the OIDC consistent-hostname contract).
 hostBase: 127.0.0.1.nip.io
 keycloak:
-  publicBase: https://keycloak.127.0.0.1.nip.io
+  # publicBase derives from hostBase (https://keycloak.<hostBase>) via the nhdw.kcPublicBase
+  # helper — leave empty so ONE hostBase knob moves the whole OIDC issuer. Set only to override.
+  publicBase: ""
   internalBase: http://keycloak.nhdw.svc.cluster.local:8080
 fayda:
   internalBase: http://host.k3d.internal:8096   # external Fayda replica (email-OTP); prod → real Fayda
+
+# Alertmanager email is opt-IN. Default false ⇒ a from-bare/cold rebuild renders a null
+# receiver and NEVER emails a real inbox, even though smtp-secrets carries a live app-password.
+# Set true only when you deliberately want live alert emails.
+alertmanager:
+  email: false
 
 storageClass: local-path
 

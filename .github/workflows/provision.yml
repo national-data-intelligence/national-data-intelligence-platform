@@ -1,0 +1,72 @@
+name: Provision + full deploy (from bare, ansible)
+
+# From-bare bring-up: hydrates the not-in-git artifacts (secrets + source dumps) into the
+# fresh checkout, installs k3s (+ optional GPU) on the target host(s) from the inventory,
+# deploys the Helm chart, and runs the full seed. Manual-dispatch only (it is destructive:
+# it installs system packages + k3s and re-seeds). The everyday push-to-main path is
+# `deploy.yml`. For single-node the runner IS the target (local connection, no SSH); the
+# fleet path SSHes to the agents with secrets.NHDW_SSH_KEY.
+
+on:
+  workflow_dispatch:
+    inputs:
+      inventory:
+        description: 'Inventory to use'
+        type: choice
+        options: [palladium2, single-node, fleet]
+        default: palladium2
+      run_seed:
+        description: 'Run the full data + app/security seed after deploy'
+        type: boolean
+        default: true
+
+concurrency:
+  group: nhdw-provision
+  cancel-in-progress: false
+
+permissions:
+  contents: read          # GITHUB_TOKEN reads the data-release assets in hydrate-data.sh
+
+jobs:
+  provision:
+    runs-on: [self-hosted, nhdw-control]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Everything a fresh clone LACKS: secrets.yaml (from an encrypted Actions secret) and the
+      # source .bak dumps (from the private data release). Fail-closed if secrets are missing.
+      - name: Hydrate not-in-git artifacts (secrets + source dumps)
+        env:
+          NHDW_SECRETS_YAML_B64: ${{ secrets.NHDW_SECRETS_YAML }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash bundle/scripts/hydrate-data.sh
+
+      - name: Install ansible-core
+        run: pip install --user --break-system-packages 'ansible-core>=2.16'
+
+      # Only the fleet path needs SSH to the agents; single-node runs on the runner host itself.
+      - name: Load SSH key (fleet only)
+        if: ${{ github.event.inputs.inventory == 'fleet' }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.NHDW_SSH_KEY }}" > ~/.ssh/nhdw_deploy
+          chmod 600 ~/.ssh/nhdw_deploy
+
+      - name: ansible-playbook site.yml
+        working-directory: 1_infrastructure/ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: 'False'
+          RUN_SEED: ${{ github.event.inputs.run_seed }}
+          INV_CHOICE: ${{ github.event.inputs.inventory }}
+        run: |
+          # Map the friendly choice to the actual inventory file (dir is inventory/, and the
+          # fleet inventory ships as an .example so it must be filled in per site).
+          case "$INV_CHOICE" in
+            fleet)      INV=inventory/fleet.example.yml; KEY=(--private-key ~/.ssh/nhdw_deploy) ;;
+            palladium2) INV=inventory/palladium2.yml;    KEY=() ;;
+            *)          INV=inventory/single-node.yml;   KEY=() ;;
+          esac
+          ~/.local/bin/ansible-playbook \
+            -i "$INV" "${KEY[@]}" \
+            --extra-vars "nhdw_run_seed=${RUN_SEED:-true}" \
+            site.yml

@@ -28,5 +28,7 @@
   run_once: true
   roles:
     - role: deploy          # external-file configMaps + secrets + `helm upgrade --install` + metrics-server
+    # seed is skippable (nhdw_run_seed=false → deploy-only, e.g. re-seed a healthy cluster by hand):
     - role: seed            # sources-up + seed-realistic + seed-app-security + regen-opa (compat-gated)
+      when: nhdw_run_seed | default(true) | bool
     - role: verify          # health gate: workloads Ready, every dashboard reachable, OPA enforcing

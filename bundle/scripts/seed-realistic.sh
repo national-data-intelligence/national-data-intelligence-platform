@@ -142,7 +142,11 @@ sys.exit(1 if bad else 0)' 2>/dev/null; then
   # serial-retry pass below still catches any straggler. Set INGEST_BATCH=99 to
   # restore the old all-at-once behaviour on a host with ample RAM.
   BATCH="${INGEST_BATCH:-3}"
-  echo "▸ [ingest] launching ${#INGEST_JOBS[@]} source ingestors, ${BATCH} at a time"
+  # Per-ingestor completion budget. Default 25 min suits the laptop; a real k3s host
+  # reaches DHIS2 over the pod→node→host-docker hop, which is slower than k3d's route,
+  # so the large data-value-sets extract can exceed it — bump via INGEST_WAIT.
+  INGEST_WAIT="${INGEST_WAIT:-1500}"
+  echo "▸ [ingest] launching ${#INGEST_JOBS[@]} source ingestors, ${BATCH} at a time (per-job budget ${INGEST_WAIT}s)"
   retry=()
   i=0
   while [ "$i" -lt "${#INGEST_JOBS[@]}" ]; do
@@ -154,7 +158,7 @@ sys.exit(1 if bad else 0)' 2>/dev/null; then
     done
     echo "  ▸ batch launched: ${batch[*]}"
     for job in "${batch[@]}"; do
-      if wait_job "$job" 1500; then
+      if wait_job "$job" "$INGEST_WAIT"; then
         echo "  ✓ $job"
       else
         echo "  ! $job did not complete in its batch — queuing solo retry"
@@ -174,7 +178,7 @@ sys.exit(1 if bad else 0)' 2>/dev/null; then
     for job in "${retry[@]}"; do
       kubectl -n "$NS" delete job "$job" --ignore-not-found --wait=true >/dev/null 2>&1
       kubectl -n "$NS" apply -f /tmp/nhdw-job-$job.yaml >/dev/null || { echo "FAILED re-applying $job"; exit 1; }
-      if wait_job "$job" 1500; then
+      if wait_job "$job" "$INGEST_WAIT"; then
         echo "  ✓ $job (solo retry)"
       else
         echo "  ✗ $job FAILED even on a solo retry — logs:"

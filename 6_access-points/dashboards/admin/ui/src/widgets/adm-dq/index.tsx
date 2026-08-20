@@ -17,6 +17,12 @@ import { useEffect, useMemo, useState } from 'react';
 import * as dq from '../../api/dq';
 import '../../styles/dq.css';
 
+// Operator-tool hosts follow the host this admin SPA is served on (admin.<base> -> <sub>.<base>),
+// so the whole system re-homes on a single hostBase with no rebuild. No window (SSR) -> dev fallback.
+const HOST_BASE = (typeof window !== 'undefined' ? window.location.host.replace(/^admin\./, '') : '127.0.0.1.nip.io');
+const toolUrl = (sub: string, path = ''): string => `https://${sub}.${HOST_BASE}${path}`;
+
+
 // dbt-manifest lineage tiers. NB: the "source" tier counts dbt source()
 // TABLE declarations (one per raw table we read), NOT the six source
 // SYSTEMS — hence the "Source tables" label, so ~29 is never mistaken for
@@ -44,13 +50,13 @@ const SOURCE_META: Record<string, string> = {
 
 const TOOLS = [
   { label: 'dbt Docs', sub: 'Full interactive lineage DAG',
-    href: 'https://dbt-docs.127.0.0.1.nip.io/', ico: 'i-database' },
+    href: toolUrl('dbt-docs', '/'), ico: 'i-database' },
   // The browsable MinIO CONSOLE (:9001), not the S3 API host (minio.* → :9000,
   // which isn't a web UI and fails to load). See ing-minio-console.
   { label: 'MinIO Console', sub: 'Browse the raw data lake · nhdw-raw',
-    href: 'https://minio-console.127.0.0.1.nip.io/', ico: 'i-folder' },
+    href: toolUrl('minio-console', '/'), ico: 'i-folder' },
   { label: 'Airflow', sub: 'Ingestion + build run history',
-    href: 'https://airflow.127.0.0.1.nip.io/', ico: 'i-refresh' },
+    href: toolUrl('airflow', '/'), ico: 'i-refresh' },
 ];
 
 const DIM_ORDER: Array<{ key: keyof dq.Dimensions['dimensions']; label: string; hint: string }> = [
@@ -584,7 +590,7 @@ function DQ() {
             {modelTestRollup.warn > 0 && <span className="pill watch">{modelTestRollup.warn} warn</span>}
             {modelTestRollup.fail > 0 && <span className="pill alert">{modelTestRollup.fail} fail</span>}
             {modelTestRollup.untested > 0 && <span className="pill neutral">{modelTestRollup.untested} untested</span>}
-            <a href="https://dbt-docs.127.0.0.1.nip.io/" target="_blank" rel="noreferrer" className="btn btn-primary btn-sm dq-dbt-link">
+            <a href={toolUrl('dbt-docs', "/")} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm dq-dbt-link">
               Open full lineage in dbt Docs <svg className="ico ico-sm"><use href="#i-external" /></svg>
             </a>
           </div>

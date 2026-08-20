@@ -80,8 +80,8 @@ spec:
             # OIDC — consistent-hostname contract: browser legs on the public
             # ingress hosts, server legs pod-to-pod.
             - { name: KEYCLOAK_BASE,        value: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080" }
-            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.127.0.0.1.nip.io" }
-            - { name: JUPYTER_PUBLIC_BASE,  value: "https://jupyter.127.0.0.1.nip.io" }
+            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.{{ .Values.hostBase }}" }
+            - { name: JUPYTER_PUBLIC_BASE,  value: "https://jupyter.{{ .Values.hostBase }}" }
             - { name: OIDC_REALM,     value: "moh-staff" }
             - { name: OIDC_CLIENT_ID, value: "jupyterhub" }
             - name: OIDC_CLIENT_SECRET

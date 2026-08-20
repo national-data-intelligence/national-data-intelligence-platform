@@ -16,6 +16,9 @@
 *.p12
 *.pfx
 credentials.json
+# Local workspace holding real credentials (GCP service-account keys, etc.) — NEVER commit
+_workspace/
+*-service-account*.json
 secrets/
 **/secrets.yaml
 **/secrets.yml
@@ -140,3 +143,7 @@ _tools/
 2_pipelines/*/dbt_packages/
 bundle/seeds/entity-model/sample-data/
 client_secret_*.json
+
+# Local data landmines / raw import artifacts — never commit
+*.bak.bloated-orig
+supply-control-tower.zip

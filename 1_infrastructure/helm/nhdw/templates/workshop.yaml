@@ -16,7 +16,7 @@ spec:
           # env order matches the kustomize strategic-merge result (overlay prepends the
           # nip.io OIDC vars ahead of the base env) so helm/kustomize stay byte-identical.
           env:
-            - { name: KEYCLOAK_PUBLIC_BASE, value: {{ .Values.keycloak.publicBase | quote }} }
+            - { name: KEYCLOAK_PUBLIC_BASE, value: {{ include "nhdw.kcPublicBase" . | quote }} }
             - { name: OIDC_REDIRECT_URI,    value: "https://workshop.{{ .Values.hostBase }}/" }
             - { name: APP_BASE,             value: "https://workshop.{{ .Values.hostBase }}" }
             - { name: DEV_AUTH,             value: "false" }

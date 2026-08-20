@@ -24,6 +24,12 @@ import type { TopoTheme, TopologyHandle, TopoNode, TopoEdge, TopoGraph } from '.
 import TopoSummary from './TopoSummary';
 import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKit';
 
+// Operator-tool hosts follow the host this admin SPA is served on (admin.<base> -> <sub>.<base>),
+// so the whole system re-homes on a single hostBase with no rebuild. No window (SSR) -> dev fallback.
+const HOST_BASE = (typeof window !== 'undefined' ? window.location.host.replace(/^admin\./, '') : '127.0.0.1.nip.io');
+const toolUrl = (sub: string, path = ''): string => `https://${sub}.${HOST_BASE}${path}`;
+
+
 type RefreshInterval = 10 | 30 | 60 | 0;
 const REFRESH_LABEL: Record<RefreshInterval, string> = { 10: '10s', 30: '30s', 60: '60s', 0: 'off' };
 
@@ -536,13 +542,13 @@ function Infra() {
                 no role gate here: the tool-gate's ALLOWED_ROLES already covers
                 every operator, and this page is itself only visible to ops. */}
             <a className="btn btn-sm btn-ghost"
-               href="https://prometheus.127.0.0.1.nip.io/oauth2gate/login?realm=privileged-ops&rd=/"
+               href={toolUrl('prometheus', "/oauth2gate/login?realm=privileged-ops&rd=/")}
                target="_blank" rel="noreferrer" data-testid="prometheus-btn"
                title="Prometheus: metrics store & query UI (SSO-gated)">
               <svg className="ico ico-sm"><use href="#i-pulse" /></svg> Prometheus ↗
             </a>
             <a className="btn btn-sm btn-ghost"
-               href="https://alertmanager.127.0.0.1.nip.io/oauth2gate/login?realm=privileged-ops&rd=/"
+               href={toolUrl('alertmanager', "/oauth2gate/login?realm=privileged-ops&rd=/")}
                target="_blank" rel="noreferrer" data-testid="alertmanager-btn"
                title="Alertmanager: alert routing & silences (SSO-gated)">
               <svg className="ico ico-sm"><use href="#i-bell" /></svg> Alertmanager ↗

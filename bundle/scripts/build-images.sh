@@ -19,15 +19,29 @@ cd "$REPO"
 CLUSTER=nhdw
 DO_IMPORT=0
 ONLY=""
+RUNTIME="${NHDW_RUNTIME:-}"     # k3d | k3s (imports into the right runtime); autodetected if empty
 for arg in "$@"; do
   case "$arg" in
     --import)     DO_IMPORT=1 ;;
     --cluster=*)  CLUSTER="${arg#--cluster=}" ;;
     --only=*)     ONLY="${arg#--only=}" ;;
+    --runtime=*)  RUNTIME="${arg#--runtime=}" ;;
     -h|--help)    sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+
+# Autodetect the cluster runtime when not pinned (an existing k3d cluster of this
+# name → k3d; a running k3s → k3s; else legacy k3d). Matches cache-images.sh.
+if [ -z "$RUNTIME" ]; then
+  if command -v k3d >/dev/null 2>&1 && k3d cluster list "$CLUSTER" >/dev/null 2>&1; then
+    RUNTIME=k3d
+  elif command -v k3s >/dev/null 2>&1 || systemctl is-active --quiet k3s 2>/dev/null; then
+    RUNTIME=k3s
+  else
+    RUNTIME=k3d
+  fi
+fi
 
 # image | context (relative to repo root) | dockerfile (relative to context)
 # Order: base-dashboard before sibling dashboards (FROM dependency); platform
@@ -103,7 +117,19 @@ echo
 echo "==> built ${#BUILT[@]}: ${BUILT[*]:-none}"
 [ ${#FAILED[@]} -gt 0 ] && echo "==> FAILED ${#FAILED[@]}: ${FAILED[*]}" >&2
 
-if [ "$DO_IMPORT" = 1 ] && [ ${#BUILT[@]} -gt 0 ]; then
+if [ "$DO_IMPORT" = 1 ] && [ ${#BUILT[@]} -gt 0 ] && [ "$RUNTIME" = k3s ]; then
+  # REAL k3s: stream each freshly-built image straight into the node's containerd
+  # (k3s ctr defaults to the k8s.io namespace). Per-image, loud on failure.
+  echo "==> importing ${#BUILT[@]} images into k3s containerd (node '$CLUSTER')..."
+  for img in "${BUILT[@]}"; do
+    if docker save "$img" | k3s ctr images import - >/dev/null 2>&1 \
+       || docker save "$img" | sudo k3s ctr images import - >/dev/null 2>&1; then
+      echo "    ✓ $img"
+    else
+      echo "    ✗ import failed: $img" >&2; FAILED+=("$img(import)")
+    fi
+  done
+elif [ "$DO_IMPORT" = 1 ] && [ ${#BUILT[@]} -gt 0 ]; then
   echo "==> importing ${#BUILT[@]} images into k3d cluster '$CLUSTER'..."
   k3d image import "${BUILT[@]}" --cluster "$CLUSTER" 2>&1 | tail -5
 fi
