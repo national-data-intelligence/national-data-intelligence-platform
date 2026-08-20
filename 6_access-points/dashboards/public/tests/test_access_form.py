@@ -31,6 +31,7 @@ PUBLIC = "https://public.127.0.0.1.nip.io/"
 # Seeded Fayda identities (0_external/fayda/seed/citizens.yaml). Each maps to a
 # reachable gmail plus-alias, so a real code is delivered + logged.
 SEEDED_FAN = "1000000000000023"   # Genet Abera
+SEEDED_EMAIL = "tesfayeabenezer64+genet.abera@gmail.com"   # the email on that record (the pair)
 UNKNOWN_FAN = "9999999999999999"
 FAILURES: list[str] = []
 
@@ -90,6 +91,7 @@ def main() -> int:
         pg2 = ctx.new_page()
         open_modal(pg2)
         pg2.fill("input[placeholder='e.g. 1000000000000001']", UNKNOWN_FAN)
+        pg2.fill("input[placeholder='you@example.com']", "someone@example.com")
         pg2.get_by_role("button", name="Send code", exact=True).click()
         pg2.wait_for_timeout(1500)
         check("no fayda record matches" in body(pg2).lower(),
@@ -101,6 +103,7 @@ def main() -> int:
         pg3 = ctx.new_page()
         open_modal(pg3)
         pg3.fill("input[placeholder='e.g. 1000000000000001']", SEEDED_FAN)
+        pg3.fill("input[placeholder='you@example.com']", SEEDED_EMAIL)
         pg3.get_by_role("button", name="Send code", exact=True).click()
         pg3.wait_for_selector("text=We sent a 6-digit code", timeout=15000)
         pg3.wait_for_timeout(700)

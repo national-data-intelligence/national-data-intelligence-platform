@@ -7,9 +7,11 @@ The primary consumer is the public dashboard's identity-verification step on the
 access-request form. Rather than an OIDC popup, a non-registered visitor now
 proves they hold a real Fayda identity via an EMAIL-OTP round-trip that Fayda
 runs entirely itself (exactly as a real external IdP sends its own codes):
-    POST /verify/challenge {fan}       — check the FAN exists, email a 6-digit
-                                          OTP to its registered address (Fayda's
-                                          OWN isolated SMTP), return masked email
+    POST /verify/challenge {fan,email} — check the FAN exists AND the supplied
+                                          email matches the address on that record
+                                          (both factors), then email a 6-digit OTP
+                                          to it (Fayda's OWN isolated SMTP); return
+                                          masked email
     POST /verify/confirm  {fan, code}  — validate the code, return the identity
 The OTP mailer is Fayda's own (0_external/fayda/.env → docker-compose), fully
 isolated from the NHDW gateway's mailer + smtp-secrets.
@@ -136,6 +138,7 @@ _OTP_MAX_ATTEMPTS = 5        # wrong-code tries before the challenge is burned
 
 class ChallengeReq(BaseModel):
     fan: str
+    email: str = ""   # the visitor must supply the email registered to this FAN
 
 
 class ConfirmReq(BaseModel):
@@ -404,10 +407,21 @@ async def verify_challenge(req: ChallengeReq) -> JSONResponse:
     if not citizen:
         return JSONResponse({"ok": False, "reason": "not_found"}, status_code=404)
 
-    email = (citizen.get("email") or "").strip()
-    if not email:
+    # Two-factor: the visitor must supply the email registered to this FAN. We
+    # only ever send the OTP to the address ON the record, and only when the
+    # supplied address matches it — so knowing a FAN alone is not enough, and the
+    # code can never be diverted to an attacker-chosen inbox.
+    record_email = (citizen.get("email") or "").strip()
+    if not record_email:
         return JSONResponse(
             {"ok": False, "reason": "no_email_on_record"}, status_code=422)
+
+    supplied_email = (req.email or "").strip()
+    if not supplied_email:
+        return JSONResponse({"ok": False, "reason": "email_required"}, status_code=400)
+    if supplied_email.casefold() != record_email.casefold():
+        return JSONResponse({"ok": False, "reason": "email_mismatch"}, status_code=403)
+    email = record_email
 
     code = f"{random.randint(0, 999999):06d}"
     _OTP[fan] = {

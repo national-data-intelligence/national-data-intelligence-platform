@@ -36,6 +36,7 @@ type AccessForm = {
   name: string; email: string; phone: string; org: string; role: string;
   dashboards: string[]; purpose: string;
   fan: string;                        // the entered Fayda FAN
+  faydaEmail: string;                 // the email registered to that FAN (the pair)
   code: string;                       // the 6-digit OTP the visitor received
   verifyState: VerifyState;
   maskedEmail: string;                // e.g. "b•••@gmail.com" — shown after send
@@ -45,11 +46,11 @@ type AccessForm = {
 
 const EMPTY: AccessForm = {
   name: '', email: '', phone: '', org: '', role: '', dashboards: [], purpose: '',
-  fan: '', code: '', verifyState: 'not-started', maskedEmail: '',
+  fan: '', faydaEmail: '', code: '', verifyState: 'not-started', maskedEmail: '',
   fayda_id: '', verified_via: '',
 };
 
-type FieldErr = { name?: string; email?: string; purpose?: string; fan?: string; code?: string };
+type FieldErr = { name?: string; email?: string; purpose?: string; fan?: string; faydaEmail?: string; code?: string };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const FAN_RE = /^\d{12,16}$/;   // Ethiopia's FIN is 12 digits, the FAN 16.
@@ -97,6 +98,8 @@ function faydaReason(reason: string | undefined): string {
     case 'invalid_fan':        return 'Enter a valid Fayda number (12 to 16 digits).';
     case 'rate_limited':       return 'Please wait a moment before requesting another code.';
     case 'no_email_on_record': return 'This Fayda identity has no email on record, so we cannot send a code.';
+    case 'email_required':      return 'Enter the email registered to your Fayda number.';
+    case 'email_mismatch':      return 'That email does not match this Fayda number. Check both and try again.';
     case 'bad_code':           return 'That code is not correct. Check the digits and try again.';
     case 'expired':            return 'That code has expired — request a new one.';
     case 'too_many_attempts':  return 'Too many incorrect attempts. Request a new code to try again.';
@@ -129,11 +132,26 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
     }));
   };
 
-  // Step 1 — confirm the FAN exists in Fayda + email a code to its address.
+  // Editing the email also invalidates any code already sent + prior verification.
+  const changeFaydaEmail = (value: string) => {
+    setFieldErr(fe => ({ ...fe, faydaEmail: undefined }));
+    setVerifyMsg(null);
+    setForm(f => ({
+      ...f, faydaEmail: value, code: '', maskedEmail: '',
+      verifyState: 'not-started', fayda_id: '', verified_via: '',
+    }));
+  };
+
+  // Step 1 — confirm the FAN + registered email pair, then email a code to it.
   const sendCode = async () => {
     const e = validateFan(form.fan);
     if (e) { setFieldErr(fe => ({ ...fe, fan: e })); return; }
-    setFieldErr(fe => ({ ...fe, fan: undefined }));
+    const em = form.faydaEmail.trim();
+    if (!EMAIL_RE.test(em)) {
+      setFieldErr(fe => ({ ...fe, faydaEmail: 'Enter the email registered to your Fayda number.' }));
+      return;
+    }
+    setFieldErr(fe => ({ ...fe, fan: undefined, faydaEmail: undefined }));
     setVerifyMsg(null);
     setErr('');
     update({ verifyState: 'sending' });
@@ -142,7 +160,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
       const r = await fetch('/api/proxy/fayda/challenge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fan }),
+        body: JSON.stringify({ fan, email: em }),
       });
       const body = await r.json().catch(() => ({}));
       if (r.ok && body.ok) {
@@ -302,22 +320,35 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                       Verify your identity with Fayda (optional)
                     </p>
                     <p className="text-xs muted" style={{ margin: '0.2rem 0 0' }}>
-                      Enter your Fayda number; we email a one-time code to the address on your
-                      Fayda record to confirm it is you. Helps reviewers approve faster. Not required
-                      for organisation accounts.
+                      Enter your Fayda number and the email registered to it; we send a one-time
+                      code to that address to confirm it is you. Helps reviewers approve faster. Not
+                      required for organisation accounts.
                     </p>
                   </div>
                 </div>
 
-                {/* Step 1 — FAN + Send code */}
+                {/* Step 1 — FAN + registered email (the pair) + Send code */}
                 <div className="field-group" style={{ marginTop: '0.8rem' }}>
                   <label>Fayda number (FAN)</label>
+                  <input type="text" inputMode="numeric"
+                         value={form.fan} placeholder="e.g. 1000000000000001"
+                         aria-invalid={!!fieldErr.fan}
+                         disabled={verified}
+                         onChange={e => changeFan(e.target.value)} />
+                  {fieldErr.fan && (
+                    <p className="text-xs" style={{ margin: '0.35rem 0 0', color: 'var(--alert, #c0392b)' }}>
+                      {fieldErr.fan}
+                    </p>
+                  )}
+                </div>
+                <div className="field-group" style={{ marginTop: '0.6rem' }}>
+                  <label>Email on your Fayda record</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input type="text" inputMode="numeric"
-                           value={form.fan} placeholder="e.g. 1000000000000001"
-                           aria-invalid={!!fieldErr.fan}
+                    <input type="email" inputMode="email"
+                           value={form.faydaEmail} placeholder="you@example.com"
+                           aria-invalid={!!fieldErr.faydaEmail}
                            disabled={verified}
-                           onChange={e => changeFan(e.target.value)}
+                           onChange={e => changeFaydaEmail(e.target.value)}
                            style={{ flex: '1 1 auto', minWidth: 0 }} />
                     <button type="button" className="btn btn-sm btn-primary"
                             onClick={sendCode}
@@ -326,9 +357,9 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                       {sending ? 'Sending' : verified ? 'Verified' : codeSent ? 'Resend code' : 'Send code'}
                     </button>
                   </div>
-                  {fieldErr.fan && (
+                  {fieldErr.faydaEmail && (
                     <p className="text-xs" style={{ margin: '0.35rem 0 0', color: 'var(--alert, #c0392b)' }}>
-                      {fieldErr.fan}
+                      {fieldErr.faydaEmail}
                     </p>
                   )}
                 </div>
