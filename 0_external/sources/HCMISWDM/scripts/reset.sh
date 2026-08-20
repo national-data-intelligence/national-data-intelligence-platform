@@ -38,4 +38,7 @@ python3 scripts/synthesize.py
 echo "==> Running analytics-layer synthesis (Dim.*, Commodity.*, Fact.*)..."
 python3 scripts/synthesize_analytics.py
 
+echo "==> Running dispatch synthesis (EPSS hub->facility movement plan)..."
+python3 scripts/synthesize_dispatch.py
+
 echo "Done. Verify: bash scripts/verify.sh"

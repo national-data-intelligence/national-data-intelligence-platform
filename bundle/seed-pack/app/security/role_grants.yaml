@@ -49,6 +49,10 @@
     - rm-act-week
     - rm-hotspots
     - rm-map
+    - ct-filters
+    - ct-kpis
+    - ct-movement
+    - ct-dispatch
     - rm-statboard
     - rm-stock-heatmap
     - rm-stockout-impact
@@ -109,6 +113,10 @@
     - rm-act-week
     - rm-hotspots
     - rm-map
+    - ct-filters
+    - ct-kpis
+    - ct-movement
+    - ct-dispatch
     - rm-statboard
     - rm-stock-heatmap
     - rm-workforce
@@ -215,6 +223,10 @@
     - rm-act-week
     - rm-hotspots
     - rm-map
+    - ct-filters
+    - ct-kpis
+    - ct-movement
+    - ct-dispatch
     - rm-statboard
     - rm-stock-heatmap
     - rm-stockout-impact

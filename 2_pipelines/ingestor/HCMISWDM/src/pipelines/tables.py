@@ -51,6 +51,14 @@ TABLES: list[TableSpec] = [
     TableSpec("Fact", "DailyRecord"),
     TableSpec("Fact", "Inventory"),
 
+    # ── Dispatch plan — EPSS route-optimization export (Supply Control Tower) ─
+    # Loaded by 0_external/sources/HCMISWDM/scripts/synthesize_dispatch.py.
+    TableSpec("Dim", "DispatchHub"),
+    TableSpec("Dim", "DispatchFacility"),
+    TableSpec("Dim", "DispatchPeriod"),
+    TableSpec("Fact", "Dispatch"),
+    TableSpec("Fact", "DispatchRun"),
+
     # ── Vaccine — operational vaccine module ────────────────────────────────
     TableSpec("Vaccine", "Environment"),
     TableSpec("Vaccine", "Unit"),

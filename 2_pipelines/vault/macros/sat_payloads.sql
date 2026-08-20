@@ -136,6 +136,41 @@
         'volatile': [],
     },
 
+    'hcmis_dispatch_hub': {
+        'payload': ['name', 'short_name', 'zone', 'lng', 'lat', 'is_hub', 'vehicles'],
+        'volatile': [],
+    },
+    'hcmis_dispatch_facility': {
+        'payload': ['name', 'region', 'facility_type', 'lng', 'lat',
+                    'line_count', 'store_cap'],
+        'volatile': [],
+    },
+    'hcmis_dispatch_period': {
+        'payload': ['label', 'sort_order', 'movements', 'units', 'runs', 'facilities',
+                    'avg_fill', 'overflow_legs', 'min_months', 'max_months',
+                    'uncovered_needs', 'at_risk_facilities', 'optimized_km', 'baseline_km',
+                    'km_saved', 'km_saved_pct', 'optimized_cost', 'baseline_cost',
+                    'cost_saved', 'cost_saved_pct', 'vehicles_used', 'naive_vehicles',
+                    'vehicles_saved'],
+        'volatile': [],
+    },
+    'hcmis_dispatch_run': {
+        'payload': ['period_id', 'vehicle_type', 'capacity_units', 'origin_hub_id',
+                    'total_road_km', 'total_units', 'fill_rate', 'cost_total',
+                    'cost_per_unit', 'km_saved_vs_baseline', 'depart', 'eta', 'status',
+                    'stops_json', 'path_json'],
+        'volatile': [],
+    },
+    'hcmis_dispatch': {
+        'payload': ['drug', 'drug_short', 'commodity_key', 'units', 'amc', 'mos',
+                    'days_to_stockout', 'priority', 'lane_km', 'cost_units',
+                    'sequence_index', 'vehicle_run_id', 'fill_rate', 'nearest_hub_id',
+                    'alt_hub_id', 'reason', 'assign_delta_km', 'assign_delta_cost',
+                    'baseline_hub_id', 'baseline_km', 'planned', 'repaired', 'capped',
+                    'why_json'],
+        'volatile': [],
+    },
+
     'mbrana_commodity': {
         'payload': ['commodity_code', 'commodity_name'],
         'volatile': [],

@@ -167,6 +167,35 @@
   granularity: aggregate
   default_sensitivity: default
   description: "Open vaccine purchase orders with live ETA (HCMIS procurement)."
+# Supply Control Tower (EPSS dispatch plan) — served via /api/ct/plan.
+- schema_name: bi_supply
+  table_name: mart_ct_nodes
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "Supply Control Tower — EPSS hubs + delivery facilities (coords/region/type/capacity)."
+- schema_name: bi_supply
+  table_name: mart_ct_movements
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "Supply Control Tower — hub→facility movement lines per period × commodity."
+- schema_name: bi_supply
+  table_name: mart_ct_vehicle_runs
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "Supply Control Tower — dispatch vehicle runs (stops, fill rate, ETA)."
+- schema_name: bi_supply
+  table_name: mart_ct_plan_stats
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "Supply Control Tower — per-period plan KPI + savings summary (vs naive baseline)."
 
 # ── Public / k-anonymised (bi_public) ───────────────────────────────────
 - schema_name: bi_public

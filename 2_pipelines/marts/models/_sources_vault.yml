@@ -21,6 +21,13 @@ sources:
       - name: hub_hcmis_item
       - name: hub_hcmis_purchase_order     # procurement pipeline (open POs)
       - name: lnk_hcmis_stock_event
+      # EPSS dispatch plan (Supply Control Tower)
+      - name: hub_hcmis_dispatch           # BK holder (movement_id)
+      - name: hub_hcmis_dispatch_hub       # BK holder (hub_id — warehouse)
+      - name: hub_hcmis_dispatch_facility  # BK holder (node_id — the facility dimension)
+      - name: hub_hcmis_dispatch_period    # BK holder (period_id)
+      - name: hub_hcmis_dispatch_run       # BK holder (run_id)
+      - name: lnk_hcmis_dispatch           # movement fact edge (hub × facility × period)
       # EthioEMR
       - name: hub_ethioemr_encounter      # BK holder (FHIR Encounter id) — DQ encounter pulse
       # mBrana
@@ -67,6 +74,12 @@ sources:
       - name: v_sat_mfr_organization_current    # MFR registry pulse (share mapped to FAC-id)
       - name: v_sat_mfr_device_current          # facility equipment inventory (FHIR Device)
       - name: v_sat_hcmis_purchase_order_current # procurement pipeline (open POs)
+      # EPSS dispatch plan (Supply Control Tower) current-record views
+      - name: v_sat_hcmis_dispatch_current           # movement measures + commodity_key + run id
+      - name: v_sat_hcmis_dispatch_hub_current       # hub coords + fleet
+      - name: v_sat_hcmis_dispatch_facility_current  # facility coords/region/type/capacity
+      - name: v_sat_hcmis_dispatch_period_current    # period label + plan KPI/savings summary
+      - name: v_sat_hcmis_dispatch_run_current       # run stops/path/fill/cost/eta
       - name: v_sat_ethioemr_encounter_current  # EthioEMR encounter pulse (provider ref + FHIR status)
       - name: v_sat_mbrana_stock_event_current  # mBrana USSD SOH-log pulse (quantity ≥ 0 validity)
       - name: v_sat_mbrana_ussd_facility_current # USSD facility identity (canonical FAC-<region>- codes)

@@ -250,3 +250,68 @@ models:
           - not_null
           - accepted_values:
               values: [Ordered, In Transit, At Customs]
+
+  # ── Supply Control Tower (EPSS dispatch plan) ─────────────────────────────
+  - name: mart_ct_nodes
+    description: |
+      Every EPSS hub (warehouse) and delivery facility in the dispatch plan,
+      one row each (node_kind = hub|facility). Reproduces plan.ts WAREHOUSES +
+      NODES; region_id conforms the plan region name to the bi_supply 2-letter
+      code for OPA geo scoping. Backs ct-movement / ct-dispatch (via /api/ct/plan).
+    columns:
+      - name: node_kind
+        tests:
+          - not_null
+          - accepted_values: {values: [hub, facility]}
+      - name: node_id
+        tests: [not_null, unique]
+      - name: name
+        tests: [not_null]
+  - name: mart_ct_movements
+    description: |
+      One row per dispatch movement line (hub → facility × commodity × period),
+      reproducing plan.ts MOVEMENTS. region_id enables geography scoping;
+      programme_id conforms via commodity_reference; why_json holds the nested
+      demand-signal breakdown. Backs ct-movement / ct-kpis.
+    columns:
+      - name: movement_id
+        tests: [not_null, unique]
+      - name: period_id
+        tests: [not_null]
+      - name: from_hub_id
+        tests: [not_null]
+      - name: to_node_id
+        tests: [not_null]
+      - name: commodity_key
+        tests: [not_null]
+      - name: reason
+        tests:
+          - not_null
+          - accepted_values: {values: [nearest, capacity-overflow]}
+  - name: mart_ct_vehicle_runs
+    description: |
+      One row per dispatch vehicle run, reproducing plan.ts VEHICLE_RUNS. The
+      per-run stop list + road polyline ride as JSON (stops_json / path_json).
+      Backs ct-dispatch and the selected-run overlay on ct-movement.
+    columns:
+      - name: run_id
+        tests: [not_null, unique]
+      - name: period_id
+        tests: [not_null]
+      - name: status
+        tests:
+          - not_null
+          - accepted_values: {values: [Dispatched, Loading, Planned, Delivered]}
+  - name: mart_ct_plan_stats
+    description: |
+      Per-period plan-level KPI + savings summary (units/legs/runs/facilities/
+      fill + km/cost/vehicles saved vs a naive one-truck-per-facility baseline).
+      Reproduces plan.ts PERIOD_STATS and, for the current period, SUMMARY +
+      BASELINE verbatim. Served as summary/baseline/periodStats by /api/ct/plan.
+    columns:
+      - name: period_id
+        tests: [not_null, unique]
+      - name: label
+        tests: [not_null]
+      - name: units
+        tests: [not_null]

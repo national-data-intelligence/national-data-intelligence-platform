@@ -61,6 +61,7 @@ export default function App() {
                 {state.active === 'overview' && granted('overview') && <CatalogPage pageId="overview" />}
                 {state.active === 'disease'  && granted('disease')  && <CatalogPage pageId="disease" />}
                 {state.active === 'resource' && granted('resource') && <CatalogPage pageId="resource" />}
+                {state.active === 'control-tower' && granted('control-tower') && <CatalogPage pageId="control-tower" />}
                 {state.active === 'service'  && granted('service')  && <CatalogPage pageId="service" />}
                 {state.active === 'predictions' && granted('predictions') && <Predictions />}
                 {state.active === 'export'   && granted('export')   && <CatalogPage pageId="export" />}

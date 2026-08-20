@@ -133,6 +133,7 @@ function biApp() {
       {id: 'overview', ico: 'i-grid',         title: 'Overview'},
       {id: 'disease',  ico: 'i-alert',        title: 'Disease Surveillance'},
       {id: 'resource', ico: 'i-package',      title: 'Resource Management'},
+      {id: 'control-tower', ico: 'i-truck',   title: 'Supply Control Tower'},
       {id: 'service',  ico: 'i-chart-line',   title: 'Service Performance'},
       {id: 'predictions', ico: 'i-brain',     title: 'Predictions'},
       {id: 'export',   ico: 'i-upload',       title: 'Data Export & Query'},
