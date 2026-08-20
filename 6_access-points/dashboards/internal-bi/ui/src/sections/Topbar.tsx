@@ -12,6 +12,7 @@ const PAGE_TITLES: Record<string, string> = {
   overview: 'Overview Dashboard',
   disease:  'Disease Surveillance',
   resource: 'Resource Management',
+  'control-tower': 'Supply Control Tower',
   service:  'Service Performance',
   export:   'Data Export & Query',
   settings: 'Profile & Settings',
@@ -22,6 +23,7 @@ const PAGE_SUBTITLES: Record<string, string> = {
   overview: 'Key health-system indicators, action priorities, and system trust.',
   disease:  'Disease trends, risk distribution, response readiness, and active operations.',
   resource: 'Supply-chain and commodity readiness, and the service impact of stockouts.',
+  'control-tower': 'EPSS hub-to-facility movement planning, routing, and dispatch.',
   service:  'Track quality, access, and outcomes across programmes and facilities.',
 };
 
@@ -48,8 +50,12 @@ export default function Topbar() {
   return (
     <header className="bi-topbar">
       <div className="tb-title">
-        <div className="breadcrumb"><span>National Health Data Warehouse</span></div>
-        <h2 style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{title}</h2>
+        <div className="breadcrumb">
+          <span>NHDW</span>
+          <span aria-hidden="true" style={{ opacity: 0.55 }}>›</span>
+          <span>{title}</span>
+        </div>
+        <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1 }}>{title}</h2>
         {subtitle && (
           <p style={{ margin: '0.2rem 0 0', fontSize: '0.92rem', fontWeight: 500, color: 'var(--ink-3)' }}>{subtitle}</p>
         )}

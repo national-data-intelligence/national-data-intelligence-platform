@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: nhdw-registry:5500/nhdw/dbt-docs:dev
+          image: nhdw-registry:5500/nhdw/dbt-docs:1.0.0
           ports: [ { containerPort: 80, name: http } ]
           env:
             - { name: KEYCLOAK_BASE,        value: "http://keycloak.nhdw.svc.cluster.local:8080" }

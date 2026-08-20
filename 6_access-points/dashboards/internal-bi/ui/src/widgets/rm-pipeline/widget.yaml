@@ -1,8 +1,0 @@
-id: rm-pipeline
-title: Procurement Pipeline
-kind: table
-requires:
-  subject: PRD
-  verb: read
-  granularity: aggregate
-  sensitivity: default

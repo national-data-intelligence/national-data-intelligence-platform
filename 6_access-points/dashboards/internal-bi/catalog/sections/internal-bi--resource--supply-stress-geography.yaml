@@ -1,6 +1,7 @@
 id: internal-bi/resource/supply-stress-geography
 page_id: internal-bi/resource
 title: Supply Stress Geography
+description: "Where supply pressure concentrates: the map shades each region by stress, and the table ranks the sharpest hotspots to act on first."
 ordering: 20
 columns: 12
 dense: true

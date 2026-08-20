@@ -1,0 +1,49 @@
+name: Deploy to k3s (push → redeploy)
+
+# Push-to-main continuous deployment. Runs on a SELF-HOSTED runner that lives on
+# the k3s host (so it has docker + kubectl + repo, no SSH-key dance). It rebuilds
+# only the images whose source changed, imports them into k3s, restarts the
+# affected workloads, reseeds catalog/RBAC when those seeds changed, and verifies.
+# The heavier from-bare install (provision k3s + full seed) is `provision.yml`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '6_access-points/**'
+      - 'bundle/seed-pack/app/security/**'
+      - 'bundle/scripts/ci-redeploy.sh'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Redeploy scope: "all" for everything, or blank for changed-only'
+        required: false
+        default: ''
+
+concurrency:
+  group: nhdw-deploy
+  cancel-in-progress: false
+
+jobs:
+  redeploy:
+    runs-on: [self-hosted, nhdw]
+    env:
+      KUBECONFIG: ${{ secrets.NHDW_KUBECONFIG_PATH || '/home/biniyam/.kube/config' }}
+      NS: nhdw
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Compute redeploy scope
+        id: scope
+        run: |
+          if [ -n "${{ github.event.inputs.scope }}" ]; then
+            echo "value=${{ github.event.inputs.scope }}" >> "$GITHUB_OUTPUT"
+          else
+            changed="$(git diff --name-only HEAD~1 HEAD | tr '\n' ' ')"
+            echo "value=${changed:-all}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Redeploy changed components
+        run: bash bundle/scripts/ci-redeploy.sh "${{ steps.scope.outputs.value }}"

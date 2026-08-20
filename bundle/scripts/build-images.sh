@@ -19,55 +19,69 @@ cd "$REPO"
 CLUSTER=nhdw
 DO_IMPORT=0
 ONLY=""
+RUNTIME="${NHDW_RUNTIME:-}"     # k3d | k3s (imports into the right runtime); autodetected if empty
 for arg in "$@"; do
   case "$arg" in
     --import)     DO_IMPORT=1 ;;
     --cluster=*)  CLUSTER="${arg#--cluster=}" ;;
     --only=*)     ONLY="${arg#--only=}" ;;
+    --runtime=*)  RUNTIME="${arg#--runtime=}" ;;
     -h|--help)    sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+
+# Autodetect the cluster runtime when not pinned (an existing k3d cluster of this
+# name → k3d; a running k3s → k3s; else legacy k3d). Matches cache-images.sh.
+if [ -z "$RUNTIME" ]; then
+  if command -v k3d >/dev/null 2>&1 && k3d cluster list "$CLUSTER" >/dev/null 2>&1; then
+    RUNTIME=k3d
+  elif command -v k3s >/dev/null 2>&1 || systemctl is-active --quiet k3s 2>/dev/null; then
+    RUNTIME=k3s
+  else
+    RUNTIME=k3d
+  fi
+fi
 
 # image | context (relative to repo root) | dockerfile (relative to context)
 # Order: base-dashboard before sibling dashboards (FROM dependency); platform
 # images first, then pipeline (dbt/ingestor/ml) images.
 IMAGES=(
   # --- platform / access ---
-  "nhdw/keycloak:dev|7_security/keycloak|Dockerfile"
-  "nhdw/mlflow:dev|2_pipelines/ml/registry|Dockerfile"
+  "nhdw/keycloak:1.0.0|7_security/keycloak|Dockerfile"
+  "nhdw/mlflow:1.0.0|2_pipelines/ml/registry|Dockerfile"
   # NOTE: the LLM is an EXTERNAL component now (0_external/llm/) — the default path
   # runs stock ollama/ollama:0.6.8 (a bundled public image) with the weights in
   # 0_external/llm/models mounted directly, so there is NO custom LLM image to build
   # here. The baked-weights nhdw/ollama-model image is for the BARE-METAL in-cluster
   # recipe ONLY; build it by hand when using that recipe:
-  #   docker build -t nhdw/ollama-model:dev -f 0_external/llm/image/Dockerfile 0_external/llm/models
-  "nhdw/airflow:dev|5_orchestrator|Dockerfile"
-  "nhdw/fayda-replica:dev|0_external/fayda|Dockerfile"
-  "nhdw/gateway:dev|6_access-points/api/nhdw-gateway|Dockerfile"
-  "nhdw/fhir-mediator:dev|6_access-points/api/openhim/mediator|Dockerfile"
-  "nhdw/jupyterhub:dev|6_access-points/jupyterhub|Dockerfile"
-  "nhdw/jupyterlab:dev|6_access-points/jupyterhub/singleuser|Dockerfile"
-  "nhdw/public-dashboard:dev|6_access-points/dashboards/public|Dockerfile"
-  "nhdw/dbt-docs:dev|6_access-points/dashboards/dbt-docs|Dockerfile"
-  "nhdw/superset:dev|6_access-points/dashboards/superset|Dockerfile"
-  "nhdw/tool-gate:dev|6_access-points/api/tool-gate|Dockerfile"
-  "nhdw/admin:dev|6_access-points/dashboards|admin/Dockerfile"
-  "nhdw/workshop:dev|6_access-points/dashboards|workshop/Dockerfile"
-  "nhdw/internal-bi:dev|6_access-points/dashboards|internal-bi/Dockerfile"
+  #   docker build -t nhdw/ollama-model:1.0.0 -f 0_external/llm/image/Dockerfile 0_external/llm/models
+  "nhdw/airflow:1.0.0|5_orchestrator|Dockerfile"
+  "nhdw/fayda-replica:1.0.0|0_external/fayda|Dockerfile"
+  "nhdw/gateway:1.0.0|6_access-points/api/nhdw-gateway|Dockerfile"
+  "nhdw/fhir-mediator:1.0.0|6_access-points/api/openhim/mediator|Dockerfile"
+  "nhdw/jupyterhub:1.0.0|6_access-points/jupyterhub|Dockerfile"
+  "nhdw/jupyterlab:1.0.0|6_access-points/jupyterhub/singleuser|Dockerfile"
+  "nhdw/public-dashboard:1.0.0|6_access-points/dashboards/public|Dockerfile"
+  "nhdw/dbt-docs:1.0.0|6_access-points/dashboards/dbt-docs|Dockerfile"
+  "nhdw/superset:1.0.0|6_access-points/dashboards/superset|Dockerfile"
+  "nhdw/tool-gate:1.0.0|6_access-points/api/tool-gate|Dockerfile"
+  "nhdw/admin:1.0.0|6_access-points/dashboards|admin/Dockerfile"
+  "nhdw/workshop:1.0.0|6_access-points/dashboards|workshop/Dockerfile"
+  "nhdw/internal-bi:1.0.0|6_access-points/dashboards|internal-bi/Dockerfile"
   # --- pipeline: lake seed, dbt, bridge ---
-  "nhdw/staging-dbt:dev|2_pipelines/staging|Dockerfile"
-  "nhdw/vault-dbt:dev|2_pipelines/vault|Dockerfile"
-  "nhdw/vault-bridge:dev|2_pipelines/vault/bridge|Dockerfile"
-  "nhdw/marts-dbt:dev|2_pipelines/marts|Dockerfile"
-  "nhdw/ml-runner:dev|2_pipelines/ml/runner|Dockerfile"
+  "nhdw/staging-dbt:1.0.0|2_pipelines/staging|Dockerfile"
+  "nhdw/vault-dbt:1.0.0|2_pipelines/vault|Dockerfile"
+  "nhdw/vault-bridge:1.0.0|2_pipelines/vault/bridge|Dockerfile"
+  "nhdw/marts-dbt:1.0.0|2_pipelines/marts|Dockerfile"
+  "nhdw/ml-runner:1.0.0|2_pipelines/ml/runner|Dockerfile"
   # --- pipeline: source ingestors ---
-  "nhdw/dhis2-ingestor:dev|2_pipelines/ingestor/DHIS2|Dockerfile"
-  "nhdw/ethioemr-ingestor:dev|2_pipelines/ingestor/EthioEMR|Dockerfile"
-  "nhdw/hcmiswdm-ingestor:dev|2_pipelines/ingestor/HCMISWDM|Dockerfile"
-  "nhdw/mbrana-ingestor:dev|2_pipelines/ingestor/mBrana|Dockerfile"
-  "nhdw/mfr-ingestor:dev|2_pipelines/ingestor/MFR|Dockerfile"
-  "nhdw/climate-ingestor:dev|2_pipelines/ingestor/Climate|Dockerfile"
+  "nhdw/dhis2-ingestor:1.0.0|2_pipelines/ingestor/DHIS2|Dockerfile"
+  "nhdw/ethioemr-ingestor:1.0.0|2_pipelines/ingestor/EthioEMR|Dockerfile"
+  "nhdw/hcmiswdm-ingestor:1.0.0|2_pipelines/ingestor/HCMISWDM|Dockerfile"
+  "nhdw/mbrana-ingestor:1.0.0|2_pipelines/ingestor/mBrana|Dockerfile"
+  "nhdw/mfr-ingestor:1.0.0|2_pipelines/ingestor/MFR|Dockerfile"
+  "nhdw/climate-ingestor:1.0.0|2_pipelines/ingestor/Climate|Dockerfile"
 )
 
 BUILT=()
@@ -84,7 +98,7 @@ for entry in "${IMAGES[@]}"; do
   # canonical home is 2_pipelines/ml/registry/validators.py (single source of
   # truth). Docker COPY can't reach outside the build context, so stage it
   # into the context here (transient, gitignored) right before the build.
-  if [ "$img" = "nhdw/gateway:dev" ]; then
+  if [ "$img" = "nhdw/gateway:1.0.0" ]; then
     cp "$REPO/2_pipelines/ml/registry/validators.py" \
        "$REPO/6_access-points/api/nhdw-gateway/validators.py"
   fi
@@ -103,7 +117,19 @@ echo
 echo "==> built ${#BUILT[@]}: ${BUILT[*]:-none}"
 [ ${#FAILED[@]} -gt 0 ] && echo "==> FAILED ${#FAILED[@]}: ${FAILED[*]}" >&2
 
-if [ "$DO_IMPORT" = 1 ] && [ ${#BUILT[@]} -gt 0 ]; then
+if [ "$DO_IMPORT" = 1 ] && [ ${#BUILT[@]} -gt 0 ] && [ "$RUNTIME" = k3s ]; then
+  # REAL k3s: stream each freshly-built image straight into the node's containerd
+  # (k3s ctr defaults to the k8s.io namespace). Per-image, loud on failure.
+  echo "==> importing ${#BUILT[@]} images into k3s containerd (node '$CLUSTER')..."
+  for img in "${BUILT[@]}"; do
+    if docker save "$img" | k3s ctr images import - >/dev/null 2>&1 \
+       || docker save "$img" | sudo k3s ctr images import - >/dev/null 2>&1; then
+      echo "    ✓ $img"
+    else
+      echo "    ✗ import failed: $img" >&2; FAILED+=("$img(import)")
+    fi
+  done
+elif [ "$DO_IMPORT" = 1 ] && [ ${#BUILT[@]} -gt 0 ]; then
   echo "==> importing ${#BUILT[@]} images into k3d cluster '$CLUSTER'..."
   k3d image import "${BUILT[@]}" --cluster "$CLUSTER" 2>&1 | tail -5
 fi

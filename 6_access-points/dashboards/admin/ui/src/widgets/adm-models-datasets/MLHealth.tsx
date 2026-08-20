@@ -25,12 +25,18 @@ import * as ml from '../../api/ml';
 import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKit';
 import '../../styles/mlhealth.css';
 
-const WORKSHOP_MODELS_URL = 'https://workshop.127.0.0.1.nip.io/';
+// Operator-tool hosts follow the host this admin SPA is served on (admin.<base> -> <sub>.<base>),
+// so the whole system re-homes on a single hostBase with no rebuild. No window (SSR) -> dev fallback.
+const HOST_BASE = (typeof window !== 'undefined' ? window.location.host.replace(/^admin\./, '') : '127.0.0.1.nip.io');
+const toolUrl = (sub: string, path = ''): string => `https://${sub}.${HOST_BASE}${path}`;
+
+
+const WORKSHOP_MODELS_URL = toolUrl('workshop', '/');
 // tool-gate-fronted registry: enter via the gate sign-in leg so the existing
 // privileged-ops session admits silently and lands on the MLflow home; the gate
 // enforces the role too (R-CONS-*, R-OPS-ADM, R-SUPER — a non-permitted role
 // gets the gate's friendly 403, never a broken page).
-const MLFLOW_URL = 'https://mlflow.127.0.0.1.nip.io/oauth2gate/login?realm=privileged-ops&rd=/';
+const MLFLOW_URL = toolUrl('mlflow', '/oauth2gate/login?realm=privileged-ops&rd=/');
 
 /* ── formatting (real values only; '—' when absent) ─────────────────── */
 
@@ -100,7 +106,7 @@ function PerfChart({ rows, metric }: { rows: ml.PerfRow[]; metric: string }) {
     return (
       <p className="mlh-chart-empty muted">
         {pts.length === 1
-          ? `Only one ${metric} window recorded so far — a trend needs at least two.`
+          ? `Only one ${metric} window recorded so far. A trend needs at least two.`
           : `No ${metric} windows recorded yet.`}
       </p>
     );
@@ -340,9 +346,9 @@ export default function MLHealth() {
   return (
     <section className="mlh-page">
       <p className="page-lede">
-        Every model the platform carries, in one place — submitted and accepted models,
+        Every model the platform carries, in one place: submitted and accepted models,
         including those graduated into BI integration and the public models living in
-        workshop projects — with latest run, feature drift (PSI/KS from the monitoring
+        workshop projects, with latest run, feature drift (PSI/KS from the monitoring
         job), newest performance window, and schedule staleness. Investigate and retrain
         in the workshop; the registry of record is MLflow.
       </p>
@@ -391,7 +397,7 @@ export default function MLHealth() {
           <svg className="ico"><use href="#i-info" /></svg>
           <div>
             <h4>Fleet monitoring endpoint not available yet</h4>
-            <p>The gateway answered 404 for <code>/gw/ml/monitoring/fleet</code> — it
+            <p>The gateway answered 404 for <code>/gw/ml/monitoring/fleet</code>. It
             hasn't been rebuilt with the monitoring routes yet. No monitoring data
             can be shown until it is; nothing here is simulated.</p>
           </div>
@@ -411,7 +417,7 @@ export default function MLHealth() {
           <div className="ps-hdr">
             <div>
               <h3 className="ps-title"><svg className="ico"><use href="#i-pulse" /></svg> Model fleet</h3>
-              <p className="ps-sub">One row per model — expand a row for per-feature drift and the performance trend.</p>
+              <p className="ps-sub">One row per model. Expand a row for per-feature drift and the performance trend.</p>
             </div>
             <div className="ps-meta">drift &amp; performance · <strong>monitoring job</strong> · refreshes every 30s</div>
           </div>
@@ -505,7 +511,7 @@ export default function MLHealth() {
                   {items.length === 0 && (
                     <tr>
                       <td colSpan={6} className="muted">
-                        The monitoring feed is live but reports no models yet — register a
+                        The monitoring feed is live but reports no models yet. Register a
                         model in MLflow and run the monitoring job to populate this table.
                       </td>
                     </tr>

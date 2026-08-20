@@ -75,6 +75,37 @@ rm -f /tmp/nhdw-fast-boot.flag   # restore-state writes it iff the snapshot rest
 step() { echo; echo "── $* ──"; }
 need() { command -v "$1" >/dev/null 2>&1 || { echo "FATAL: missing $1" >&2; exit 1; }; }
 
+# Self-heal Cilium node-IP drift (idempotent; a no-op on a healthy cluster).
+# ROOT ISSUE: k3d/Docker Desktop can reassign the node CONTAINER IPs across a
+# daemon or host restart. Cilium caches each node's IP in its CiliumNode CR and
+# keys its cross-node VXLAN tunnel on it, so an IP reshuffle silently black-holes
+# ALL cross-node pod traffic (Keycloak↔postgres-vault, gateway↔DB, ML jobs) while
+# the cluster still reports "up". This is a k3d-on-Docker-Desktop limitation, not
+# an app bug — real nodes have stable IPs, so the class of failure can't occur in
+# production and can't be reliably PREVENTED here. So the ONE canonical bring-up
+# DETECTS the drift (k8s InternalIP != CiliumNode IP) and reconciles it in place;
+# the stuck pods then self-heal once cross-node networking is restored.
+heal_cilium_node_ip_drift() {
+  kubectl get crd ciliumnodes.cilium.io >/dev/null 2>&1 || return 0   # Cilium not installed (yet)
+  local n k8s cil drift=0
+  for n in $(kubectl get nodes -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+    k8s=$(kubectl get node "$n" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+    cil=$(kubectl get ciliumnode "$n" -o jsonpath='{.spec.addresses[?(@.type=="InternalIP")].ip}' 2>/dev/null)
+    if [ -n "$k8s" ] && [ "$k8s" != "$cil" ]; then
+      echo "  ! Cilium node-IP drift on $n (k8s=$k8s cilium=${cil:-none})"; drift=1
+    fi
+  done
+  if [ "$drift" = 1 ]; then
+    echo "  ▸ reconciling Cilium to the current node IPs (drop stale CiliumNode CRs + restart agents)"
+    kubectl delete ciliumnode --all >/dev/null 2>&1 || true
+    kubectl -n kube-system delete pod -l k8s-app=cilium >/dev/null 2>&1 || true
+    kubectl -n kube-system rollout status ds/cilium --timeout=180s >/dev/null 2>&1 || true
+    echo "  ✓ Cilium reconciled — cross-node networking restored (dependent pods self-heal)"
+  else
+    echo "  ✓ Cilium node IPs consistent — no cross-node drift"
+  fi
+}
+
 # ─── 1. tools ──────────────────────────────────────────────────────────────
 step "1 · tools"
 need docker; need kubectl; need python3
@@ -93,6 +124,10 @@ fi
 step "2 · k3d cluster ${CLUSTER}"
 if k3d cluster list 2>/dev/null | awk '{print $1}' | grep -qx "$CLUSTER"; then
   echo "  cluster exists — reusing"
+  # A reused cluster may be recovering from a host/Docker restart that reshuffled
+  # the node IPs — reconcile Cilium so cross-node pod traffic is actually alive
+  # before we trust the cluster (see heal_cilium_node_ip_drift above).
+  heal_cilium_node_ip_drift
 else
   # Pass the host GPU into the cluster when one is present. NOTE: the assistant LLM
   # is EXTERNAL now (0_external/llm/) and gets its GPU from its OWN container
@@ -110,11 +145,33 @@ else
   # per-pod flow metrics, incl. controller-less lab pods coroot could not see).
   # k3d --wait is satisfied by the k3s process (node stays NotReady until the
   # Cilium install right below; coredns/traefik Pend briefly and then recover).
-  k3d cluster create "$CLUSTER" --servers 1 --agents 1 $GPU_FLAG \
+  # P2.2: pin k3s + load the bundled node image so cluster-create works OFFLINE.
+  K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.35.5-k3s1}"
+  for t in "$REPO"/bundle/images/system/node-*.tar; do
+    [ -f "$t" ] && docker load -i "$t" >/dev/null 2>&1 || true
+  done
+  k3d cluster create "$CLUSTER" --image "$K3S_IMAGE" --servers 1 --agents 1 $GPU_FLAG \
     --port "80:80@loadbalancer" --port "443:443@loadbalancer" \
     --k3s-arg "--disable=metrics-server@server:0" \
     --k3s-arg "--flannel-backend=none@server:0" \
     --k3s-arg "--disable-network-policy@server:0" --wait
+
+  # P2.2: import the bundled k3s SYSTEM images (pause/coredns/traefik/klipper/local-path/busybox)
+  # BEFORE anything schedules, so an OFFLINE boot never pulls them (a fresh k3d node embeds none —
+  # this is what stalled a boot during the 2026-08-04 docker.io outage). Import FROM THE TARS
+  # (sanitized by fetch-system-images.sh); a name-import fatals in-node ctr.
+  SYS_TARS=()
+  for t in "$REPO"/bundle/images/system/*.tar; do
+    case "$t" in */node-*) continue ;; esac
+    [ -f "$t" ] && SYS_TARS+=("$t")
+  done
+  if [ ${#SYS_TARS[@]} -gt 0 ]; then
+    k3d image import "${SYS_TARS[@]}" -c "$CLUSTER" --mode direct >/dev/null 2>&1 \
+      && echo "  ✓ imported ${#SYS_TARS[@]} bundled k3s system images (offline-ready)" \
+      || echo "  ! system-image import had errors — offline boot may pull pause/coredns"
+  else
+    echo "  ! no bundled system-image tars — run bundle/scripts/fetch-system-images.sh for offline boot"
+  fi
 
   # ── Cilium CNI + Hubble (#38) — from the BUNDLED chart + image tars ────────
   echo "  ▸ installing Cilium CNI + Hubble (bundled chart)"
@@ -321,13 +378,24 @@ fi
 step "7 · APP/SECURITY seed (RBAC + workshop groups — from files)"
 bash "$SCRIPTS/seed-app-security.sh" || { echo; echo "✗ APP/SECURITY seed FAILED — the boot is NOT demoable. See the errors above."; exit 1; }
 
-# ─── 7.1 · gateway restart — the gateway runs an OPA self-test at startup that
+# ─── 7.1 · regen OPA policy from the permission store (#91 Option A). Step 7 just
+# (re)populated ops_perm.permission/role_permission; regenerate the OPA rego FROM
+# the store (compile.py --from-db), gate it with `opa test`, and reload OPA — so
+# the DB is the authoritative source for the deployed policy (perm-admin edits
+# take effect on the next boot). Fail-closed: a failing opa test leaves OPA
+# untouched and fails the boot. Runs BEFORE the gateway restart (7.2), whose
+# self-test evaluates against OPA.
+step "7.1 · regen OPA policy from the permission store (opa test gated)"
+bash "$SCRIPTS/regen-opa-policy.sh" \
+  || { echo; echo "✗ OPA policy regen FAILED — see errors above."; exit 1; }
+
+# ─── 7.2 · gateway restart — the gateway runs an OPA self-test at startup that
 # needs the mart_attrs catalog step 7 just seeded. It is deployed with the
 # manifests (step 4), so on a cold boot it starts against an EMPTY catalog,
 # fail-closes, and CrashLoopBackOffs. Force it to re-run the self-test now that
 # the catalog exists, and GATE the gateway-driven seeds below (7.55/7.57/7.6) on
 # it being Ready — otherwise they race a not-yet-recovered gateway and time out.
-step "7.1 · restart gateway (its OPA self-test needs the step-7 catalog)"
+step "7.2 · restart gateway (its OPA self-test needs the step-7 catalog)"
 kubectl -n "$NS" rollout restart deploy/nhdw-gateway >/dev/null 2>&1 || true
 kubectl -n "$NS" rollout status deploy/nhdw-gateway --timeout=180s \
   || { echo; echo "✗ gateway not Ready after the security seed (OPA self-test likely still failing — see 'kubectl -n $NS logs deploy/nhdw-gateway')."; exit 1; }
@@ -343,7 +411,7 @@ bash "$SCRIPTS/seed-docs.sh" || { echo; echo "✗ docs seed FAILED — the Docum
 # Convergent like every other seed: models already @champion (restored state /
 # re-boots) are skipped, so this is cheap on warm boots and complete on cold.
 # Forecast widgets have data from day one (no empty-until-first-schedule gap).
-step "7.5 · ML seed (bundle/seeds/ml → MLflow registry → ops_ml.ml_predictions)"
+step "7.5 · ML seed (bundle/seed-pack/app/ml → MLflow registry → ops_ml.ml_predictions)"
 bash "$SCRIPTS/seed-ml.sh" || { echo; echo "✗ ML seed FAILED — forecast widgets will be empty. See the errors above."; exit 1; }
 
 # ─── 7.55 · projects + datasets seed (real /api/projects + /api/datasets) ────
@@ -363,6 +431,18 @@ bash "$SCRIPTS/seed-projects.sh" || { echo; echo "✗ projects/datasets seed FAI
 step "7.57 · resource-request seed (real /api/workspace/resource-request + decide APIs)"
 bash "$SCRIPTS/seed-resource-requests.sh" || { echo; echo "✗ resource-request seed FAILED — the compute review queue is not demoable. See the errors above."; exit 1; }
 
+# ─── 7.58 · model-projects seed (platform models → approved public projects) ──
+# Makes each of the 5 PLATFORM ML models (already trained + integrated by the ML
+# seed 7.5) a full, approved workshop PROJECT — a project row + its package files
+# + a kind='model' artifact bound to the EXISTING MLflow model + an approved
+# review record — by driving the real POST /api/graduation/.../adopt-model
+# endpoint (never by INSERTing rows; it re-uses the integrated model, never
+# re-trains). Runs AFTER the ML (7.5) + projects (7.55) seeds so the models +
+# project APIs exist, and BEFORE the community graduation demo (7.6). Convergent;
+# a failure means the platform models have no project home, so gate the boot.
+step "7.58 · model-projects seed (bundle/seed-pack/app/ml → real adopt-model API)"
+bash "$SCRIPTS/seed-model-projects.sh" || { echo; echo "✗ model-projects seed FAILED — the platform models have no project home. See the errors above."; exit 1; }
+
 # ─── 7.6 · graduation seed (PROJECT-centric review flow, real gateway API) ───
 # Populates the project-review lifecycle HONESTLY — drives the same
 # submit / approve / reject endpoints a contributor + reviewer use, never by
@@ -373,12 +453,30 @@ bash "$SCRIPTS/seed-resource-requests.sh" || { echo; echo "✗ resource-request 
 # seeded users (step 7 — owner/reviewer are FK'd to ops_identity.user).
 # Convergent (keys off each project's actual review_status); a failure means the
 # review flow + community-model catalogue are not demoable, so gate the boot.
-step "7.6 · graduation seed (bundle/seeds/project-review → real submit/approve/reject API)"
+step "7.6 · graduation seed (bundle/seed-pack/app/project-review → real submit/approve/reject API)"
 bash "$SCRIPTS/seed-graduation.sh" || { echo; echo "✗ graduation seed FAILED — the review flow / model catalogue is not demoable. See the errors above."; exit 1; }
 
 # (7.7 demo widget-plugin RETIRED 2026-07-06 — the runtime-swappable-plugin
 # system was removed platform-wide; every dashboard widget is now a foldered
 # build-time module. Archived to _archive/2026-07-06/runtime-plugin-system/.)
+
+# ─── 7.9 · verification gate ─────────────────────────────────────────────────
+# Fail LOUDLY, not silently. Every prior step exiting 0 does NOT prove the demo
+# is actually usable (a mart can be empty, a contract unmet) — so run the fast
+# regression check as a hard gate. On a clean boot it passes in seconds; on a
+# bad one it prints the exact failing contracts here instead of surfacing later
+# as a mysteriously-broken demo. SKIP_VERIFY=1 bypasses (deliberate partial boot).
+if [ "${SKIP_VERIFY:-0}" != "1" ]; then
+  step "7.9 · verify-system (fast regression gate)"
+  if ! bash "$SCRIPTS/verify-system.sh"; then
+    echo
+    echo "✗ verify-system found problems — the boot ran to completion but one or"
+    echo "  more contracts are NOT satisfied (see the ✗ lines above). The demo may"
+    echo "  be partially broken; investigate before relying on it. Re-run"
+    echo "  '$SCRIPTS/verify-system.sh' after any fix. (SKIP_VERIFY=1 to bypass.)"
+    exit 1
+  fi
+fi
 
 # ─── 8. done ────────────────────────────────────────────────────────────────
 step "8 · DONE — NHDW demo is up"

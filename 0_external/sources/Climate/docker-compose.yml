@@ -10,7 +10,7 @@
 services:
   climate-api:
     build: ./api
-    image: nhdw/climate-api:dev
+    image: nhdw/climate-api:1.0.0
     container_name: climate-api
     restart: unless-stopped
     environment:

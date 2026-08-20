@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """load_public_articles.py — seed the public-dashboard newsroom.
 
-Idempotent upsert of bundle/seeds/articles/articles.yaml into
+Idempotent upsert of bundle/seed-pack/app/articles/articles.yaml into
 ops_governance.public_article (managed_by='seed'). Follows the same
 reconciliation contract as the other YAML loaders: seed-origin rows the YAML no
 longer declares are DELETE-synced; runtime-authored rows (managed_by='runtime')

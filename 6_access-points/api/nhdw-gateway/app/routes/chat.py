@@ -63,7 +63,10 @@ NUM_CTX     = int(os.environ.get("NHDW_LLM_NUM_CTX", "8192"))
 KEEP_ALIVE  = os.environ.get("NHDW_LLM_KEEP_ALIVE", "30m")
 MAX_HISTORY = int(os.environ.get("NHDW_CHAT_MAX_HISTORY", "8"))
 MAX_ROUNDS  = int(os.environ.get("NHDW_CHAT_MAX_ROUNDS", "8"))
-LLM_TIMEOUT = float(os.environ.get("NHDW_CHAT_HTTP_TIMEOUT_S", "60"))
+# 180s (not 60): the external ollama may be COLD on the first request after an
+# idle period — loading a 14B model into VRAM before it can generate can exceed
+# 60s, which otherwise surfaces to the SPA as a misleading "model unreachable".
+LLM_TIMEOUT = float(os.environ.get("NHDW_CHAT_HTTP_TIMEOUT_S", "180"))
 SESSION_TTL_S = 300
 
 # Per-dashboard chat config lives next to this endpoint (the gateway is
@@ -75,7 +78,8 @@ CHAT_CONFIGS_DIR = Path(__file__).parent / "chat_configs"
 # ─── in-memory session store ──────────────────────────────────────────
 class _Session:
     __slots__ = ("user_kc_sub", "dashboard_id", "page_id", "messages",
-                 "tool_catalogue", "tool_calls", "rounds", "created_at")
+                 "tool_catalogue", "tool_calls", "rounds", "created_at",
+                 "seen_calls", "sql_net_fired")
 
     def __init__(self, user_kc_sub: str, dashboard_id: str, page_id: str | None,
                  messages: list, tool_catalogue: list, created_at: float) -> None:
@@ -87,6 +91,11 @@ class _Session:
         self.tool_calls: list[dict] = []
         self.rounds         = 0
         self.created_at     = created_at
+        # signatures (name+args) of tool calls already issued this session — the
+        # idempotency guard uses these to short-circuit a repeated identical call.
+        self.seen_calls: set[str] = set()
+        # the deterministic SQL-editor safety net fires at most once per turn
+        self.sql_net_fired  = False
 
 
 _sessions: dict[str, _Session] = {}
@@ -382,6 +391,43 @@ def _sanitize_answer(raw: str | None) -> tuple[str, bool]:
     return text, True
 
 
+def _sql_editor_safety_net(session: _Session, answer: str) -> dict[str, Any] | None:
+    """Deterministic guarantee for the SQL editor. qwen2.5:14b frequently writes the
+    query as a ```sql block in prose (or CLAIMS it "placed" it) WITHOUT calling
+    write_widget_input — including after the user says "you didn't actually do it".
+    If the model's final answer carries a SELECT/WITH and the editor tool was NOT
+    invoked this turn, emit a write_widget_input call so the SQL actually lands in
+    ex-sql-editor. It RUNS the query (and_run) only when the user's own message asked
+    to run/execute — honouring place-vs-run rather than always injecting. Fires at
+    most once per turn; if the model already called the editor tool, we respect that
+    and do nothing."""
+    if session.sql_net_fired:
+        return None
+    if not any(t.get("id") == "write_widget_input" for t in session.tool_catalogue):
+        return None                       # user lacks the interact capability
+    if any(c.get("kind") == "write_widget_input" for c in session.tool_calls):
+        return None                       # the model already did it — respect it
+    m = re.search(r"```(?:sql)?\s*(.*?)```", answer or "", re.S | re.I)
+    sql = (m.group(1).strip() if m else "")
+    if not re.match(r"^\s*(with|select)\b", sql, re.I):
+        return None                       # no runnable query in the answer
+    q = next((mm.get("content", "") for mm in reversed(session.messages)
+              if mm.get("role") == "user"), "")
+    run = bool(re.search(r"\b(run|execute)\b", q or "", re.I))
+    session.sql_net_fired = True
+    args = {"widget_id": "ex-sql-editor", "value": sql, "and_run": run}
+    # Append a well-formed assistant turn carrying this tool call so /continue reads
+    # it back from messages[-1] and can feed the SPA's result to the model.
+    session.messages.append({
+        "role": "assistant", "content": "",
+        "tool_calls": [{"type": "function",
+                        "function": {"name": "write_widget_input", "arguments": args}}],
+    })
+    return {"kind": "tool_call",
+            "tool": {"name": "write_widget_input", "args": args},
+            "executor": "spa"}
+
+
 # ─── orchestration ───────────────────────────────────────────────────
 async def _drive_one_round(session: _Session, user: UserCtx) -> dict[str, Any]:
     """Run one Ollama turn. Returns either {kind:'tool_call'} or {kind:'answer'}."""
@@ -392,8 +438,9 @@ async def _drive_one_round(session: _Session, user: UserCtx) -> dict[str, Any]:
         clean, ok = _sanitize_answer(msg.get("content"))
         answer = clean if ok else \
             "I've hit my tool-call budget for this question — try asking more narrowly."
-        return {"kind": "answer", "answer": answer,
-                "tool_calls": session.tool_calls}
+        step = _sql_editor_safety_net(session, answer)
+        return step if step is not None else {"kind": "answer", "answer": answer,
+                                              "tool_calls": session.tool_calls}
 
     session.rounds += 1
     ollama_tools = _to_ollama_tools(session.tool_catalogue)
@@ -407,8 +454,9 @@ async def _drive_one_round(session: _Session, user: UserCtx) -> dict[str, Any]:
         answer = clean if ok else \
             "I don't have a grounded answer for that — try asking more narrowly, or " \
             "open the relevant widget from the dashboard."
-        return {"kind": "answer", "answer": answer,
-                "tool_calls": session.tool_calls}
+        step = _sql_editor_safety_net(session, answer)
+        return step if step is not None else {"kind": "answer", "answer": answer,
+                                              "tool_calls": session.tool_calls}
 
     # Take the first call; later we could batch multiple in one round.
     call = calls[0]
@@ -423,6 +471,22 @@ async def _drive_one_round(session: _Session, user: UserCtx) -> dict[str, Any]:
                                   "content": json.dumps({"ok": False,
                                                           "error": f"unknown tool {tool_name!r}"})})
         return await _drive_one_round(session, user)
+
+    # Idempotency guard: if the model re-issues a tool call identical to one it
+    # already made this session (same name + args), don't re-run it — feed back a
+    # short note and let it move on. This breaks the degenerate loop where the
+    # model repeats a call and re-announces success without progressing toward an
+    # answer. The recursion below re-enters _drive_one_round (a spent round), so
+    # it is bounded by MAX_ROUNDS like every other feed-back path.
+    sig = tool_name + ":" + json.dumps(args, sort_keys=True, default=str)
+    if sig in session.seen_calls:
+        session.messages.append(msg)
+        session.messages.append({"role": "tool", "content": json.dumps(
+            {"ok": True, "note": (f"{tool_name} was already called with these "
+             "arguments earlier in this conversation; its effect stands. Do not "
+             "repeat it — use the prior result and give your final answer.")})})
+        return await _drive_one_round(session, user)
+    session.seen_calls.add(sig)
 
     if spec.get("executor") == "gateway":
         executor = GATEWAY_EXECUTORS.get(tool_name)

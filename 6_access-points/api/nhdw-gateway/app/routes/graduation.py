@@ -41,6 +41,7 @@ is GONE from the tree, not coexisting). The MLflow-alias primitive
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -192,6 +193,26 @@ async def _list_project_files(project_id: str) -> list[dict]:
         out.append({"name": name, "size": o.get("size", 0),
                     "last_modified": lm.isoformat() if hasattr(lm, "isoformat") else lm})
     return out
+
+
+async def _model_manifest_fingerprint(project_id: str,
+                                      model_name: str) -> tuple[str, str, int]:
+    """Locate the adopted model's manifest object under the project's files/
+    prefix and return (minio_key, sha256, byte_count) for its artifact version.
+    The SHALLOWEST key whose basename is manifest.yml/.yaml wins (the package's
+    top-level manifest). Honest fallback when none is present / readable: the
+    files/ prefix itself, a hash of the model name, and byte_count 0 — so a
+    project whose files were not (yet) uploaded still adopts cleanly."""
+    prefix = _files_prefix(project_id)
+    objs = await minio_client.list_prefix(prefix=prefix, bucket=PROJECTS_BUCKET)
+    cand = sorted((o["key"] for o in objs
+                   if _RE_MANIFEST.match(_basename(o["key"]))),
+                  key=lambda k: (k.count("/"), k))
+    if cand:
+        raw = await minio_client.read_object(key=cand[0], bucket=PROJECTS_BUCKET)
+        if raw is not None:
+            return cand[0], hashlib.sha256(raw).hexdigest(), len(raw)
+    return prefix, hashlib.sha256(model_name.encode()).hexdigest(), 0
 
 
 def _proj_out(row) -> dict:
@@ -414,6 +435,116 @@ async def approve_project(
                      "integration": integration})
     return {"project_id": project_id, "review_status": "approved",
             "visibility": "public", "integration": integration}
+
+
+# ── adopt a platform model onto its project (reviewers only) ───────────────
+@router.post("/project/{project_id}/adopt-model")
+async def adopt_model(
+    project_id: str = PathParam(...),
+    user: UserCtx = Depends(get_user),
+    model_name: str = Body(..., embed=True),
+    title: str | None = Body(default=None, embed=True),
+    description: str | None = Body(default=None, embed=True),
+    note: str | None = Body(default=None, embed=True),
+) -> dict:
+    """Bind an ALREADY-INTEGRATED platform model (trained by seed-ml.sh into
+    MLflow + ops_ml.model_deployment) onto a workshop PROJECT as an approved,
+    public project: a kind='model' artifact bound to the MLflow model + an
+    approved review record, and the project published. It does NOT re-train,
+    fork, or spawn a runner (the model is already integrated) — it only makes
+    the project the catalogue home of that platform model. Convergent +
+    idempotent: re-running reuses the existing artifact / review row and
+    re-asserts the approved+public state. Platform models bypass the
+    submit→review gate — ANY current review_status (incl. draft) is adopted."""
+    decision = _review_gate(user)
+    if not decision.allow:
+        raise HTTPException(403, decision.reason or "reviewers only")
+    try:
+        UUID(project_id)
+    except (ValueError, TypeError):
+        raise HTTPException(404, "not found")
+
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        # The model must be a REAL integrated platform model — its deployment row
+        # is registered by seed-ml.sh. Never adopt a name that isn't served.
+        if not await conn.fetchval(
+                "SELECT 1 FROM ops_ml.model_deployment WHERE model_name = $1",
+                model_name):
+            raise HTTPException(404, f"model not registered: {model_name}")
+        prj = await conn.fetchrow("""
+            SELECT owner_kc_sub, slug, review_status
+            FROM ops_workspace.project WHERE id = $1::uuid;
+        """, project_id)
+        if prj is None:
+            raise HTTPException(404, "not found")
+        owner = prj["owner_kc_sub"]
+
+        # Fingerprint the model's manifest object for the artifact version's real
+        # size + hash (MinIO IO — outside the write path, like approve's
+        # essential-files check). Honest fallback when no manifest is present.
+        minio_key, sha256, byte_count = await _model_manifest_fingerprint(
+            project_id, model_name)
+
+        # All writes commit together (mirrors approve_project): a failure must
+        # never leave a public project with no artifact / verdict trail.
+        async with conn.transaction():
+            # Convergent artifact: reuse the model artifact already bound to this
+            # (project, MLflow model) pair rather than creating a duplicate.
+            aid = await conn.fetchval("""
+                SELECT id FROM ops_artifact.artifact
+                WHERE project_id = $1::uuid AND kind = 'model'
+                  AND mlflow_model_name = $2;
+            """, project_id, model_name)
+            if aid is None:
+                aid = await conn.fetchval("""
+                    INSERT INTO ops_artifact.artifact
+                        (owner, kind, title, description, license, tier,
+                         project_id, mlflow_model_name, peer_review_status, tags)
+                    VALUES ($1, 'model', $2, $3, 'CC-BY-4.0', 'public',
+                            $4::uuid, $5, 'approved', $6::text[])
+                    RETURNING id;
+                """, owner, title or model_name, description, project_id,
+                     model_name, ["model", "platform"])
+                await conn.execute("""
+                    INSERT INTO ops_artifact.artifact_version
+                        (artifact_id, version, minio_bucket, minio_key,
+                         sha256, byte_count, change_note)
+                    VALUES ($1, 1, $2, $3, $4, $5,
+                            'platform model adopted onto project');
+                """, aid, PROJECTS_BUCKET, minio_key, sha256, byte_count)
+
+            # Approve → publish. Platform models bypass the submit→review gate,
+            # so ANY current review_status transitions to approved. The DB CHECK
+            # forbids a group_id on non-group visibility → clear it on publish.
+            await conn.execute("""
+                UPDATE ops_workspace.project
+                   SET review_status = 'approved',
+                       visibility = 'public', group_id = NULL,
+                       reviewed_at = now(), reviewed_by = $2::uuid,
+                       updated_at = now()
+                 WHERE id = $1::uuid
+            """, project_id, user.kc_sub)
+
+            # Convergent review-audit row: one approved verdict, not one per re-run.
+            if not await conn.fetchval("""
+                    SELECT 1 FROM ops_workspace.project_review
+                    WHERE project_id = $1::uuid AND verdict = 'approved';
+            """, project_id):
+                await conn.execute("""
+                    INSERT INTO ops_workspace.project_review
+                        (project_id, reviewer, verdict, comment, checklist)
+                    VALUES ($1::uuid, $2::uuid, 'approved', $3, NULL)
+                """, project_id, user.kc_sub, note)
+
+    await ops_db.log_policy_decision(
+        user=user, action="adopt.model", resource=project_id,
+        decision="allow", rule_hits=decision.rule_hits,
+        explanation={"model_name": model_name, "artifact_id": str(aid),
+                     "review_status": "approved", "adopted": True})
+    return {"project_id": project_id, "model_name": model_name,
+            "artifact_id": str(aid), "review_status": "approved",
+            "adopted": True}
 
 
 # ── reject / request-changes (reviewers only) ─────────────────────────────

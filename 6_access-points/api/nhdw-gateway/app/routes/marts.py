@@ -32,6 +32,17 @@ async def list_marts(request: Request, user: UserCtx = Depends(get_user)) -> dic
     """
     t0 = time.perf_counter()
     res = await trino_client.query(sql)
+    # Single source of truth: only marts in the mart_attrs catalog are queryable
+    # (the ad-hoc SQL executor + get_mart 403 anything else). Filter the raw
+    # information_schema listing to the cataloged set so the browser NEVER offers
+    # an uncataloged intermediate/bridge table (e.g. bi_dhis2_facility_with_region)
+    # that would then 403 on click. Marts appear here iff they're both deployed
+    # AND cataloged.
+    cataloged = await mart_attrs.catalog_keys()
+    rows = [r for r in (res.get("rows") or [])
+            if (r.get("table_schema"), r.get("table_name")) in cataloged]
+    res["rows"] = rows
+    res["row_count"] = len(rows)
     await ops_db.log_gateway_query(
         user=user, method="GET", path="/api/marts",
         mart_scope=[], filters={},

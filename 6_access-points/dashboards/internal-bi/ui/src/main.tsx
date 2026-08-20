@@ -1,8 +1,13 @@
 import { createRoot } from 'react-dom/client';
-// Self-hosted fonts (offline cluster — no runtime CDN). Inter is the UI face
-// (matches the reference goldens — FINAL owner mandate 2026-07-07 supersedes the
-// earlier Nunito decree); Cormorant Garamond only for the auth splash serif;
-// JetBrains Mono for code.
+// Self-hosted fonts (offline cluster — no runtime CDN). Nunito Sans is the UI
+// body face and Cormorant Garamond the heading serif — the shared workshop face
+// applied across every dashboard (global font decree). Inter is retained only
+// for a few standalone screens that still hardcode it (auth splash, denied-access
+// takeover); JetBrains Mono for code.
+import '@fontsource/nunito-sans/400.css';
+import '@fontsource/nunito-sans/600.css';
+import '@fontsource/nunito-sans/700.css';
+import '@fontsource/nunito-sans/800.css';
 import '@fontsource/inter/400.css';
 import '@fontsource/inter/500.css';
 import '@fontsource/inter/600.css';

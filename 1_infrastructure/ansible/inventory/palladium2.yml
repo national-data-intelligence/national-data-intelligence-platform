@@ -1,0 +1,27 @@
+# NHDW inventory — palladium2 (the live Azure single-node: real k3s + Tesla T4 GPU).
+#
+# Single machine, but a PUBLIC re-home: the whole stack comes up on
+# 20.84.70.78.nip.io (not 127.0.0.1), the GPU is enabled for the LLM assistant, and
+# the k3s API binds the private NIC. The CI runner lives ON this host, so ansible
+# connects locally (no SSH). Going public is a change of THIS inventory only — the
+# roles/chart are host-agnostic (hostBase flows to ingress + OIDC + seeds + TLS).
+all:
+  vars:
+    nhdw_topology: single
+    nhdw_cluster_name: nhdw
+    # The single supplied host base — drives ingress, every OIDC redirect/issuer,
+    # the keycloak seed (dashboards + tools + gates), and the wildcard TLS cert.
+    nhdw_host_base: 20.84.70.78.nip.io
+    # Tesla T4 — install the Canonical-signed nvidia module + container toolkit so
+    # the external GPU-ollama offloads the 14b assistant model.
+    nhdw_gpu: true
+    nhdw_gpu_driver_branch: 580-server
+    # The private NIC the k3s API + host.k3d.internal alias bind to on this VM.
+    nhdw_node_ip: 172.16.0.4
+  children:
+    control_plane:
+      hosts:
+        localhost:
+          ansible_connection: local
+    workers:
+      hosts: {}          # single-node — the control-plane node runs all workloads

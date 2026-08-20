@@ -6,14 +6,14 @@
  * accusations. Source: bi_supply + DHIS2 (+ EMR where available).
  *
  * DATA CONTRACT (mock: rm-wastage.json): commodity · wastage_score:num · use_band:'adequate'|'high'|'low'
- * (the use-vs-service mix is derived from the use_band distribution). reactsTo: geography · period.
+ * (the use-vs-service mix is derived from the use_band distribution). reactsTo: geography · period · commodity.
  */
 import * as echarts from 'echarts';
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 
 const def: WidgetDef = {
   id: 'rm-wastage',
-  reactsTo: ['geography', 'period'],
+  reactsTo: ['geography', 'period', 'commodity'],
   async render(ctx: WidgetCtx) {
     const rows = await ctx.fetchData();
     if (!rows || !rows.length) { ctx.empty('No wastage and consistency data for the selected filters.'); return; }

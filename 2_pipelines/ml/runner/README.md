@@ -12,7 +12,7 @@ never resident — it runs in a throwaway pod and dies.
 The runner **owns all infrastructure I/O** (Postgres, MLflow, MinIO).
 A model package only ever sees a `DataFrame` in and hands a `DataFrame`
 back — it never receives credentials. The package contract is documented
-in `bundle/seeds/ml/_template/` (the annotated reference package).
+in `bundle/seed-pack/app/ml/_template/` (the annotated reference package).
 
 ## CLI
 
@@ -29,7 +29,7 @@ runner.py predict-adhoc <model_name> --input <minio uri csv> --output <minio uri
   holding the package files (or exactly one `.tar.gz`, the gateway-upload
   shape), or
 * a mounted directory, e.g. `/seed/<name>` (the boot path mounts
-  `bundle/seeds/ml` at `/seed`).
+  `bundle/seed-pack/app/ml` at `/seed`).
 
 Steps: fetch package → layered pip install of `requirements.txt` extras
 (baked libs → `/wheels` delta with `--no-index` → **loud** network fallback)
@@ -63,7 +63,7 @@ schema) → validates the output against the **unified flat forecast schema**
 
 Scheduling: the Airflow DAG iterates `ops_ml.model_deployment` rows
 (`enabled AND deployment_kind='batch'`) and runs one of these per row.
-Scheduling a model = INSERT a row (seed rows: `bundle/seeds/ml/deployments.yaml`).
+Scheduling a model = INSERT a row (seed rows: `bundle/seed-pack/app/ml/deployments.yaml`).
 
 ### `predict-adhoc <model_name> --input … --output …`
 

@@ -28,6 +28,7 @@ const def: WidgetDef = {
       </tr>`;
     }).join('');
     ctx.el.innerHTML = `
+      <p class="widget-lead" style="color:var(--ink-3);font-size:.8rem;margin:0 0 .6rem">Facility indicators that fall outside their expected range, with the expected band shown per row so outliers are judged in context.</p>
       <div class="scrollable"><table class="dash"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
     return () => { /* pure DOM */ };
   },

@@ -6,6 +6,9 @@ model-serving service (retired 2026-07-03) and NO per-model CronJob:
   GET  /api/ml                         list registered models (MLflow aliases
                                         + ops_ml.model_deployment join)
   GET  /api/ml/{model}                 one model — registry + deployment + last run
+  GET  /api/ml/{model}/schema          input/output SCHEMA (MLflow signature +
+                                        input_example) — catalogue metadata, no
+                                        stored prediction data
   GET  /api/ml/{model}/predictions     batch output, FLAT forecast schema
                                         (ops_ml.ml_predictions)
   POST /api/ml/{model}/predict         ad-hoc inference: stage input CSV to
@@ -26,12 +29,19 @@ and polls it. RBAC comes from the pod's ServiceAccount (gateway-rbac.yaml:
 batch jobs create/get/list/delete).
 
 Every call is gated + audit-logged like marts/exports/observability, with a
-TWO-CLASS split: catalogue METADATA (detail/versions/registered/runs/jobs +
-predict-on-own-CSV) is PRG/DC.CAT — the workshop personas' surface (R-CONS-SCI/
-RES hold a DC.CAT carve-out; their health-data deny-all stands) — while STORED
-predictions are PRG/DC.PRO health-data aggregates (analysts/decision-makers
-only). Retrain/promote are operator actions with no data-plane verb —
-role-gated via _manage_gate (R-OPS-ADM / R-STEW / R-SUPER, the B3 reviewer set).
+THREE-CLASS split:
+  * catalogue METADATA (detail/schema/versions/registered/runs/jobs +
+    predict-on-own-CSV) is PRG/DC.CAT — the workshop personas' surface
+    (R-CONS-SCI/RES hold a DC.CAT carve-out; their health-data deny-all stands).
+    /schema exposes only the input/output shape, never stored predictions.
+  * STORED predictions (/predictions) are PRG/DC.PRO health-data aggregates
+    (analysts / decision-makers only).
+  * MODEL MONITORING (/monitoring/fleet, /{model}/drift, /{model}/performance)
+    is an ADMIN-console surface — the view_ops_console capability only. The
+    workshop Models page is usage-only (2026-07-14), so the DC.CAT carve-out
+    that once let a workshop widget read drift/performance was removed.
+Retrain/promote are operator actions with no data-plane verb — role-gated via
+_manage_gate (R-OPS-ADM / R-STEW / R-SUPER, the B3 reviewer set).
 """
 from __future__ import annotations
 
@@ -111,6 +121,42 @@ async def _mlflow_get(path: str, params: dict[str, str] | None = None) -> dict[s
         raise HTTPException(502, f"mlflow error: {exc.response.text[:300]}")
     except Exception as exc:
         raise HTTPException(502, f"mlflow unreachable: {exc}")
+
+
+async def _mlflow_get_text(path: str) -> str | None:
+    """Fetch a RAW-text artifact through MLflow's artifact proxy
+    (/api/2.0/mlflow-artifacts/artifacts/<run-relative-path>). Returns None on
+    absence — the caller degrades to an honest empty schema. Unlike _mlflow_get
+    this never raises: a missing signature is a legitimate state, not an error."""
+    try:
+        async with httpx.AsyncClient(timeout=8) as c:
+            r = await c.get(f"{MLFLOW_URL}{path}")
+            if r.status_code == 404:
+                return None
+            r.raise_for_status()
+            return r.text
+    except Exception as exc:                                # noqa: BLE001
+        log.warning("mlflow artifact fetch failed (%s): %s", path, exc)
+        return None
+
+
+def _parse_signature_cols(raw: Any) -> list[dict[str, Any]]:
+    """MLflow stores signature.inputs/outputs as a JSON string of
+    [{type,name,required}]. Normalize to UI-friendly {name,type,required}."""
+    if not raw:
+        return []
+    try:
+        cols = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:                                       # noqa: BLE001
+        return []
+    out: list[dict[str, Any]] = []
+    for c in cols or []:
+        if not isinstance(c, dict) or not c.get("name"):
+            continue
+        out.append({"name": c.get("name"),
+                    "type": c.get("type"),
+                    "required": bool(c.get("required", True))})
+    return out
 
 
 async def _deployments() -> dict[str, dict[str, Any]]:
@@ -318,19 +364,16 @@ async def job_status(job_id: str,
 
 
 async def _monitoring_gate(user: UserCtx) -> None:
-    """Model-monitoring reads serve TWO personas: workshop analysts/scientists
-    (data-plane: OPA read on the PRG/DC.CAT catalogue surface — the same verdict
-    that gates the registry detail) and ops admins on the admin Models page
-    (console surface: the view_ops_console capability, per the admin-authz
-    sweep #45 — R-OPS-* roles hold no data-plane mart grants by design)."""
-    decision = await opa.decide(user, action="read", resource="PRG", attributes={"data_class": "DC.CAT", "granularity": "aggregate", "sensitivity": "default"})
-    if decision.allow:
-        return
+    """Model-monitoring reads (fleet health, per-model drift + performance) are
+    an ADMIN-console surface ONLY — R-OPS-*/R-SUPER via the view_ops_console
+    capability (admin-authz sweep #45; those roles hold no data-plane mart grants
+    by design). Workshop personas (R-CONS-SCI / R-CONS-RES) must NOT reach this
+    PRO monitoring plane: the workshop Models page is USAGE-ONLY (catalogue
+    metadata + input/output schema + own ad-hoc predict), so the earlier DC.CAT
+    carve-out that let the retired ws-model-monitoring widget read drift /
+    performance was removed (2026-07-14). Fail-closed."""
     from .perm_admin import _require_capability
-    try:
-        await _require_capability(user, "view_ops_console")
-    except HTTPException:
-        raise HTTPException(403, decision.reason or "denied by policy")
+    await _require_capability(user, "view_ops_console")
 
 
 # NOTE: declared before /{model} so `monitoring` is never parsed as a model name.
@@ -496,6 +539,111 @@ async def model_detail(model: str,
         "last_run":    last_run,
         "signature":   signature,
         "model_card":  model_card,
+    }
+
+
+@router.get("/{model}/schema")
+async def model_schema(model: str,
+                       user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    """The model's INPUT and OUTPUT schema — catalogue-metadata class (PRG/DC.CAT),
+    the same surface the workshop personas already read for the registry detail.
+
+    Derived from the champion (else latest) version's MLflow model SIGNATURE
+    (the MLmodel artifact, fetched through MLflow's artifact proxy) plus its
+    input_example; falls back to the package feature_spec.yaml (inputs only)
+    when no signature is published. This exposes ONLY the shape a caller must
+    supply to run the model and the shape it returns — never any stored
+    prediction data. Honest empty schema (published:false) when neither source
+    carries a signature; the UI then shows 'schema not published'."""
+    _check_model_name(model)
+    decision = await opa.decide(user, action="read", resource="PRG", attributes={"data_class": "DC.CAT", "granularity": "aggregate", "sensitivity": "default"})
+    if not decision.allow:
+        raise HTTPException(403, decision.reason or "denied by policy")
+
+    # Resolve the version whose signature we describe: @champion is the serving
+    # contract; fall back to the newest registered version so an un-promoted
+    # model still shows its shape.
+    reg = (await _mlflow_get("/api/2.0/mlflow/registered-models/get",
+                             {"name": model})).get("registered_model") or {}
+    aliases = {a.get("alias"): a.get("version") for a in (reg.get("aliases") or [])}
+    latest = [int(v.get("version") or 0) for v in (reg.get("latest_versions") or [])]
+    version = aliases.get("champion") or (str(max(latest)) if latest else None)
+
+    inputs: list[dict[str, Any]] = []
+    outputs: list[dict[str, Any]] = []
+    input_example: dict[str, Any] = {}
+    published = False
+
+    # 1. MLflow model signature (authoritative: has BOTH inputs and outputs).
+    source = None
+    if version:
+        try:
+            mv = (await _mlflow_get("/api/2.0/mlflow/model-versions/get",
+                                    {"name": model, "version": str(version)})
+                  ).get("model_version") or {}
+            source = mv.get("source")
+        except HTTPException:
+            source = None
+    if source and ":/" in source:
+        # e.g. mlflow-artifacts:/3/<run>/artifacts/model → run-relative path
+        rel = source.split(":/", 1)[1].strip("/")
+        mlmodel = await _mlflow_get_text(
+            f"/api/2.0/mlflow-artifacts/artifacts/{rel}/MLmodel")
+        if mlmodel:
+            try:
+                import yaml as _yaml
+                sig = ((_yaml.safe_load(mlmodel) or {}).get("signature") or {})
+                inputs = _parse_signature_cols(sig.get("inputs"))
+                outputs = _parse_signature_cols(sig.get("outputs"))
+                published = bool(inputs or outputs)
+            except Exception as exc:                        # noqa: BLE001
+                log.warning("MLmodel signature parse failed for %s: %s", model, exc)
+        # input_example.json is pandas split-orient {columns, data}; first row.
+        ex = await _mlflow_get_text(
+            f"/api/2.0/mlflow-artifacts/artifacts/{rel}/input_example.json")
+        if ex:
+            try:
+                doc = json.loads(ex)
+                cols = doc.get("columns") or []
+                data = doc.get("data") or []
+                if cols and data:
+                    input_example = {c: data[0][i] for i, c in enumerate(cols)
+                                     if i < len(data[0])}
+            except Exception as exc:                        # noqa: BLE001
+                log.warning("input_example parse failed for %s: %s", model, exc)
+
+    # 2. Fallback — the package feature_spec.yaml carries the INPUT signature
+    #    ([{name,dtype}]) even for models MLflow never logged a signature for.
+    if not inputs:
+        try:
+            import yaml as _yaml
+            raw = await minio_client.read_object(
+                key=f"ml-packages/{model}/current/feature_spec.yaml",
+                bucket=ARTIFACTS_BUCKET)
+            if raw:
+                spec = _yaml.safe_load(raw) or {}
+                for c in ((spec.get("input") or {}).get("signature") or []):
+                    if isinstance(c, dict) and c.get("name"):
+                        inputs.append({"name": c.get("name"),
+                                       "type": c.get("dtype"),
+                                       "required": True})
+                if inputs:
+                    published = True
+        except Exception as exc:                            # noqa: BLE001
+            log.warning("feature_spec fallback read failed for %s: %s", model, exc)
+
+    # Attach the example value per input column (placeholder in the run form).
+    for col in inputs:
+        if col["name"] in input_example:
+            col["example"] = input_example[col["name"]]
+
+    return {
+        "model":         model,
+        "version":       str(version) if version is not None else None,
+        "published":     published,
+        "inputs":        inputs,
+        "outputs":       outputs,
+        "input_example": input_example,
     }
 
 

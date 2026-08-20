@@ -18,11 +18,11 @@ const def: WidgetDef = {
   reactsTo: ['geography', 'period'],
   async render(ctx: WidgetCtx) {
     const rows = await ctx.fetchData();
-    if (!rows || !rows.length) { ctx.empty('No stockouts in the last 12 months for this scope — no estimated service impact.'); return; }
+    if (!rows || !rows.length) { ctx.empty('No stockouts in the last 12 months for this scope. No estimated service impact.'); return; }
     const t = ctx.theme;
     const maxD = Math.max(6, ...rows.map(r => Number(r.service_disruption_pct ?? 0)));
     const trend = (v: string): [string, string] =>
-      v === 'up' ? ['↑', t.status.alert] : v === 'down' ? ['↓', t.status.good] : ['→', t.ink[3]];
+      v === 'up' ? ['Rising', t.status.alert] : v === 'down' ? ['Falling', t.status.good] : ['Steady', t.ink[3]];
     const head = ['Commodity', 'Region', 'Days out (YTD)', 'Facilities affected', 'Est. missed services', 'Service disruption', 'Trend'];
     const body = rows.map(r => {
       const disr = Number(r.service_disruption_pct ?? 0);

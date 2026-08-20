@@ -20,16 +20,16 @@ const def: WidgetDef = {
     const overall = Number(r.overall_agreement_pct ?? 0);
     const segs = [
       { name: 'Agree ≥95%', value: Number(r.agree_pct ?? 0), color: t.status.good },
-      { name: 'Moderate 80–94%', value: Number(r.moderate_pct ?? 0), color: t.status.watch },
+      { name: 'Moderate 80 to 94%', value: Number(r.moderate_pct ?? 0), color: t.status.watch },
       { name: 'Low <80%', value: Number(r.low_pct ?? 0), color: t.status.alert },
     ];
     const delta = Number(r.delta_pp ?? 0);
     ctx.el.style.cssText = 'display:flex;flex-direction:column;justify-content:center;height:100%';
     ctx.el.innerHTML = `
-      <p style="font-size:.82rem;color:${t.ink[2]};margin:0 0 .4rem">Across selected high-priority indicators · EMR-active facilities only</p>
+      <p style="font-size:.82rem;color:${t.ink[2]};margin:0 0 .4rem">Across selected high-priority indicators, EMR-active facilities only</p>
       <div class="sv-ag-ring" style="height:252px"></div>
       <div class="sv-ag-legend" style="display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem 1.2rem;margin-top:.4rem"></div>
-      <div style="text-align:center;margin-top:.5rem;font-size:.74rem;font-weight:600;color:${t.status.good}">▲ ${delta} pp vs last quarter</div>`;
+      <div style="text-align:center;margin-top:.5rem;font-size:.74rem;font-weight:600;color:${delta >= 0 ? t.status.good : t.status.alert}">${delta >= 0 ? '+' : ''}${delta} pp vs last quarter</div>`;
     const legend = ctx.el.querySelector('.sv-ag-legend') as HTMLElement;
     legend.innerHTML = segs.map(s => `<span style="display:inline-flex;align-items:center;gap:.4rem;font-size:.78rem;color:${t.ink[1]}">
       <span style="width:9px;height:9px;border-radius:2px;background:${s.color}"></span>${s.name}</span>`).join('');

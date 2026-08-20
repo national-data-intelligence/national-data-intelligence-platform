@@ -3,7 +3,8 @@
 # accounts on a fresh MinIO instance. Idempotent: safe to re-run after editing.
 #
 # Run via:
-#   docker compose up minio-init
+#   the `minio-init` Kubernetes Job — bundle/scripts/seed-realistic.sh runs it
+#   (run_job minio-init) with this script mounted into a minio/mc Job.
 #
 # What it does:
 #   1. Aliases the local MinIO with mc.

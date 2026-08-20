@@ -127,7 +127,8 @@
 
   /* Topbar inside the main column · breadcrumb + title + Open JupyterLab CTA + user chip */
   .ws-topbar {
-    padding: 1.3rem 2.2rem 1.1rem 2.2rem;
+    /* MUST match .ws-pageframe's 5.5rem so the masthead is flush with content */
+    padding: 1.3rem 5.5rem 1.1rem 5.5rem;
     display: flex; align-items: flex-end; justify-content: space-between;
     gap: 1.2rem;
   }
@@ -139,8 +140,8 @@
     display: flex; align-items: center; gap: 0.4rem;
   }
   .ws-topbar .tb-title h2 {
-    font-family: var(--font-serif);
-    font-size: 1.6rem; font-weight: 600;
+    font-family: var(--font-sans);
+    font-size: 1.6rem; font-weight: 800;
     color: var(--ink); margin: 0;
     line-height: 1.1;
   }
@@ -205,8 +206,9 @@
 
   /* Page frame · each section flows below the topbar */
   .ws-pageframe {
-    padding: 0.4rem 2.2rem 2.5rem;
-    max-width: 1500px;
+    /* shared 5.5rem left/right content margin (consistent across every dashboard);
+       the topbar uses the SAME inset so the masthead is flush with content */
+    padding: 0.4rem 5.5rem 2.5rem;
     min-width: 0;
     width: 100%;
     flex: 1;                                  /* fill the column so coc-strip + footer sink to the bottom */
@@ -245,3 +247,13 @@
   }
   .ws-main .foot .foot-coc a:hover { color: var(--navy-700); }
   .ws-main .foot .foot-coc a .ico { width: 13px; height: 13px; }
+
+/* ws-topbar page description (owner: the masthead felt empty) */
+.ws-topbar .tb-title .tb-desc {
+  margin: 0.25rem 0 0;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--ink-3, #64748b);
+  max-width: 70ch;
+  line-height: 1.45;
+}

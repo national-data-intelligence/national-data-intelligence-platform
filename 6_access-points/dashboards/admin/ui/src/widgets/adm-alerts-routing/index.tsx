@@ -83,7 +83,7 @@ function Alerts() {
           <span className="meta">firing &amp; pending · from Prometheus</span></div>
         {activeErr && <p className="muted">Alert source unavailable: {activeErr}</p>}
         {active && active.length === 0 && !activeErr &&
-          <p className="muted">No alerts firing or pending — all clear.</p>}
+          <p className="muted">No alerts firing or pending. All clear.</p>}
         {active && active.length > 0 && (
           <table className="dash">
             <thead><tr><th>Alert</th><th>Severity</th><th>Service</th><th>State</th><th>Since</th><th>Summary</th></tr></thead>

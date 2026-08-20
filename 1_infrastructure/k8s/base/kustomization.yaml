@@ -118,7 +118,7 @@ configMapGenerator:
 
   - name: keycloak-users-seed
     files:
-      - ../../../bundle/seeds/security/users.yaml
+      - ../../../bundle/seed-pack/app/security/users.yaml
 
 
   - name: clickhouse-users-d

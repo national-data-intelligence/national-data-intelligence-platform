@@ -37,7 +37,10 @@ spec:
             - |
               set -eu
               OUT=/rendered/alertmanager.yml
-              if [ -n "${SMTP_HOST:-}" ] && [ -n "${SMTP_USER:-}" ]; then
+              # Email is opt-IN via AM_EMAIL_ENABLED (default 0). Even with SMTP creds present the
+              # deploy stays SILENT unless email is explicitly turned on — a boot never surprises a
+              # real inbox. Flip it on with an overlay env patch (AM_EMAIL_ENABLED=1).
+              if [ "${AM_EMAIL_ENABLED:-0}" = "1" ] && [ -n "${SMTP_HOST:-}" ] && [ -n "${SMTP_USER:-}" ]; then
                 echo "render-config: SMTP relay ${SMTP_HOST}:${SMTP_PORT:-587} → ${SMTP_USER}"
                 cat > "$OUT" <<EOF
               global:
@@ -51,12 +54,12 @@ spec:
                 group_by: ["alertname", "service"]
                 group_wait: 30s
                 group_interval: 5m
-                repeat_interval: 3h
+                repeat_interval: 24h    # at most once/day per alert group (was 3h — stop email spam)
                 receiver: email
                 routes:
                   - matchers: [ 'alertname = "Watchdog"' ]
                     receiver: email
-                    repeat_interval: 12h
+                    repeat_interval: 24h
               receivers:
                 - name: email
                   email_configs:
@@ -88,6 +91,8 @@ spec:
               EOF
               fi
           env:
+            # Email opt-in switch (default 0 = silent). Overlay-patch to "1" for live alert email.
+            - { name: AM_EMAIL_ENABLED, value: "0" }
             - { name: SMTP_HOST, valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_HOST, optional: true } } }
             - { name: SMTP_PORT, valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_PORT, optional: true } } }
             - { name: SMTP_USER, valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_USER, optional: true } } }

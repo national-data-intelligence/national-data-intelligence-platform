@@ -2,7 +2,7 @@
 """
 load_security_seed.py — permission seed loader.
 
-Reads YAMLs from `bundle/seeds/security/` and idempotently
+Reads YAMLs from `bundle/seed-pack/app/security/` and idempotently
 upserts them into the `nhdw_ops` database. Run by
 `3_storage/postgres/init/18_security_seed.sh` on first container start;
 re-runnable against an existing DB for upgrades.
@@ -295,6 +295,91 @@ def upsert_roles(cur, rows: list[dict]) -> dict[str, int]:
                 VALUES (%s, %s)
             """, [(rid, c) for c in caps])
     return code_to_id
+
+
+# ── Task #88 · normalized permission store ──────────────────────────────────
+# The per-role permission tuples in bundle/roles/*.yaml are normalized into the
+# reusable ops_perm.permission (ONE row per distinct tuple) + ops_perm.role_permission
+# links. A tuple shared by N roles → one permission row + N links. compile.py then
+# sources these from the DB to emit the SAME rego (equivalence-gated before cutover).
+
+def _perm_norm(p: dict) -> dict:
+    """Role-YAML permission entry → ops_perm.permission columns. Lists KEEP their
+    YAML order (not sorted) so compile.py can re-emit the current policies/*.rego
+    byte-for-byte — proven lossless: the role YAMLs are order-consistent, so the
+    46 tuples still dedup to 39 unique permissions."""
+    subj, gran = p["subject"], p["granularity"]
+    verbs = list(p.get("verbs") or [])
+    return {
+        "subject":      subj,
+        "members":      p.get("members", "scoped"),
+        "granularity":  gran,
+        "verbs":        verbs,
+        "purposes":     list(p.get("purpose_of_use") or []),
+        "data_classes": list(p.get("data_class") or []),
+        "sensitivity":  list(p.get("sensitivity") or []),
+        "description":  f"{subj}/{gran} — {', '.join(verbs)}",
+    }
+
+
+def _perm_key(d: dict) -> tuple:
+    return (d["subject"], d["members"], d["granularity"], tuple(d["verbs"]),
+            tuple(d["purposes"]), tuple(d["data_classes"]), tuple(d["sensitivity"]))
+
+
+def upsert_permissions_from_roles(cur, roles_dir, code_to_id: dict) -> tuple:
+    """Populate ops_perm.permission + role_permission from bundle/roles/*.yaml.
+    Seed links are delete-synced (managed_by='seed'); runtime links survive.
+    Returns (unique_permissions, seed_links)."""
+    if not roles_dir.is_dir():
+        log.warning("roles dir not found: %s — permission store not seeded", roles_dir)
+        return (0, 0)
+    role_perms = []                                    # [(role_code, order_idx, normalized perm)]
+    for f in sorted(roles_dir.glob("r-*.yaml")):
+        doc = yaml.safe_load(f.open())["role"]
+        for i, p in enumerate(doc.get("permissions") or []):
+            role_perms.append((doc["id"], i, _perm_norm(p)))
+    if not role_perms:
+        return (0, 0)
+
+    key_to_id = {}                                     # dedup: one row per unique tuple
+    for _code, _idx, d in role_perms:
+        k = _perm_key(d)
+        if k in key_to_id:
+            continue
+        cur.execute("""
+            INSERT INTO ops_perm.permission
+                (subject, members, granularity, verbs, purposes, data_classes, sensitivity, description)
+            VALUES (%(subject)s, %(members)s, %(granularity)s, %(verbs)s, %(purposes)s,
+                    %(data_classes)s, %(sensitivity)s, %(description)s)
+            ON CONFLICT ON CONSTRAINT uq_permission_tuple DO UPDATE
+              SET description = EXCLUDED.description, updated_at = now()
+            RETURNING id
+        """, d)
+        key_to_id[k] = cur.fetchone()[0]
+
+    seed_links = {}                                     # (role_id, permission_id) -> ordering (YAML index)
+    for code, idx, d in role_perms:
+        rid = code_to_id.get(code)
+        if rid is None:
+            log.warning("role %s (bundle/roles) has no ops_perm.role row — skipped", code)
+            continue
+        seed_links[(rid, key_to_id[_perm_key(d)])] = idx
+    if seed_links:
+        cur.executemany("""
+            INSERT INTO ops_perm.role_permission (role_id, permission_id, ordering, managed_by)
+            VALUES (%s, %s, %s, 'seed')
+            ON CONFLICT (role_id, permission_id) DO UPDATE
+              SET ordering = EXCLUDED.ordering, managed_by = 'seed'
+        """, [(r, p, o) for (r, p), o in seed_links.items()])
+
+    # Delete-sync seed links the YAMLs no longer declare (runtime links preserved).
+    cur.execute("SELECT role_id, permission_id FROM ops_perm.role_permission WHERE managed_by='seed'")
+    stale = {tuple(r) for r in cur.fetchall()} - set(seed_links)
+    for rid, pid in stale:
+        cur.execute("DELETE FROM ops_perm.role_permission "
+                    "WHERE role_id=%s AND permission_id=%s AND managed_by='seed'", (rid, pid))
+    return (len(key_to_id), len(seed_links))
 
 
 def upsert_role_scope(cur, roles_rows: list[dict], code_to_id: dict[str, int]) -> int:
@@ -670,17 +755,23 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed-dir", default=os.environ.get(
         "NHDW_SEED_DIR",
-        str(Path(__file__).resolve().parents[2] / "bundle/seeds/security")))
+        str(Path(__file__).resolve().parents[2] / "bundle/seed-pack/app/security")))
     parser.add_argument("--pg-host", default=os.environ.get("POSTGRES_HOST", "localhost"))
     parser.add_argument("--pg-port", default=os.environ.get("POSTGRES_PORT", "5432"))
     parser.add_argument("--pg-user", default=os.environ.get("POSTGRES_USER", "postgres"))
     parser.add_argument("--pg-db",   default=os.environ.get("OPS_DB_NAME", "nhdw_ops"))
+    # bundle/roles/*.yaml (the OPA data-permission source for the #88 permission
+    # store). Defaults next to the repo; in-cluster the seed Job mounts it and sets
+    # NHDW_ROLES_DIR, since the roles live outside the seed-dir configMap.
+    parser.add_argument("--roles-dir", default=os.environ.get("NHDW_ROLES_DIR"))
     args = parser.parse_args()
 
     seed_dir = Path(args.seed_dir).resolve()
     if not seed_dir.is_dir():
         log.error("seed dir does not exist: %s", seed_dir)
         return 2
+    roles_dir = (Path(args.roles_dir).resolve() if args.roles_dir
+                 else seed_dir.parents[1] / "roles")
 
     log.info("loading security seeds from %s", seed_dir)
     log.info("→ postgres %s:%s db=%s user=%s", args.pg_host, args.pg_port, args.pg_db, args.pg_user)
@@ -763,6 +854,10 @@ def main() -> int:
             # Phase-1: role-level default data scope (ops_perm.role_scope).
             n = upsert_role_scope(cur, data.get("roles.yaml", []), code_to_id)
             log.info("role_scope:           %d", n)
+
+            # Task #88: normalized permission store from bundle/roles/*.yaml.
+            pn, ln = upsert_permissions_from_roles(cur, roles_dir, code_to_id)
+            log.info("permissions:          %d unique · %d role links", pn, ln)
 
             counts = upsert_role_grants(cur, data.get("role_grants.yaml", []), code_to_id)
             log.info("role_dashboard:       %d", counts["role_dashboard"])

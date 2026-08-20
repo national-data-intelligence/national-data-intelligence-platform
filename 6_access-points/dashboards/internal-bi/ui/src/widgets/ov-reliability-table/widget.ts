@@ -15,12 +15,15 @@
  *   SQL. Population weighting shown as "pending" until POP lands (pop_weight_status).
  * reactsTo: geography · programme · period (Overview global filters).
  *
- * 2026-07-07 (final visual mandate): rendered as the reference-golden simple ranked
- * table — banded rank chips, plain % cells, composite score + bar, "Pop-weighting
- * pending" pill, band legend footer. No local search/pagination (the dt-standard
- * round is superseded here; the goldens show the full ranked list).
+ * 2026-07-12 (X5): migrated onto the shared paginatedTable (sticky header, fixed-height
+ * scroll). Rows arrive ranked worst-first; the "#" column carries that display rank.
+ * The rank + composite-score cells are coloured by band via TableColumn.cellClass
+ * (Low<60→alert · Moderate 60–70→watch · Strong>70→good). The "Pop-weighting pending"
+ * pill and the band legend footer live OUTSIDE the table mount (they survive redraws).
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
+import type { TableColumn } from '../_shared/charts';
+import { paginatedTable } from '../_shared/charts';
 import { regionName } from '../_shared/reference';
 
 /** Composite band → status colour (mockup legend: <60 low, 60–70 moderate, >70 strong). */
@@ -30,24 +33,9 @@ function bandColor(v: number, theme: WidgetCtx['theme']): string {
   return theme.status.good;
 }
 
-/** A value + a thin proportional track, for the numeric columns. */
-function barCell(value: number, pct: number, fill: string, theme: WidgetCtx['theme'], accent = false): string {
-  const w = Math.max(0, Math.min(100, pct));
-  const num = accent
-    ? `<span style="font-weight:700;font-variant-numeric:tabular-nums;color:${fill}">${value}</span>`
-    : `<span style="font-variant-numeric:tabular-nums;color:${theme.ink[1]}">${value}%</span>`;
-  return `
-    <div style="display:flex;align-items:center;gap:.55rem;min-width:120px">
-      ${num}
-      <span style="flex:1;height:6px;border-radius:3px;background:${theme.navy['50']};overflow:hidden">
-        <span style="display:block;height:100%;width:${w}%;border-radius:3px;background:${fill}"></span>
-      </span>
-    </div>`;
-}
-
 const def: WidgetDef = {
   id: 'ov-reliability-table',
-  reactsTo: ['geography', 'programme', 'period'],
+  reactsTo: ['geography'],
   async render(ctx: WidgetCtx) {
     const fetched = await ctx.fetchData();
     if (!fetched || !fetched.length) { ctx.empty('No regional reliability data for the current scope.'); return; }
@@ -55,23 +43,26 @@ const def: WidgetDef = {
 
     // Display ranking is worst-first (the design reads "act on rank 1 first");
     // rank chip = position in THIS display ordering, derived from the real scores.
-    const rows = [...fetched].sort((a, b) => Number(a.composite_score ?? 0) - Number(b.composite_score ?? 0));
-
-    const head = ['#', 'Region', 'Coverage', 'Coverage confidence', 'Commodity readiness', 'Composite score'];
-    const body = rows.map((r, i) => {
-      const comp = Number(r.composite_score ?? 0);
-      const c = bandColor(comp, t);
-      const rank = `<span style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:5px;
-        background:${c};color:${t.paper};font-size:.72rem;font-weight:700;font-variant-numeric:tabular-nums">${i + 1}</span>`;
-      return `<tr>
-        <td>${rank}</td>
-        <td style="font-weight:600;color:${t.ink[0]}">${regionName(String(r.region ?? ''))}</td>
-        <td class="num" style="font-variant-numeric:tabular-nums;color:${t.ink[1]}">${Number(r.coverage_pct ?? 0)}%</td>
-        <td class="num" style="font-variant-numeric:tabular-nums;color:${t.ink[1]}">${Number(r.coverage_confidence_pct ?? 0)}%</td>
-        <td class="num" style="font-variant-numeric:tabular-nums;color:${t.ink[1]}">${Number(r.commodity_readiness_pct ?? 0)}%</td>
-        <td>${barCell(comp, comp, c, t, true)}</td>
-      </tr>`;
-    }).join('');
+    const shaped = [...fetched]
+      .sort((a, b) => Number(a.composite_score ?? 0) - Number(b.composite_score ?? 0))
+      .map((r, i) => ({
+        rank: i + 1,
+        region: regionName(String(r.region ?? '')),
+        coverage: Number(r.coverage_pct ?? 0),
+        coverage_confidence: Number(r.coverage_confidence_pct ?? 0),
+        commodity_readiness: Number(r.commodity_readiness_pct ?? 0),
+        composite: Number(r.composite_score ?? 0),
+      }));
+    // Both rank and composite are banded on the SAME composite score (row.composite).
+    const bandStyle = (_v: any, row: Record<string, any>) => `color:${bandColor(Number(row.composite), t)};font-weight:700`;
+    const columns: TableColumn[] = [
+      { id: 'rank', label: '#', cellClass: bandStyle },
+      { id: 'region', label: 'Region' },
+      { id: 'coverage', label: 'Coverage', format: 'pct' },
+      { id: 'coverage_confidence', label: 'Coverage confidence', format: 'pct' },
+      { id: 'commodity_readiness', label: 'Commodity readiness', format: 'pct' },
+      { id: 'composite', label: 'Composite score', cellClass: bandStyle },
+    ];
 
     const dot = (col: string, label: string) =>
       `<span style="display:inline-flex;align-items:center;gap:.35rem;color:${t.ink[2]};font-size:.74rem">
@@ -81,18 +72,14 @@ const def: WidgetDef = {
       <div style="display:flex;justify-content:flex-end;margin-bottom:.6rem">
         <span style="font-size:.72rem;color:${t.ink[3]};border:1px solid ${t.line};border-radius:999px;padding:.15rem .6rem">Pop-weighting pending</span>
       </div>
-      <div class="scrollable">
-        <table class="dash">
-          <thead><tr>${head.map((h, i) => `<th${i === head.length - 1 ? ' style="min-width:140px"' : ''}>${h}</th>`).join('')}</tr></thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>
+      <div class="ov-rt-tbl"></div>
       <div style="display:flex;align-items:center;gap:1rem;margin-top:.7rem;padding-top:.6rem;border-top:1px solid ${t.line}">
         ${dot(t.status.alert, 'Low (&lt;60)')}
-        ${dot(t.status.watch, 'Moderate (60–70)')}
+        ${dot(t.status.watch, 'Moderate (60 to 70)')}
         ${dot(t.status.good, 'Strong (&gt;70)')}
       </div>`;
-    return () => { /* pure DOM */ };
+    const mount = ctx.el.querySelector<HTMLElement>('.ov-rt-tbl')!;
+    return paginatedTable(mount, shaped, columns, ctx.theme, { search: true, sort: true, pageSize: 12 });
   },
 };
 export default def;

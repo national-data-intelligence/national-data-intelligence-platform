@@ -11,14 +11,16 @@ import { useAdminApp } from '../../useAdminApp';
 
 // moh-staff realm roles offered for provisioning (code → operator-facing label).
 const PROVISION_ROLES: Array<{ code: string; label: string }> = [
-  { code: 'R-CONS-ANA', label: 'R-CONS-ANA · Analyst (read-only BI)' },
-  { code: 'R-CONS-SCI', label: 'R-CONS-SCI · Data scientist (Jupyter + read)' },
-  { code: 'R-CONS-RES', label: 'R-CONS-RES · Researcher (Jupyter + aggregate)' },
-  { code: 'R-CONS-PRT', label: 'R-CONS-PRT · Partner (aggregate only)' },
-  { code: 'R-DEC',      label: 'R-DEC · Decision-maker (full BI)' },
-  { code: 'R-STEW',     label: 'R-STEW · Data steward' },
-  { code: 'R-PROD-CLIN',label: 'R-PROD-CLIN · Clinical producer' },
-  { code: 'R-PROD-SUBMIT', label: 'R-PROD-SUBMIT · Facility submitter' },
+  { code: 'R-CONS-ANA', label: 'R-CONS-ANA: Analyst (read-only BI)' },
+  { code: 'R-CONS-SCI', label: 'R-CONS-SCI: Data scientist (Jupyter and read)' },
+  { code: 'R-CONS-RES', label: 'R-CONS-RES: Researcher (Jupyter and aggregate)' },
+  { code: 'R-CONS-PRT', label: 'R-CONS-PRT: Partner (aggregate only)' },
+  { code: 'R-DEC',      label: 'R-DEC: Decision-maker (full BI)' },
+  { code: 'R-STEW',     label: 'R-STEW: Data steward' },
+  { code: 'R-PROD-CLIN',label: 'R-PROD-CLIN: Clinical producer' },
+  { code: 'R-PROD-SUBMIT', label: 'R-PROD-SUBMIT: Facility submitter' },
+  { code: 'R-OPS-ADM',  label: 'R-OPS-ADM: Operations admin' },
+  { code: 'R-SUPER',    label: 'R-SUPER: Super-user (full access, break-glass)' },
 ];
 // user_scope stores the 2-letter region_id, so the picker's VALUES are ids.
 const REGIONS: Array<{ id: string; name: string }> = [

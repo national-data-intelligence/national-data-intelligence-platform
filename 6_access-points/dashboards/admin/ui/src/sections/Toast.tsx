@@ -13,7 +13,7 @@ export default function Toast() {
         <svg className="ico"><use href="#i-x" /></svg>
       </span>
       <div className="toast-title">
-        <svg className="ico"><use href="#i-bell" /></svg> New access request — from public dashboard
+        <svg className="ico"><use href="#i-bell" /></svg> New access request from public dashboard
       </div>
       <div className="toast-body">
         Request <strong>{state.newRequestId}</strong> just landed in the queue.

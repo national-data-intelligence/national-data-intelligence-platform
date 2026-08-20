@@ -595,36 +595,52 @@
     font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--ink-3); margin: 0.5rem 0 0.7rem;
   }
+  /* One card treatment for every group — member and discover alike: white,
+     soft hairline + shadow, an inset icon chip. No washed-out grey variant. */
   .grp-card {
     background: var(--paper);
+    border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-1);
-    padding: 1.1rem 1.2rem;
+    padding: 0.9rem 1rem 1rem;
     display: flex; flex-direction: column; gap: 0.45rem;
+    transition: box-shadow .2s ease, transform .2s ease;
   }
-  .grp-card.discover { background: var(--paper-2); }
+  .grp-card:hover { box-shadow: var(--shadow-2); transform: translateY(-1px); }
+  .grp-card.discover { background: var(--paper); }
   .grp-card .grp-row1 { display: flex; align-items: center; gap: 0.6rem; }
-  .grp-card .grp-badge {
-    font-size: 0.62rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.06em;
-    padding: 0.2rem 0.5rem;
-    background: var(--navy-700); color: #fff;
-    border-radius: 4px;
+  .grp-chip {
+    flex: none; width: 34px; height: 34px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--navy-50); color: var(--navy-600);
   }
-  .grp-card .grp-badge.member { background: var(--info); }
+  .grp-chip svg { width: 17px; height: 17px; }
   .grp-card .grp-name {
+    flex: 1; min-width: 0;
     font-family: var(--font-serif);
-    font-size: 1.0rem; font-weight: 600; color: var(--ink);
+    font-size: 1.05rem; font-weight: 600; color: var(--ink); line-height: 1.2;
   }
+  .grp-card .grp-badge {
+    flex: none;
+    font-size: 0.6rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 0.15rem 0.45rem;
+    background: var(--navy-50); color: var(--navy-700);
+    border-radius: 999px;
+  }
+  .grp-card .grp-badge.member { background: var(--good-50); color: var(--good); }
   .grp-card .grp-desc {
-    font-size: 0.84rem; color: var(--ink-2);
-    margin: 0;
+    font-size: 0.8rem; color: var(--ink-3);
+    margin: 0; line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
   }
   .grp-card .grp-stats {
-    display: flex; gap: 0.85rem;
-    font-size: 0.74rem; color: var(--ink-3);
-    margin-top: 0.3rem;
+    display: flex; gap: 0.7rem;
+    font-size: 0.72rem; color: var(--ink-4);
+    margin-top: auto; padding-top: 0.15rem;
   }
+  .grp-card .btn.mt-sm { margin-top: 0.15rem; align-self: flex-start; }
 
   /* ═══════════════════════════════════════════════════════════════
      Artifact detail · overlay panel opened from a card click
@@ -1262,16 +1278,42 @@
     max-height: 190px; overflow-y: auto;
   }
 
-  /* ── Phase-3 monitoring placeholder (no fake charts) ── */
-  .mdl-placeholder {
-    display: flex; gap: 0.8rem; align-items: flex-start;
-    border: 1px dashed var(--border-2);
-    border-radius: 10px;
-    background: var(--paper-2);
-    padding: 0.95rem 1.1rem;
+  /* ── input-schema typed run form (ws-model-workbench, usage-only) ── */
+  .mdl-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 0.7rem 0.9rem;
+    margin: 0.55rem 0 0.2rem;
   }
-  .mdl-placeholder > svg { width: 18px; height: 18px; color: var(--ink-4); flex-shrink: 0; margin-top: 0.1rem; }
-  .mdl-placeholder p { font-size: 0.82rem; line-height: 1.55; color: var(--ink-3); margin: 0; }
+  .mdl-field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+  .mdl-field-lbl {
+    font-size: 0.74rem; font-weight: 600; color: var(--ink-2);
+    display: flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap;
+  }
+  .mdl-field-lbl code { font-family: var(--font-mono); color: var(--navy-700); font-size: 0.94em; }
+  .mdl-field-type {
+    font-weight: 500; color: var(--ink-4); font-size: 0.64rem;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .mdl-field-req { color: var(--alert); font-weight: 700; }
+  .mdl-field input {
+    width: 100%;
+    font-family: var(--font-mono); font-size: 0.8rem;
+    border: 1px solid var(--border-2); border-radius: 8px;
+    background: var(--paper);
+    padding: 0.5rem 0.65rem;
+    color: var(--ink);
+  }
+  .mdl-field input:focus { outline: 2px solid var(--navy-500); outline-offset: -1px; }
+  .mdl-run-out {
+    margin-top: 0.65rem;
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 0.9rem;
+    overflow-x: auto;
+  }
+  .mdl-run-out-note { font-size: 0.76rem; color: var(--ink-3); margin: 0.55rem 0 0; }
 
   /* Toast — confirmation after a submit */
   .wk-toast {
@@ -1306,128 +1348,23 @@
   .prj-vis-badge.info    { background: var(--info-50);  color: var(--info); }
   .prj-vis-badge.neutral { background: #f1f5f9;         color: var(--ink-3); }
 
-  /* ── grouped catalogue (My / Group / Public) ── */
-  .prj-group { margin-top: 1.5rem; }
-  .prj-group-hdr {
-    display: flex; align-items: center; gap: 0.55rem;
-    margin-bottom: 0.7rem;
-  }
-  .prj-group-hdr svg { width: 18px; height: 18px; color: var(--navy-700); }
-  .prj-group-hdr h3 {
-    font-family: var(--font-serif); font-size: 1.12rem; font-weight: 600;
-    margin: 0;
-  }
-  .prj-group-count {
-    font-size: 0.78rem;
-    background: var(--paper-2); color: var(--ink-3);
-    padding: 0.05rem 0.5rem; border-radius: 999px;
-  }
-  .prj-grid { align-items: stretch; }
+  /* (2026-07-13) The grouped grid-of-cards catalogue, the gradient hero header
+     and the metadata statstrip were RETIRED with the side-by-side master-detail
+     redesign — their classes (.prj-group*, .prj-grid, .prj-card*, .prj-monogram,
+     .prj-back, .prj-detail, .prj-header*, .prj-statstrip, .prj-stat*) had zero
+     remaining references. The new list/detail styles live in the "Projects ·
+     side-by-side master-detail" block further below. */
 
-  /* ── project card ── */
-  .prj-card {
-    display: flex; flex-direction: column;
-    background: var(--paper);
-    border: none;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-1);
-    overflow: hidden;
-    text-align: left;
-    cursor: pointer;
-    font: inherit; color: inherit;
-    transition: box-shadow 0.18s, transform 0.18s;
-  }
-  .prj-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-2px); }
-  .prj-card:focus-visible { outline: 2px solid var(--navy-700); outline-offset: 3px; }
-  .prj-card-cover { height: 74px; opacity: 0.92; }
-  .prj-card-body {
-    display: flex; flex-direction: column; gap: 0.4rem;
-    padding: 0.9rem 1.05rem 1rem;
-    flex: 1;
-  }
-  .prj-card-row1 { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-  .prj-card-name {
-    font-family: var(--font-serif);
-    font-size: 1.04rem; font-weight: 600; line-height: 1.25;
-    margin: 0.1rem 0 0;
-  }
-  .prj-card-desc {
-    font-size: 0.82rem; color: var(--ink-2);
-    margin: 0; flex: 1;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .prj-card-foot {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 0.6rem;
-    margin-top: 0.5rem; padding-top: 0.6rem;
-    border-top: 1px solid var(--border);
-    font-size: 0.74rem; color: var(--ink-3);
-  }
-  .prj-card-owner { display: inline-flex; align-items: center; gap: 0.3rem; }
-  .prj-card-owner svg { width: 12px; height: 12px; }
-  .prj-card-foot-right { display: inline-flex; align-items: center; gap: 0.7rem; }
-  .prj-card-foot-right svg { width: 12px; height: 12px; vertical-align: -2px; }
-
-  /* ── detail: back link ── */
-  .prj-back {
-    display: inline-flex; align-items: center; gap: 0.35rem;
-    background: transparent; border: none;
-    color: var(--ink-3); font: inherit; font-size: 0.82rem; font-weight: 500;
-    cursor: pointer; padding: 0.1rem 0; margin-bottom: 0.8rem;
-  }
-  .prj-back:hover { color: var(--navy-700); }
-  .prj-back svg { width: 14px; height: 14px; transform: rotate(180deg); }
-
-  /* ── detail: header banner (ws-project-header) ── */
-  .prj-header {
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-1);
-    overflow: hidden;
-  }
-  .prj-header-body {
-    padding: 1.4rem 1.6rem 1.5rem;
-    background: linear-gradient(180deg, rgba(10,14,25,0.10), rgba(10,14,25,0.55));
-    color: #fff;
-  }
-  .prj-header-badges { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
-  .prj-header-name {
-    font-family: var(--font-serif);
-    font-size: 1.75rem; font-weight: 600; line-height: 1.15;
-    margin: 0.6rem 0 0.5rem; color: #fff;
-    letter-spacing: -0.01em;
-  }
-  .prj-header-meta {
-    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
-    font-size: 0.82rem; color: rgba(255,255,255,0.82);
-  }
-  .prj-header-meta strong { color: #fff; font-weight: 600; }
-  .prj-header-meta code {
-    background: rgba(255,255,255,0.16); color: #fff;
-    padding: 0.05rem 0.4rem; border-radius: 4px;
-  }
-  .prj-header-desc {
-    margin: 0.9rem 0 0; max-width: 60ch;
-    font-size: 0.92rem; line-height: 1.55; color: rgba(255,255,255,0.9);
-  }
-
-  /* ── detail: later-slice affordances (disabled, honest) ── */
+  /* ── detail: actions toolbar (grouped, no colored border) ── */
   .prj-actions {
-    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
-    margin: 1rem 0 0.4rem;
+    display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;
+    background: var(--paper);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+    padding: 0.9rem 1rem; margin: 0;
   }
   .prj-actions .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
-  .prj-actions-hint { font-size: 0.78rem; }
-
-  /* ── detail: two-column body ── */
-  .prj-detail-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    gap: 1.3rem;
-    align-items: start;
-    margin-top: 1rem;
-  }
-  @media (max-width: 1080px) { .prj-detail-grid { grid-template-columns: 1fr; } }
+  .prj-actions-hint { font-size: 0.78rem; flex-basis: 100%; margin-top: 0.1rem; }
 
   .prj-panel {
     background: var(--paper);
@@ -1476,20 +1413,10 @@
   }
   .prj-vis-foot { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
 
-  /* ── files browser (ws-project-files) ── */
-  .prj-files { margin-top: 0.2rem; overflow-x: auto; }
-  /* file browser chrome: breadcrumb toolbar, folder rows, send box */
-  .prj-files-tools {
-    display: flex; align-items: center; gap: 0.5rem;
-    margin-bottom: 0.7rem; flex-wrap: wrap;
-  }
-  .prj-crumbs { display: flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; }
-  .prj-crumb { cursor: pointer; color: var(--navy-500); font-weight: 600; }
-  .prj-crumb:hover { text-decoration: underline; }
-  .prj-crumb:last-child { color: var(--ink-2); cursor: default; font-weight: 700; }
-  .prj-crumb-sep { color: var(--ink-4); }
-  .prj-row-folder { cursor: pointer; }
-  .prj-row-folder:hover { background: var(--paper-2); }
+  /* ── files browser (ws-project-files) — send box + empty state; the tree
+        itself is styled in the master-detail block below. The old breadcrumb
+        table chrome (.prj-files, .prj-files-tools, .prj-crumb*, .prj-row-folder)
+        was retired with the 2026-07-13 tree redesign (zero references). ── */
   .prj-send-box {
     display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
     background: var(--paper-2); border: 1px solid var(--border);
@@ -1499,13 +1426,260 @@
     padding: 0.3rem 0.5rem; border: 1px solid var(--border);
     border-radius: 6px; background: var(--paper); font-size: 0.82rem;
   }
-  .prj-files code { word-break: break-all; }
   .prj-files-empty {
     display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
     padding: 1.8rem 1rem; text-align: center;
   }
   .prj-files-empty svg { width: 26px; height: 26px; color: var(--ink-4); }
   .prj-files-empty p { font-size: 0.83rem; color: var(--ink-3); max-width: 42ch; margin: 0; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     Projects · side-by-side master-detail (2026-07-13 redesign)
+     LEFT card  = ws-projects-table "Project catalogue" list.
+     RIGHT card = ws-project-detail (status/name/meta/actions + a
+     Visibility radio-group and the Project-files tree side-by-side).
+     Both widgets render their OWN headers, so the generic widget-card
+     chrome title is suppressed for the two of them.
+  ═══════════════════════════════════════════════════════════════ */
+  .widget-card[data-widget-id="ws-projects-table"] > .widget-hd,
+  .widget-card[data-widget-id="ws-project-detail"] > .widget-hd { display: none; }
+
+  /* ── LEFT: catalogue card ── */
+  .prj-cat { display: flex; flex-direction: column; gap: 0.85rem; }
+  .prj-cat-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.6rem;
+  }
+  .prj-cat-title {
+    font-family: var(--font-serif); font-size: 1.35rem; font-weight: 600;
+    letter-spacing: -0.01em; margin: 0; color: var(--ink);
+  }
+  .prj-cat-search {
+    margin: 0; box-shadow: none;
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.55rem 0.8rem;
+  }
+  .prj-cat-filters { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+  .prj-seg {
+    display: inline-flex; align-items: center;
+    background: var(--paper-2); border: 1px solid var(--border);
+    border-radius: 9px; padding: 3px;
+  }
+  .prj-seg button {
+    border: none; background: transparent;
+    font: inherit; font-size: 0.78rem; font-weight: 600; color: var(--ink-3);
+    padding: 0.32rem 0.7rem; border-radius: 6px; cursor: pointer;
+    white-space: nowrap; transition: background .15s, color .15s;
+  }
+  .prj-seg button:hover { color: var(--ink); }
+  .prj-seg button.active { background: #fff; color: var(--navy-700); box-shadow: var(--shadow-1); }
+  .prj-cat-selwrap {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--paper); padding-left: 0.55rem;
+  }
+  .prj-cat-selwrap svg { width: 13px; height: 13px; color: var(--ink-4); flex-shrink: 0; }
+  .prj-cat-selwrap select {
+    border: none; background: transparent; font: inherit;
+    font-size: 0.78rem; color: var(--ink-2); font-weight: 500;
+    padding: 0.34rem 0.4rem; cursor: pointer; outline: none;
+  }
+
+  .prj-cat-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.1rem; }
+  .prj-row {
+    display: flex; align-items: center; gap: 0.7rem;
+    width: 100%; text-align: left; cursor: pointer;
+    background: var(--paper); border: 1px solid var(--border);
+    border-radius: 12px; padding: 0.7rem 0.8rem;
+    font: inherit; color: inherit;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  .prj-row:hover { border-color: var(--navy-500); box-shadow: var(--shadow-1); }
+  .prj-row:focus-visible { outline: 2px solid var(--navy-700); outline-offset: 2px; }
+  .prj-row.active {
+    border-color: var(--navy-600);
+    background: var(--info-50);
+    box-shadow: inset 0 0 0 1px var(--navy-500);
+  }
+  .prj-row-vis {
+    flex-shrink: 0; width: 40px; height: 40px; border-radius: 11px;
+    display: grid; place-items: center;
+  }
+  .prj-row-vis svg { width: 17px; height: 17px; }
+  .prj-row-vis.good    { background: var(--good-50); color: var(--good); }
+  .prj-row-vis.info    { background: var(--info-50); color: var(--info); }
+  .prj-row-vis.neutral { background: var(--navy-50); color: var(--navy-600); }
+  .prj-row.active .prj-row-vis { background: #fff; }
+  .prj-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+  .prj-row-name {
+    font-family: var(--font-serif); font-size: 1.02rem; font-weight: 600;
+    color: var(--ink); line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .prj-row.active .prj-row-name { color: var(--navy-700); }
+  .prj-row-desc {
+    font-size: 0.78rem; color: var(--ink-2); line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .prj-row-meta {
+    display: flex; align-items: center; gap: 0.35rem;
+    font-size: 0.72rem; color: var(--ink-3); margin-top: 0.1rem;
+  }
+  .prj-avatar {
+    flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%;
+    display: grid; place-items: center;
+    color: #fff; font-size: 0.55rem; font-weight: 700; letter-spacing: 0.01em;
+  }
+  .prj-row-owner {
+    font-weight: 600; color: var(--ink-2); max-width: 8.5rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .prj-row-dot { color: var(--ink-4); }
+  .prj-row-updated { white-space: nowrap; }
+  .prj-row-chev { width: 16px; height: 16px; color: var(--ink-4); flex-shrink: 0; }
+  .prj-row.active .prj-row-chev { color: var(--navy-600); }
+
+  .prj-cat-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.6rem; flex-wrap: wrap;
+    margin-top: 0.25rem; padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+  .prj-cat-count { font-size: 0.75rem; color: var(--ink-3); }
+  .prj-pager { display: inline-flex; align-items: center; gap: 0.25rem; }
+  .prj-pg {
+    min-width: 26px; height: 26px; padding: 0 0.4rem;
+    display: inline-grid; place-items: center;
+    border: 1px solid var(--border); border-radius: 7px;
+    background: var(--paper); color: var(--ink-2);
+    font: inherit; font-size: 0.76rem; font-weight: 600;
+    cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+  }
+  .prj-pg:hover:not(:disabled) { border-color: var(--navy-500); color: var(--navy-700); }
+  .prj-pg.active { background: var(--navy-800); border-color: var(--navy-900); color: #fff; }
+  .prj-pg:disabled { opacity: 0.4; cursor: default; }
+  .prj-pg svg { width: 13px; height: 13px; }
+  .prj-pg[aria-label="Previous"] svg { transform: rotate(180deg); }
+
+  /* ── RIGHT: project detail ── */
+  .prj-detail2 { display: flex; flex-direction: column; gap: 0.7rem; }
+  .prj-d-pills { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+  .prj-d-name {
+    font-family: var(--font-serif); font-size: 2.1rem; font-weight: 600;
+    line-height: 1.08; letter-spacing: -0.015em; color: var(--ink);
+    margin: 0.15rem 0 0;
+  }
+  .prj-d-desc { font-size: 0.95rem; line-height: 1.55; color: var(--ink-3); margin: 0; max-width: 72ch; }
+  .prj-d-meta {
+    display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;
+    font-size: 0.82rem; color: var(--ink-3); margin-top: 0.15rem;
+  }
+  .prj-d-meta-item { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .prj-d-meta-item svg { width: 14px; height: 14px; color: var(--ink-4); }
+  .prj-d-meta-item strong { color: var(--ink); font-weight: 600; }
+  .prj-d-meta-sep { width: 1px; height: 14px; background: var(--border-2); }
+  .prj-d-meta-lbl {
+    font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--ink-4);
+  }
+  .prj-d-id {
+    font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-2);
+    background: var(--paper-2); padding: 0.08rem 0.4rem; border-radius: 5px;
+  }
+  .prj-copy {
+    display: inline-grid; place-items: center;
+    width: 24px; height: 24px; border-radius: 6px;
+    border: none; background: transparent; color: var(--ink-4); cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .prj-copy:hover { background: var(--navy-50); color: var(--navy-700); }
+  .prj-copy svg { width: 14px; height: 14px; }
+  .prj-d-role svg { color: var(--navy-500); }
+  .prj-d-divider { height: 1px; background: var(--border); margin: 0.5rem 0 0.25rem; }
+  .prj-d-cols {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+    gap: 1.6rem; align-items: start;
+  }
+  @media (max-width: 900px) { .prj-d-cols { grid-template-columns: 1fr; gap: 1.3rem; } }
+  .prj-d-col { min-width: 0; }
+
+  /* actions toolbar sits directly on the detail card (no nested card chrome) */
+  .prj-detail2 .prj-actions {
+    background: transparent; box-shadow: none; padding: 0; border-radius: 0;
+    gap: 0.5rem; margin: 0.2rem 0 0;
+  }
+
+  /* visibility radio-cards get a radio dot on the right (owner picks one) */
+  .prj-d-vis .prj-vis-opt { position: relative; padding-right: 2.5rem; }
+  .prj-vis-radio {
+    position: absolute; right: 0.85rem; top: 50%; transform: translateY(-50%);
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--border-2); background: #fff;
+    transition: border-color .15s;
+  }
+  .prj-vis-opt.active .prj-vis-radio { border-color: var(--navy-700); }
+  .prj-vis-opt.active .prj-vis-radio::after {
+    content: ''; position: absolute; inset: 3px; border-radius: 50%;
+    background: var(--navy-700);
+  }
+
+  /* ── Project files · nested tree (inside the right detail column) ── */
+  .prj-files2 { display: flex; flex-direction: column; gap: 0.6rem; }
+  .prj-new { position: relative; }
+  .prj-new-menu {
+    position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
+    min-width: 172px;
+    background: var(--paper); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow-2);
+    padding: 0.3rem; display: flex; flex-direction: column; gap: 0.1rem;
+  }
+  .prj-new-menu[hidden] { display: none; }
+  .prj-new-menu > button, .prj-new-menu > label {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.45rem 0.6rem; border-radius: 7px;
+    border: none; background: transparent; cursor: pointer;
+    font: inherit; font-size: 0.82rem; color: var(--ink-2); text-align: left;
+  }
+  .prj-new-menu > button:hover, .prj-new-menu > label:hover { background: var(--paper-2); color: var(--ink); }
+  .prj-new-menu svg { width: 14px; height: 14px; color: var(--ink-4); }
+
+  .prj-tree {
+    display: flex; flex-direction: column;
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 0.4rem 0.3rem; background: var(--paper-2);
+    max-height: 460px; overflow: auto;
+  }
+  .prj-tree-row {
+    display: flex; align-items: center; gap: 0.45rem;
+    padding: 0.28rem 0.4rem; border-radius: 7px;
+    color: var(--ink-2); min-width: 0;
+  }
+  .prj-tree-row:hover { background: rgba(255,255,255,0.85); }
+  .prj-tree-folder { cursor: pointer; color: var(--ink); }
+  .prj-tree-folder:hover { background: #fff; }
+  .prj-tree-caret { width: 13px; height: 13px; color: var(--ink-4); flex-shrink: 0; transition: transform .15s; }
+  .prj-tree-caret.open { transform: rotate(90deg); }
+  .prj-tree-caret-spacer { width: 13px; flex-shrink: 0; }
+  .prj-tree-ico { width: 15px; height: 15px; flex-shrink: 0; }
+  .prj-tree-ico.folder { color: var(--navy-500); }
+  .prj-tree-ico.data   { color: var(--good); }
+  .prj-tree-ico.nb     { color: var(--watch); }
+  .prj-tree-ico.model  { color: var(--info); }
+  .prj-tree-ico.doc    { color: var(--alert); }
+  .prj-tree-ico.text   { color: var(--ink-4); }
+  .prj-tree-name {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--font-mono); font-size: 0.76rem;
+  }
+  .prj-tree-folder .prj-tree-name { font-family: var(--font-sans); font-size: 0.82rem; font-weight: 600; }
+  .prj-tree-size { font-size: 0.68rem; color: var(--ink-4); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .prj-tree-send {
+    flex-shrink: 0; padding: 0.1rem 0.35rem !important;
+    opacity: 0; transition: opacity .12s;
+  }
+  .prj-tree-file:hover .prj-tree-send, .prj-tree-send:focus-visible { opacity: 1; }
+  .prj-tree-send svg { width: 12px; height: 12px; }
 
   /* ═══ Catalog-runtime widgets (2026-07-06 rebuild) · new ws-* pieces.
      Layout-only; colours/fonts come from the base.css tokens. ═══ */
@@ -1560,54 +1734,16 @@
     box-shadow: inset 3px 0 0 var(--navy-700);
   }
 
-  /* ws-projects-table · selected card */
+  /* ws-projects-table · selected card — soft navy ring + tinted surface */
   .prj-card.active {
-    box-shadow: 0 0 0 2px var(--navy-700), var(--shadow-2);
+    box-shadow: inset 0 0 0 2px var(--navy-700), var(--shadow-2);
+    background: linear-gradient(180deg, var(--navy-50) 0%, var(--paper) 60%);
   }
+  .prj-card.active .prj-card-open { color: var(--navy-700); }
 
-  /* ws-model-monitoring · PSI bars + performance chart */
-  .ws-psi { display: flex; align-items: center; gap: 0.5rem; min-width: 160px; }
-  .ws-psi-track {
-    position: relative; flex: 1; height: 8px;
-    background: var(--navy-50);
-    border-radius: 4px; overflow: visible;
-  }
-  .ws-psi-fill { height: 100%; border-radius: 4px; min-width: 1px; }
-  .ws-psi-thr {
-    position: absolute; top: -3px; bottom: -3px; width: 2px;
-    background: var(--alert);
-    border-radius: 1px;
-  }
-  .ws-psi-val {
-    font-variant-numeric: tabular-nums;
-    font-size: 0.78rem; color: var(--ink-2); min-width: 3.2em; text-align: right;
-  }
-  .ws-perf-chart { margin: 0.4rem 0 0.8rem; max-width: 640px; }
-  .ws-perf-chart .ws-perf-title {
-    font-size: 0.82rem; font-weight: 600; color: var(--ink-2);
-    margin-bottom: 0.25rem;
-  }
-  /* Single-window metrics render as compact stat tiles, not a big empty chart. */
-  .ws-perf-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 0.7rem;
-  }
-  .ws-perf-stat {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--paper-2);
-    padding: 0.7rem 0.85rem;
-  }
-  .ws-perf-stat-val {
-    font-size: 1.5rem; font-weight: 700; line-height: 1;
-    font-variant-numeric: tabular-nums lining-nums; letter-spacing: -0.02em;
-  }
-  .ws-perf-stat-lbl {
-    font-size: 0.8rem; font-weight: 600; color: var(--ink-2);
-    margin-top: 0.3rem; text-transform: uppercase; letter-spacing: 0.03em;
-  }
-  .ws-perf-stat-sub { font-size: 0.72rem; color: var(--ink-3); margin-top: 0.15rem; }
+  /* ws-model-monitoring / ws-model-results CSS (PSI bars, perf tiles) RETIRED
+     2026-07-14 — model health/drift/performance is an admin-only surface; both
+     widgets were archived and the workshop Models page is now usage-only. */
 
   /* ws-project-artifacts · compact rows */
   .ws-proj-art {
@@ -1641,3 +1777,87 @@
   .art-tier.public   { background: var(--good-50); color: var(--good); }
   .art-tier.shared   { background: var(--info-50); color: var(--info); }
   .art-tier.personal { background: var(--paper-2); color: var(--ink-3); }
+
+/* ═══ ws-stats — Workspace landing strip (serif greeting + two labelled
+       clusters of borderless metric tiles: "Your work" · "In the warehouse") ═══ */
+.ws-stats-wrap { display: flex; flex-direction: column; gap: 1.5rem; }
+.ws-greeting-hi {
+  font-family: var(--font-serif);
+  font-size: 1.7rem; font-weight: 600; letter-spacing: -0.01em;
+  color: var(--ink); line-height: 1.15;
+}
+.ws-greeting-sub { font-size: 0.9rem; margin-top: 0.2rem; line-height: 1.5; color: var(--ink-3); }
+
+.ws-stat-clusters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+.ws-stat-cluster { display: flex; flex-direction: column; gap: 0.6rem; }
+.ws-stat-cluster-hd {
+  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--navy-500);
+}
+.ws-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.ws-stat {
+  border-radius: var(--radius-lg);
+  background: var(--paper-2);
+  padding: 0.9rem 1rem 1rem;
+  display: flex; flex-direction: column; gap: 0.1rem;
+  min-height: 116px;
+  transition: box-shadow 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+.ws-stat:hover { background: #fff; box-shadow: var(--shadow-1); transform: translateY(-2px); }
+.ws-stat-ico { width: 18px; height: 18px; color: var(--navy-500); opacity: 0.85; margin-bottom: 0.35rem; }
+.ws-stat-num {
+  font-size: 1.85rem; font-weight: 700; line-height: 1.05;
+  font-variant-numeric: tabular-nums; color: var(--ink); letter-spacing: -0.02em;
+}
+.ws-stat-label { font-size: 0.78rem; font-weight: 500; color: var(--ink-3); }
+
+/* ═══ ws-running-labs — polished empty state (framed placeholder, not a void) ═══ */
+.ws-labs-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  padding: 1.7rem 1.5rem; text-align: center;
+  background: var(--paper-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+}
+.ws-labs-empty-chip {
+  width: 42px; height: 42px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--navy-50); color: var(--navy-500);
+  margin-bottom: 0.15rem;
+}
+.ws-labs-empty-chip svg { width: 19px; height: 19px; }
+.ws-labs-empty-msg {
+  font-family: var(--font-serif);
+  font-size: 1.15rem; font-weight: 600; color: var(--ink-2);
+}
+.ws-labs-empty-hint { font-size: 0.83rem; color: var(--ink-3); max-width: 34rem; line-height: 1.55; }
+
+/* ═══ Workspace · Community — card titles in Cormorant serif to match the
+       Projects reference (scoped to the group widgets; other pages untouched) ═══ */
+.widget-card[data-widget-id="ws-group-inbox"] > .widget-hd .widget-title,
+.widget-card[data-widget-id="ws-my-groups"] > .widget-hd .widget-title,
+.widget-card[data-widget-id="ws-group-sent"] > .widget-hd .widget-title,
+.widget-card[data-widget-id="ws-groups-discover"] > .widget-hd .widget-title,
+.widget-card[data-widget-id="ws-group-invite"] > .widget-hd .widget-title {
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.widget-card[data-widget-id="ws-group-inbox"] > .widget-hd,
+.widget-card[data-widget-id="ws-my-groups"] > .widget-hd,
+.widget-card[data-widget-id="ws-group-sent"] > .widget-hd,
+.widget-card[data-widget-id="ws-groups-discover"] > .widget-hd,
+.widget-card[data-widget-id="ws-group-invite"] > .widget-hd {
+  margin-bottom: 0.75rem;
+}
+/* Community list rows — hairline separators, no trailing divider under the last */
+.ws-cm-row { border-bottom: 1px solid var(--border); }
+.ws-cm-row:last-child { border-bottom: none; }

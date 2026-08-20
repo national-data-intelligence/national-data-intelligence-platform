@@ -1,5 +1,5 @@
 id: rm-hotspots
-title: Supply Hotspots
+title: Priority Hotspots
 kind: table
 requires:
   subject: PRG

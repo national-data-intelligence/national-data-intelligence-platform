@@ -1,5 +1,5 @@
 id: rm-stock-heatmap
-title: Resource · Drug stock heatmap (commodity × region)
+title: "National Stock Distribution"
 kind: heatmap
 requires:
   subject: PRD

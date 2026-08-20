@@ -1,5 +1,5 @@
 id: internal-bi/disease
-title: Disease Surveillance
+title: Disease
 ordering: 20
 filters:
 - region

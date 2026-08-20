@@ -83,12 +83,30 @@
   --shadow-3:0 24px 50px -16px rgba(15,23,42,.22), 0 8px 18px -6px rgba(15,23,42,.08);
   --shadow-hover:0 18px 36px -12px rgba(15,23,42,.18), 0 6px 14px -4px rgba(15,23,42,.06);
 
-  /* ── Typography: all-Inter (matches the reference goldens; serif retired —
-       --font-serif kept as an Inter alias so heading rules need no per-rule
-       edits). Self-hosted via @fontsource (main.tsx imports 400–800). ── */
-  --font-serif:'Inter','system-ui',-apple-system,sans-serif;
-  --font-sans:'Inter','system-ui',-apple-system,sans-serif;
+  /* ── Typography: Cormorant-Garamond headings over Nunito-Sans body — the
+       shared workshop face, applied across every staff/public dashboard (global
+       font decree). --font-serif drives every heading rule; --font-sans the
+       body. Self-hosted via @fontsource (main.tsx imports the weights). ── */
+  --font-serif:'Cormorant Garamond','Georgia',serif;
+  --font-sans:'Nunito Sans', system-ui, sans-serif;
   --font-mono:'JetBrains Mono','Menlo',monospace;
+
+  /* ── Type ramp — single canonical scale for headings/labels. Values map
+       1:1 to the current look (h1 2.0 / h2 1.5 / h3 1.20 / h4 1.02rem), so
+       this is consolidation, not a resize. Reference these instead of ad-hoc
+       rem sizes. Widgets migrate in a later step — for now only the base
+       heading rules below consume the ramp. ── */
+  --fs-2xs: 0.72rem;   /* captions, eyebrows, table headers, pills */
+  --fs-xs:  0.78rem;   /* small labels, sub-text */
+  --fs-sm:  0.84rem;   /* body-small, table cells */
+  --fs-md:  0.92rem;   /* default control / field text */
+  --fs-lg:  1.02rem;   /* h4, lead body */
+  --fs-xl:  1.20rem;   /* h3, section titles */
+  --fs-2xl: 1.50rem;   /* h2 */
+  --fs-3xl: 2.00rem;   /* h1 */
+  /* consistent heading treatment — every heading shares one weight + tracking */
+  --fw-heading: 600;
+  --tracking-heading: -0.01em;
 
   /* ── NEW canonical warm tokens (for Phase 3 component restyles) ── */
   --brown:      #9a6a3a;
@@ -118,14 +136,16 @@
   /* neutrals */
   --paper:#FFFFFF; --paper-2:#F2F5F9; --bg:#F7F8FA; --bg-2:#F2F5F9; --sand:#F2F5F9;
   --border:#E5E9F0; --border-2:#D6DDE8;
-  --ink:#0F172A; --ink-2:#334155; --ink-3:#64748B; --ink-4:#94A3B8;
+  --ink:#111827; --ink-2:#334155; --ink-3:#64748B; --ink-4:#94A3B8;
   /* charcoal nav + slate emphasis (names kept for cascade compatibility) */
   --navy-900:#050b20; --navy-800:#0a1734; --navy-700:#334155;
   --navy-600:#475569; --navy-500:#64748B; --navy-50:#EEF2F7;
-  /* status — red reserved for alert/escalation/negative only */
-  --good:#22A06B; --good-50:#EAF7F0;
-  --watch:#F59E0B; --watch-50:#FFF4D6;
-  --alert:#EF4444; --alert-50:#FDE8E8;
+  /* status — red reserved for alert/escalation/negative only. Overhaul §1:
+   * muted, executive-suitable semantic colours (softer green / red) so trend
+   * indicators read as subtle direction cues, not aggressive signals. */
+  --good:#3f9d70; --good-50:#EAF7F0;
+  --watch:#C6893F; --watch-50:#FFF4D6;
+  --alert:#CB5B62; --alert-50:#FDE8E8;
   --info:#3B82F6;  --info-50:#E8F1FF;
   /* amber sequential interpolator → repointed to a cool slate ramp so funnels/
      lollipops/heatmaps read cool with the new palette */
@@ -159,11 +179,11 @@ body {
 a { color: var(--navy-700); text-decoration: none; }
 a:hover { color: var(--navy-500); }
 
-h1,h2,h3,h4 { font-family:var(--font-serif); color:var(--ink); font-weight:600; letter-spacing:-0.01em; margin:0; }
-h1 { font-size: 2.0rem; }
-h2 { font-size: 1.5rem; }
-h3 { font-size: 1.20rem; }
-h4 { font-size: 1.02rem; }
+h1,h2,h3,h4 { font-family:var(--font-serif); color:var(--ink); font-weight:var(--fw-heading); letter-spacing:var(--tracking-heading); margin:0; }
+h1 { font-size: var(--fs-3xl); }
+h2 { font-size: var(--fs-2xl); }
+h3 { font-size: var(--fs-xl); }
+h4 { font-size: var(--fs-lg); }
 p  { margin:0; color:var(--ink-2); }
 .eyebrow { font-family: var(--font-sans); font-size:0.74rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-4); }
 code, pre { font-family: var(--font-mono); font-size: 0.85em; background: #f1f5f9; padding: 1px 5px; border-radius: 3px; }
@@ -462,6 +482,9 @@ table.dash {
   width: 100%; border-collapse: collapse; font-size: 0.84rem;
 }
 table.dash th, table.dash td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); }
+/* Overhaul §4: numeric columns right-align in BOTH header and body so digits
+ * line up under their label. `.num` on a th or td opts a column in. */
+table.dash th.num, table.dash td.num { text-align: right; font-variant-numeric: tabular-nums; }
 table.dash th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-3); font-weight: 600; background: var(--paper-2); }
 table.dash tr:hover { background: var(--navy-50); }
 

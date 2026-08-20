@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: dashboard
-          image: nhdw-registry:5500/nhdw/internal-bi:v1782689751
+          image: nhdw-registry:5500/nhdw/internal-bi:1.0.0
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 80, name: http } ]
           env:

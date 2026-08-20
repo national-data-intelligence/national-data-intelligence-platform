@@ -12,14 +12,13 @@
  * blank pages when the gateway is unreachable (each widget then degrades to
  * its own data-fetch error state, same as before the migration).
  *
- * Keys are adminApp `active` ids; values mirror bundle/seeds/security/
+ * Keys are adminApp `active` ids; values mirror bundle/seed-pack/app/security/
  * page_widget.yaml for dashboard `admin` (page id = `admin/<key>`) — the
  * COLLAPSED one-widget-per-page catalog (owner 2026-07-07). If the catalog
  * gains a widget, add it here too (one line) so degraded mode stays faithful.
  */
 export const FALLBACK_PAGE_WIDGETS: Record<string, string[]> = {
   infra:               ['adm-topology'],
-  audit:               ['adm-audit-events'],
   alerts:              ['adm-alerts-routing'],
   dq:                  ['adm-dq'],
   'models-datasets':   ['adm-models-datasets'],

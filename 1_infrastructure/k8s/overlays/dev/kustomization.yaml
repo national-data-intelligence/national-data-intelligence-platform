@@ -9,27 +9,27 @@ resources:
 # Remap the CI registry-pinned images to the locally-built nhdw/*:dev images
 # (built by bundle/scripts/build-images.sh and imported into k3d).
 images:
-  - { name: "nhdw-registry:5500/nhdw/admin",            newName: nhdw/admin,            newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/gateway",          newName: nhdw/gateway,          newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/keycloak",         newName: nhdw/keycloak,         newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/internal-bi",      newName: nhdw/internal-bi,      newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/workshop",         newName: nhdw/workshop,         newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/mlflow",           newName: nhdw/mlflow,           newTag: dev }
+  - { name: "nhdw-registry:5500/nhdw/admin",            newName: nhdw/admin,            newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/gateway",          newName: nhdw/gateway,          newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/keycloak",         newName: nhdw/keycloak,         newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/internal-bi",      newName: nhdw/internal-bi,      newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/workshop",         newName: nhdw/workshop,         newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/mlflow",           newName: nhdw/mlflow,           newTag: 1.0.0 }
   # (nhdw/ollama-model remap RETIRED 2026-07-06 — the LLM is external now, served by
   # stock ollama/ollama:0.6.8 in 0_external/llm/, not an in-cluster image. The baked
   # image is bare-metal-recipe-only; llm.yaml archived to _archive/2026-07-06/.)
   # orchestrator + ML runner (the runner is also referenced by ML_RUNNER_IMAGE
   # on the airflow Deployment — patched below, keep in sync).
-  - { name: "nhdw-registry:5500/nhdw/airflow",          newName: nhdw/airflow,          newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/ml-runner",        newName: nhdw/ml-runner,        newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/public-dashboard", newName: nhdw/public-dashboard, newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/dbt-docs",         newName: nhdw/dbt-docs,         newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/superset",         newName: nhdw/superset,         newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/tool-gate",        newName: nhdw/tool-gate,        newTag: dev }
-  - { name: "nhdw-registry:5500/nhdw/vault-bridge",     newName: nhdw/vault-bridge,     newTag: dev }
+  - { name: "nhdw-registry:5500/nhdw/airflow",          newName: nhdw/airflow,          newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/ml-runner",        newName: nhdw/ml-runner,        newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/public-dashboard", newName: nhdw/public-dashboard, newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/dbt-docs",         newName: nhdw/dbt-docs,         newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/superset",         newName: nhdw/superset,         newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/tool-gate",        newName: nhdw/tool-gate,        newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/vault-bridge",     newName: nhdw/vault-bridge,     newTag: 1.0.0 }
   # workshop compute: the hub itself; the singleuser lab image is env-carried
   # (SINGLEUSER_IMAGE — patched below like ML_RUNNER_IMAGE, keep in sync).
-  - { name: "nhdw-registry:5500/nhdw/jupyterhub",       newName: nhdw/jupyterhub,       newTag: dev }
+  - { name: "nhdw-registry:5500/nhdw/jupyterhub",       newName: nhdw/jupyterhub,       newTag: 1.0.0 }
 
 # All nhdw images are pre-imported into k3d; never try to pull them from a
 # registry. Force IfNotPresent on the first container of every workload kind.
@@ -64,11 +64,11 @@ patches:
               - name: scheduler
                 imagePullPolicy: IfNotPresent
                 env:
-                  - { name: ML_RUNNER_IMAGE, value: "nhdw/ml-runner:dev" }
+                  - { name: ML_RUNNER_IMAGE, value: "nhdw/ml-runner:1.0.0" }
               - name: webserver
                 imagePullPolicy: IfNotPresent
                 env:
-                  - { name: ML_RUNNER_IMAGE, value: "nhdw/ml-runner:dev" }
+                  - { name: ML_RUNNER_IMAGE, value: "nhdw/ml-runner:1.0.0" }
 
   # JupyterHub spawns lab pods from an env-carried image ref (SINGLEUSER_IMAGE)
   # that the images: transform can't reach — patch it to the local dev image
@@ -84,7 +84,7 @@ patches:
               - name: hub
                 imagePullPolicy: IfNotPresent
                 env:
-                  - { name: SINGLEUSER_IMAGE, value: "nhdw/jupyterlab:dev" }
+                  - { name: SINGLEUSER_IMAGE, value: "nhdw/jupyterlab:1.0.0" }
 
   # ── OIDC consistent-hostname wiring (HTTPS via Traefik ingress + nip.io) ──
   # Keycloak: advertise the external HTTPS URL + trust the edge proxy headers
@@ -197,4 +197,4 @@ patches:
                 env:
                   - { name: KEYCLOAK_ALLOWED_ISSUERS, value: "https://keycloak.127.0.0.1.nip.io/realms/moh-staff,https://keycloak.127.0.0.1.nip.io/realms/privileged-ops" }
                   - { name: KEYCLOAK_PUBLIC_BASE,     value: "https://keycloak.127.0.0.1.nip.io" }
-                  - { name: ML_RUNNER_IMAGE,          value: "nhdw/ml-runner:dev" }
+                  - { name: ML_RUNNER_IMAGE,          value: "nhdw/ml-runner:1.0.0" }

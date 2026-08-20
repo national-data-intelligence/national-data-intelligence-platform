@@ -24,7 +24,7 @@ async function draw(ctx: WidgetCtx) {
     tpls = await r.json();
   } catch { ctx.empty('Could not load report templates.'); return; }
   if (!Array.isArray(tpls) || !tpls.length) {
-    ctx.empty('No report templates available for your role — build a governed extract with the SQL editor below.');
+    ctx.empty('No report templates available for your role. Build a governed extract with the SQL editor below.');
     return;
   }
 
@@ -69,7 +69,7 @@ async function draw(ctx: WidgetCtx) {
         if (!r.ok) {
           status.innerHTML = `<span style="color:${alert}">${esc(j.detail || `Failed (${r.status})`)}</span>`;
         } else {
-          status.innerHTML = `<span style="color:${good}">✓ ${esc(j.name)} · ${esc(j.row_count)} rows · ${esc(String(j.format).toUpperCase())} ready — downloading…</span>`;
+          status.innerHTML = `<span style="color:${good}">✓ ${esc(j.name)}, ${esc(j.row_count)} rows, ${esc(String(j.format).toUpperCase())} ready. Downloading…</span>`;
           if (j.download_url) {
             const a = document.createElement('a');
             a.href = j.download_url; a.rel = 'noopener'; a.download = '';

@@ -139,7 +139,10 @@
   /* ═══ Top bar inside main · balanced left/right padding (reference-golden
      masthead: eyebrow + 2rem/800 title from Topbar.tsx, no band, no hairline) ═══ */
   .bi-topbar {
-    padding: 1.3rem 2.2rem 1.1rem 2.2rem;
+    /* Horizontal padding MUST match .bi-pageframe (5.5rem) so the masthead
+       title/breadcrumb sit flush-left with the page content below, not inset
+       further left. Both are siblings in .bi-main (same left edge). */
+    padding: 1.3rem 5.5rem 1.1rem 5.5rem;
     display: flex; align-items: flex-end; justify-content: space-between;
     gap: 1.2rem;
   }
@@ -806,7 +809,16 @@
     display: flex; flex-direction: column; gap: 0.7rem;
     background: linear-gradient(180deg, #fafafa 0%, #ffffff 100%);
   }
-  .ai-msg { max-width: 86%; line-height: 1.45; font-size: 0.86rem; }
+  .ai-msg { max-width: 86%; min-width: 0; line-height: 1.45; font-size: 0.86rem; overflow-wrap: anywhere; }
+  /* fenced code the bot emits (```sql …```) — wrap long lines instead of
+     overflowing the chat panel horizontally */
+  .ai-code {
+    display: block; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%;
+    background: #14171f; color: #f4f4f5; font-family: var(--font-mono, monospace);
+    font-size: 0.74rem; line-height: 1.4; padding: 0.5rem 0.65rem; border-radius: 6px;
+    margin: 0.35rem 0;
+  }
+  .ai-msg pre, .ai-msg code { max-width: 100%; overflow-wrap: anywhere; }
   .ai-msg.bot {
     background: #f1f3f7;
     color: var(--ink);
@@ -1041,7 +1053,7 @@
   }
 
   /* ═══ Page body within main · balanced left/right padding (more breathing room off both edges) ═══ */
-  .bi-pageframe { padding: 1.4rem 3.6rem 3rem 3.6rem; }
+  .bi-pageframe { padding: 1.4rem 5.5rem 3rem 5.5rem; } /* shared 5.5rem left/right content margin */
 
   /* ═══ Fine grid backdrop for the Ethiopia maps · applied via .map-graticule on the chart host ═══ */
   .map-graticule {
@@ -1053,6 +1065,17 @@
     background-position: 0 0;
     border-radius: 12px;
     border: 1px solid #e8eaee;
+  }
+
+  /* ═══ Earth/water backdrop for the burden map (choropleth worldContext) ·
+     faint neighbouring land renders on a soft-water gradient — NO grid ═══ */
+  .map-earth {
+    background-color: #e9f0f5;
+    background-image: linear-gradient(158deg, #eef4f8 0%, #e3edf3 52%, #d9e6ee 100%);
+    background-size: auto;
+    background-position: 0 0;
+    border: none;
+    border-radius: 14px;
   }
 
   /* ═══ Cross-disease anomaly grid · widget header ═══ */

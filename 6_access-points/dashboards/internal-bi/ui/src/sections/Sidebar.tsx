@@ -11,8 +11,9 @@ import { useDashboardSpec } from '../api/spec';
 
 const PAGES = [
   { id: 'overview', ico: 'i-grid',       title: 'Overview',           page_id: 'internal-bi/overview' },
-  { id: 'disease',  ico: 'i-alert',      title: 'Disease Surveillance',page_id: 'internal-bi/disease' },
+  { id: 'disease',  ico: 'i-alert',      title: 'Disease Surveillance', page_id: 'internal-bi/disease' },
   { id: 'resource', ico: 'i-package',    title: 'Resource Management', page_id: 'internal-bi/resource' },
+  { id: 'control-tower', ico: 'i-truck', title: 'Supply Control Tower', page_id: 'internal-bi/control-tower' },
   { id: 'service',  ico: 'i-chart-line', title: 'Service Performance', page_id: 'internal-bi/service' },
   { id: 'export',   ico: 'i-upload',     title: 'Data Export & Query', page_id: 'internal-bi/export' },
 ];
@@ -46,13 +47,7 @@ export default function Sidebar() {
         </a>
       </div>
 
-      <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', margin: '0.9rem 0 0.2rem',
-        fontSize: '0.8rem', fontWeight: 500, color: 'var(--nav-muted, rgba(255,255,255,0.55))' }}>← Back to portal</a>
-
-      <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
-        color: 'rgba(255,255,255,0.4)', margin: '1rem 0 0.4rem' }}>Dashboards</div>
-
-      <nav className="bi-nav">
+      <nav className="bi-nav" style={{ marginTop: '1rem' }}>
         {visible.map(p => (
           <a key={p.id} className={state.active === p.id ? 'active' : undefined} onClick={() => setActive(p.id)}>
             <svg className="ico"><use href={'#' + p.ico} /></svg>

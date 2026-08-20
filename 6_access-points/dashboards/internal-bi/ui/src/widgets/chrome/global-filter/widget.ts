@@ -15,11 +15,13 @@
  */
 import type { WidgetDef, WidgetCtx } from '../../../runtime/types';
 import type { ResolvedFilter } from '../../../api/spec';
-import { REGIONS, PROGRAMMES, DISEASES, PERIOD_OPTS } from '../../../biApp';
+import { REGIONS, PROGRAMMES, DISEASES, PERIOD_OPTS, COMMODITIES } from '../../../biApp';
+import { getWidgetDef } from '../../../runtime/registry';
 
 // Spec filter id → the bus/biApp filter key it drives.
 const DIM_KEY: Record<string, string> = {
   region: 'geography', geography: 'geography', programme: 'programme', period: 'period',
+  commodity: 'commodity',
 };
 
 interface Opt { value: string; label: string; }
@@ -32,6 +34,7 @@ function catalog(filterId: string): Opt[] {
     ...DISEASES.map((d: any) => ({ value: d.key, label: d.name })),
   ];
   if (filterId === 'period') return Object.entries(PERIOD_OPTS).map(([k, l]) => ({ value: k, label: String(l) }));
+  if (filterId === 'commodity') return COMMODITIES.map((c: { code: string; name: string }) => ({ value: c.code, label: c.name }));
   return [];
 }
 
@@ -43,7 +46,7 @@ function labelFor(filterId: string, value: string): string {
 
 const def: WidgetDef = {
   id: 'chrome/global-filter',
-  reactsTo: ['geography', 'programme', 'period'],   // re-render chips on any change
+  reactsTo: ['geography', 'programme', 'period', 'commodity'],   // re-render chips on any change
 
   render(ctx: WidgetCtx) {
     // Display order is a UI concern: the gateway returns filters ORDER BY id
@@ -51,9 +54,19 @@ const def: WidgetDef = {
     // except Service, whose spec lists Programme before Period.
     const isService = String(ctx.page.id || '').endsWith('/service');
     const CHIP_ORDER: Record<string, number> = isService
-      ? { region: 0, geography: 0, programme: 1, period: 2 }
-      : { region: 0, geography: 0, period: 1, programme: 2 };
+      ? { region: 0, geography: 0, programme: 1, period: 2, commodity: 3 }
+      : { region: 0, geography: 0, period: 1, programme: 2, commodity: 3 };
+    // PAGE-SPECIFIC filter set (owner 2026-07-13): only offer a filter whose
+    // dimension a widget ON THIS PAGE actually reacts to — no generic
+    // region/period/programme on every page regardless of use. The resolved
+    // spec's reacts_to is null for core widgets, so derive it from the registry.
+    const usedDims = new Set<string>();
+    for (const w of (ctx.page.widgets || [])) {
+      const wdef = getWidgetDef(w.id);
+      for (const d of (wdef?.reactsTo || [])) usedDims.add(d);
+    }
     const filters = [...(ctx.page.global_filters || [])]
+      .filter(f => usedDims.has(DIM_KEY[f.id] || f.id))
       .sort((a, b) => (CHIP_ORDER[a.id] ?? 99) - (CHIP_ORDER[b.id] ?? 99));
     const el = ctx.el;
     let openId: string | null = null;
@@ -84,7 +97,7 @@ const def: WidgetDef = {
         }
         const menu = openId === f.id ? `
           <div class="dropdown-menu" data-menu="${f.id}">
-            ${scoped ? `<div class="dd-section">${f.title || f.id} · scoped</div>` : ''}
+            ${scoped ? `<div class="dd-section">${f.title || f.id} (scoped)</div>` : ''}
             ${opts.map(o => `<div class="dd-item${o.value === shownVal ? ' selected' : ''}" data-key="${key}" data-val="${o.value}">${o.label}</div>`).join('')}
           </div>` : '';
         return `<span class="dropdown">

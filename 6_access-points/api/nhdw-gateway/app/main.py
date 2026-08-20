@@ -34,7 +34,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from . import mart_attrs, metrics, opa, ops_db
 from .routes import (access_requests, alerts, api_tokens, artifacts, audit,
-                      chat, datasets, docs, dq, exports, graduation, groups, marts,
+                      chat, ct, datasets, docs, dq, exports, graduation, groups, marts,
                       me, ml, observability, perm_admin,
                       permissions as permissions_route,
                       policy, projects, public_articles, queries,
@@ -182,6 +182,7 @@ async def audit_all_requests(request: Request, call_next):
 
 app.include_router(me.router)
 app.include_router(marts.router)
+app.include_router(ct.router)
 app.include_router(exports.router)
 app.include_router(audit.router)
 app.include_router(observability.router)

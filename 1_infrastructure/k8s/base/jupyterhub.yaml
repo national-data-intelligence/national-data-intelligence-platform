@@ -60,7 +60,7 @@ spec:
       serviceAccountName: jupyterhub
       containers:
         - name: hub
-          image: nhdw-registry:5500/nhdw/jupyterhub:v1
+          image: nhdw-registry:5500/nhdw/jupyterhub:1.0.0
           ports:
             - { containerPort: 8000, name: proxy-public }
             - { containerPort: 8081, name: hub-api }
@@ -86,10 +86,10 @@ spec:
             # Encrypts auth_state at rest — required by enable_auth_state=True.
             - name: JUPYTERHUB_CRYPT_KEY
               valueFrom: { secretKeyRef: { name: jupyterhub-secrets, key: CRYPT_KEY } }
-            # Spawned-lab image (overlay remaps to nhdw/jupyterlab:dev — env
+            # Spawned-lab image (overlay remaps to nhdw/jupyterlab:1.0.0 — env
             # refs are NOT covered by the images: transform, so the dev
             # overlay patches this value like ML_RUNNER_IMAGE).
-            - { name: SINGLEUSER_IMAGE, value: "nhdw-registry:5500/nhdw/jupyterlab:v1" }
+            - { name: SINGLEUSER_IMAGE, value: "nhdw-registry:5500/nhdw/jupyterlab:1.0.0" }
             - { name: WORKSPACE_PROFILES_PATH, value: "/srv/jupyterhub/profiles.yaml" }
             # Injected into spawned labs by the pre-spawn hook:
             - { name: MLFLOW_TRACKING_URI, value: "http://mlflow.nhdw.svc.cluster.local:5000" }

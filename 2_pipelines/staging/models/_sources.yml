@@ -52,6 +52,21 @@ sources:
       - name: hcmiswdm__vaccine_purchaseorder
         identifier: raw_hcmiswdm__vaccine_purchaseorder
         description: "HCMIS vaccine procurement pipeline — open + recently-closed purchase orders."
+      - name: hcmiswdm__dim_dispatchhub
+        identifier: raw_hcmiswdm__dim_dispatchhub
+        description: "EPSS dispatch-plan hubs (warehouses) — coords + fleet (Supply Control Tower)."
+      - name: hcmiswdm__dim_dispatchfacility
+        identifier: raw_hcmiswdm__dim_dispatchfacility
+        description: "EPSS dispatch-plan delivery facilities (nodes) — coords/region/type/capacity."
+      - name: hcmiswdm__dim_dispatchperiod
+        identifier: raw_hcmiswdm__dim_dispatchperiod
+        description: "EPSS dispatch-plan planning periods + plan-level KPI/savings summary."
+      - name: hcmiswdm__fact_dispatch
+        identifier: raw_hcmiswdm__fact_dispatch
+        description: "EPSS dispatch-plan movement lines (hub→facility × commodity per period)."
+      - name: hcmiswdm__fact_dispatchrun
+        identifier: raw_hcmiswdm__fact_dispatchrun
+        description: "EPSS dispatch-plan vehicle runs (stops + road path as JSON)."
       - name: hcmiswdm__commodity_product
         identifier: raw_hcmiswdm__commodity_product
       - name: hcmiswdm__dim_date

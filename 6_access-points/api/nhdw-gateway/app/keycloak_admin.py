@@ -12,6 +12,7 @@ the INTERNAL Keycloak service URL (the gateway can't reach the browser host).
 from __future__ import annotations
 
 import logging
+import secrets
 from typing import Any
 
 import httpx
@@ -90,18 +91,32 @@ async def provision_user(*, email: str, full_name: str | None,
                 log.warning("role %s not found in realm %s (%s)",
                             role, realm, rr.status_code)
 
-        # 3. execute-actions-email → the applicant sets their own password.
-        ea = await c.put(
-            f"{base}/admin/realms/{realm}/users/{kc_sub}/execute-actions-email",
-            headers=h, params={"lifespan": 43200}, json=["UPDATE_PASSWORD"])
-        emailed = ea.status_code in (200, 204)
-        if not emailed:
-            log.warning("execute-actions-email failed for %s: %s %s",
-                        email, ea.status_code, ea.text[:160])
+        # 3. Set a temporary password + force a change at first login. We do NOT
+        #    use execute-actions-email: its single-use link is silently consumed by
+        #    e-mail link scanners (Gmail prefetches URLs to check them), so the
+        #    applicant lands on "your account has been updated" without ever
+        #    choosing a password. Instead we set a temporary password, require
+        #    UPDATE_PASSWORD at first login, and let the gateway e-mail the
+        #    credential + the dashboard to sign in at (via the unified SMTP mailer).
+        #    Policy-compliant: length>=10, upper (N), lower, digit.
+        temp_password = f"Nhdw{secrets.randbelow(90) + 10}-{secrets.token_hex(4)}"
+        rp = await c.put(
+            f"{base}/admin/realms/{realm}/users/{kc_sub}/reset-password",
+            headers=h, json={"type": "password", "value": temp_password,
+                             "temporary": True})
+        pw_set = rp.status_code in (200, 204)
+        if not pw_set:
+            log.warning("set temp password failed for %s: %s %s",
+                        email, rp.status_code, rp.text[:160])
+        # Force the password change on first login; mark admin-provisioned users
+        # email-verified so they aren't stalled behind a VERIFY_EMAIL action.
+        await c.put(f"{base}/admin/realms/{realm}/users/{kc_sub}", headers=h,
+                    json={"requiredActions": ["UPDATE_PASSWORD"],
+                          "emailVerified": True})
 
     return {"kc_sub": kc_sub, "created": created, "role": role,
-            "role_assigned": role_assigned, "emailed": emailed,
-            "realm": realm, "username": username}
+            "role_assigned": role_assigned, "temp_password": temp_password,
+            "pw_set": pw_set, "realm": realm, "username": username}
 
 
 async def send_password_reset(*, realm: str, user_id: str) -> bool:

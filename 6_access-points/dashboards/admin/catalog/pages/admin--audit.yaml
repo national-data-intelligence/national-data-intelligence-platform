@@ -1,8 +1,0 @@
-id: admin/audit
-title: Audit Logs
-ordering: 20
-widgets:
-- id: adm-audit-events
-  col_span: 6
-  row_span: 1
-  ordering: 11

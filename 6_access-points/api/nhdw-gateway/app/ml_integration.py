@@ -30,9 +30,10 @@ real, monitored model with no per-model UI work:
      baselines. The Job runs ASYNCHRONOUSLY — the hook never blocks approval.
 
 Model-agnostic by design: once (1) MLflow @champion, (2) a model_deployment
-row and (3) prediction rows exist, the existing widgets (ws-models-table,
-ws-model-workbench, ws-model-monitoring, ws-model-results) show the model with
-NO new widget. Integration = producing exactly those three facts.
+row and (3) prediction rows exist, the existing widgets show the model with NO
+new widget — the workshop usage-only pair (ws-models-table, ws-model-workbench)
+and the admin monitoring surface (adm-models-datasets: drift / performance /
+stored predictions). Integration = producing exactly those three facts.
 
 Best-effort contract: this hook NEVER raises so as to fail an approval (the
 project is already public + the verdict recorded before we run). Every failure
@@ -61,7 +62,7 @@ log = logging.getLogger("gateway.ml_integration")
 ARTIFACTS_BUCKET = os.environ.get("ARTIFACTS_BUCKET", "nhdw-artifacts")
 ML_PACKAGES_PREFIX = "ml-packages"          # <bucket>/ml-packages/<name>/current/
 
-# The five bundle-seeded models (bundle/seeds/ml/deployments.yaml). A community
+# The five bundle-seeded models (bundle/seed-pack/app/ml/deployments.yaml). A community
 # model whose manifest name collides with one of these is namespaced with the
 # project slug so approval can NEVER clobber a seeded model's registry entry,
 # deployment row or predictions.

@@ -11,19 +11,29 @@
  *   (live mart also ships lowercase active/contained/closed — all vocabularies mapped).
  * reactsTo: geography.
  *
- * 2026-07-07 (final visual mandate): reference-golden plain roster — right-aligned
- * "Subscribe to alerts" + episode count, one table inside .scrollable (the grid
- * row_span caps the card; rows scroll INSIDE it). dt-standard round superseded.
+ * 2026-07-12 (X5): migrated onto the shared paginatedTable (sticky header, fixed-height
+ * scroll, search + click-to-sort). The right-aligned "Subscribe to alerts" control + episode
+ * count live OUTSIDE the table mount so they survive the table's internal redraws. Status +
+ * Readiness pills are coloured via TableColumn.tone — restoring the domain-label colours
+ * (active/Alert→alert, contained→good, closed→neutral, Ready→good, Partial→watch, Limited→alert),
+ * both mock (capitalised) and live-mart (lowercase) vocabularies mapped.
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
+import type { TableColumn } from '../_shared/charts';
+import { paginatedTable } from '../_shared/charts';
 import { regionName } from '../_shared/reference';
 
-// The live mart ships lowercase episode states (active/contained/closed) in
-// addition to the mock contract's Alert/Watch — map ALL observed vocabularies.
-const STATUS_PILL: Record<string, string> = {
-  alert: 'alert', watch: 'watch', active: 'alert', contained: 'good', closed: 'neutral',
+// Value → pill token. Both cases covered (mock ships Alert/Watch + Ready/Partial/Limited;
+// the live mart ships lowercase active/contained/closed) so tone is case-robust like the pre-X5 lookup.
+const STATUS_TONE: Record<string, string> = {
+  Alert: 'alert', Watch: 'watch',
+  active: 'alert', Active: 'alert',
+  contained: 'good', Contained: 'good',
+  closed: 'neutral', Closed: 'neutral',
 };
-const READY_PILL: Record<string, string> = { ready: 'good', partial: 'watch', limited: 'alert' };
+const READY_TONE: Record<string, string> = {
+  Ready: 'good', ready: 'good', Partial: 'watch', partial: 'watch', Limited: 'alert', limited: 'alert',
+};
 
 const def: WidgetDef = {
   id: 'dz-outbreaks-table',
@@ -33,24 +43,34 @@ const def: WidgetDef = {
     if (!rows || !rows.length) { ctx.empty('No active outbreaks for the selected filters.'); return; }
     const t = ctx.theme;
 
-    const head = ['ID', 'Disease', 'Region', 'Woreda', 'Declared', 'Days', 'Total', 'New 7D', 'CFR', 'Status', 'RRT', 'Readiness'];
-    const body = rows.map(r => {
-      const st = String(r.status ?? ''), rd = String(r.readiness ?? '');
-      return `<tr>
-        <td style="font-weight:600;color:${t.navy['700']};white-space:nowrap">${r.id ?? '-'}</td>
-        <td>${r.disease ?? '-'}</td>
-        <td style="color:${t.ink[2]}">${regionName(String(r.region ?? ''))}</td>
-        <td>${r.woreda ?? '-'}</td>
-        <td style="color:${t.ink[2]};white-space:nowrap">${r.declared ?? '-'}</td>
-        <td class="num" style="font-variant-numeric:tabular-nums">${Number(r.days ?? 0)}</td>
-        <td class="num" style="font-variant-numeric:tabular-nums">${Number(r.total ?? 0).toLocaleString()}</td>
-        <td class="num" style="font-variant-numeric:tabular-nums">${Number(r.new_7d ?? 0)}</td>
-        <td class="num" style="font-variant-numeric:tabular-nums">${Number(r.cfr_pct ?? 0).toFixed(1)}%</td>
-        <td><span class="pill ${STATUS_PILL[st.toLowerCase()] || 'neutral'}">${st || '-'}</span></td>
-        <td style="color:${t.ink[1]}">${r.rrt ?? '-'}</td>
-        <td><span class="pill ${READY_PILL[rd.toLowerCase()] || 'neutral'}">${rd || '-'}</span></td>
-      </tr>`;
-    }).join('');
+    const shaped = rows.map(r => ({
+      id: r.id ?? '-',
+      disease: r.disease ?? '-',
+      region: regionName(String(r.region ?? '')),
+      woreda: r.woreda ?? '-',
+      declared: r.declared ?? '-',
+      days: Number(r.days ?? 0),
+      total: Number(r.total ?? 0).toLocaleString(),
+      new_7d: Number(r.new_7d ?? 0),
+      cfr: `${Number(r.cfr_pct ?? 0).toFixed(1)}%`,
+      status: String(r.status ?? '-'),
+      rrt: r.rrt ?? '-',
+      readiness: String(r.readiness ?? '-'),
+    }));
+    const columns: TableColumn[] = [
+      { id: 'id', label: 'ID' },
+      { id: 'disease', label: 'Disease' },
+      { id: 'region', label: 'Region' },
+      { id: 'woreda', label: 'Woreda' },
+      { id: 'declared', label: 'Declared' },
+      { id: 'days', label: 'Days' },
+      { id: 'total', label: 'Total' },
+      { id: 'new_7d', label: 'New 7D' },
+      { id: 'cfr', label: 'CFR' },
+      { id: 'status', label: 'Status', format: 'pill', tone: STATUS_TONE },
+      { id: 'rrt', label: 'RRT' },
+      { id: 'readiness', label: 'Readiness', format: 'pill', tone: READY_TONE },
+    ];
 
     ctx.el.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:flex-end;gap:1rem;margin-bottom:.5rem">
@@ -59,10 +79,11 @@ const def: WidgetDef = {
           <span style="font-size:.72rem;color:${t.ink[3]}">${rows.length.toLocaleString()} active outbreaks</span>
         </div>
       </div>
-      <div class="scrollable" style="max-height:430px"><table class="dash"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+      <div class="dz-ob-tbl"></div>`;
     const sub = ctx.el.querySelector<HTMLButtonElement>('.dz-ob-sub');
     if (sub) sub.onclick = () => ctx.host.openSubscribe?.('all', ctx.filters.geography);
-    return () => { /* pure DOM */ };
+    const mount = ctx.el.querySelector<HTMLElement>('.dz-ob-tbl')!;
+    return paginatedTable(mount, shaped, columns, ctx.theme, { search: true, sort: true });
   },
 };
 export default def;

@@ -1,33 +1,16 @@
 /**
  * Widget · pub-hero — orbital dot-globe + masthead + CTAs (fullBleed).
- * Re-homed verbatim from sections/Hero.tsx (mockup L916-991). Globe canvas is
- * wired by hooks/heroGlobe on mount; the bottom-strip stat reads the `pub-hero`
- * widget-data seam (facility distribution mart) with the mockup text as offline
- * fallback. Reads setPage from the host.
+ * Globe canvas is wired by hooks/heroGlobe on mount. A darkening gradient at the
+ * hero's lower edge (`.hero::after`) settles it into the content surface; the old
+ * magazine bottom strip was removed. Reads setPage from the host.
  */
 import { useEffect, useRef } from 'react';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
 import { heroGlobe } from '../../hooks/heroGlobe';
-import { useWidgetData, type WidgetData } from '../../hooks/widgetData';
-
-/** {columns, rows} → "N facilities · M regions · 5 source systems", or
- *  null when the payload isn't the facility-distribution shape. The pub-hero
- *  fetcher pre-aggregates to a single national row (regions, facilities). */
-function heroStripStats(d: WidgetData | null): string | null {
-  if (!d || !d.columns.includes('regions') || !d.columns.includes('facilities') || !d.rows.length) {
-    return null;
-  }
-  const row = d.rows[0];
-  const facilities = Number(row.facilities) || 0;
-  const regions = Number(row.regions) || 0;
-  if (!facilities || !regions) return null;
-  return `${facilities.toLocaleString('en-US')} facilities · ${regions} regions · 5 source systems`;
-}
 
 function Hero({ host }: { host: PublicHost }) {
   const { setPage } = host;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stripStats = heroStripStats(useWidgetData('pub-hero'));
 
   useEffect(() => {
     if (canvasRef.current) heroGlobe(canvasRef.current);
@@ -84,9 +67,10 @@ function Hero({ host }: { host: PublicHost }) {
         </p>
 
         {/* Trust ribbon — the governance posture is the credibility, not fine print. */}
-        <p className="hero-trust">
+        <p className="hero-trust"
+           title="Aggregate and privacy-protected, k-anonymity at least 5, sourced from national health systems">
           <svg className="ico ico-sm"><use href="#i-shield-check"/></svg>
-          Aggregate &amp; privacy-protected · k-anonymity ≥ 5 · sourced from national health systems
+          Privacy-protected national health data
         </p>
 
         <div className="hero-actions">
@@ -98,20 +82,6 @@ function Hero({ host }: { host: PublicHost }) {
             Read the latest bulletins
             <svg className="ico ico-sm"><use href="#i-arrow-right"/></svg>
           </button>
-        </div>
-      </div>
-
-      {/* Magazine-style bottom strip · live signal + identifier */}
-      <div className="hero-strip hero-strip--bot">
-        <div className="hero-strip-inner">
-          <span className="hs-lhs">
-            <span className="hs-live"><span className="hs-live-dot"></span> Live</span>
-            <span className="hs-sep">·</span>
-            <span>Aggregate, k-anonymity&nbsp;≥&nbsp;5</span>
-          </span>
-          <span className="hs-rhs">
-            <span>{stripStats ?? '1,148 woredas · 14 regions · 5 source systems'}</span>
-          </span>
         </div>
       </div>
     </section>

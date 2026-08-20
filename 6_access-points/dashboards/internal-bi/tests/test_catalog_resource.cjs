@@ -36,7 +36,7 @@ const check = (c, l) => { console.log((c ? '  ✓ ' : '  ✗ ') + l); if (!c) fa
       if (!el) return { present: false };
       return { present: true, canvas: !!el.querySelector('canvas'), canvasCount: el.querySelectorAll('canvas').length, rows: el.querySelectorAll('table.dash tbody tr').length, kpis: el.querySelectorAll('.kpi').length, empty: !!el.querySelector('.widget-empty') };
     };
-    const ids = ['rm-hero','rm-statboard','rm-map','rm-hotspots','rm-facilities','rm-wastage','rm-order-next','rm-forecast','rm-stock-heatmap','rm-events','rm-workforce','rm-equipment','rm-cold-chain','rm-pipeline'];
+    const ids = ['rm-hero','rm-statboard','rm-map','rm-hotspots','rm-facilities','rm-wastage','rm-forecast','rm-stock-heatmap','rm-events','rm-workforce','rm-equipment','rm-cold-chain'];
     return {
       sections: document.querySelectorAll('.catalog-page .page-section').length,
       noRenderer: document.body.innerText.includes('No renderer registered'),
@@ -54,12 +54,11 @@ const check = (c, l) => { console.log((c ? '  ✓ ' : '  ✗ ') + l); if (!c) fa
   check(r.sections >= 4, `sections rendered (${r.sections})`);
   real('rm-hero', 'kpi'); real('rm-statboard', 'kpi');
   real('rm-map', 'canvas'); real('rm-hotspots', 'table'); real('rm-facilities', 'canvas');
-  real('rm-wastage', 'canvas'); real('rm-order-next', 'table'); real('rm-forecast', 'canvas');
+  real('rm-wastage', 'canvas'); real('rm-forecast', 'canvas');
   real('rm-stock-heatmap', 'canvas');
   real('rm-cold-chain', 'kpi');    // Group B: DHIS2 EPI cold-chain/AEFI
   real('rm-workforce', 'canvas');  // Group C: MFR cadre staffing → region density
   real('rm-equipment', 'canvas');  // Group C: MFR FHIR Device → equipment availability
-  real('rm-pipeline', 'table');    // Group D: HCMIS Vaccine.PurchaseOrder → procurement pipeline
   // rm-events: real table OR honest empty (overstocked synth → likely empty)
   check(W['rm-events'].present && (W['rm-events'].rows > 0 || W['rm-events'].empty), `rm-events real-or-honest-empty (rows=${W['rm-events'].rows}, empty=${W['rm-events'].empty})`);
   // no widget renders its chart twice (the async-draw race)

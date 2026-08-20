@@ -81,10 +81,9 @@ function adminApp() {
     // Owner consolidation 2026-07-06: Data = Quality & Lineage · Models ·
     // Review Queue; System & Access = Users and Access · Roles and
     // Permissions · SSO · Environment · Documentation. Titles mirror the
-    // ops_perm page catalog (bundle/seeds/security/pages.yaml).
+    // ops_perm page catalog (bundle/seed-pack/app/security/pages.yaml).
     pageInfo: {
       infra:               { group: 'Infrastructure',   title: 'Health & topology' },
-      audit:               { group: 'Infrastructure',   title: 'Audit logs' },
       alerts:              { group: 'Infrastructure',   title: 'Alert routing' },
       dq:                  { group: 'Data',             title: 'Quality & lineage' },
       'models-datasets':   { group: 'Data',             title: 'Models and datasets' }, // catalog page admin/models-datasets (Models + Review merged)
@@ -238,7 +237,7 @@ function adminApp() {
       }
       return `Dear ${r.name},\n\n`
            + `Thank you for your access request to the NHDW (${r.id}). Before we can complete the review, we need additional information:\n\n`
-           + `  ${this.reviewNote || '— please confirm your institutional affiliation and intended use.'}\n\n`
+           + `  ${this.reviewNote || 'Please confirm your institutional affiliation and intended use.'}\n\n`
            + `Please reply to this email with the requested details. We will resume the review on receipt.\n\n`
            + `Federal Ministry of Health · NHDW\n`;
     },
@@ -264,7 +263,6 @@ function adminApp() {
       this.$nextTick(() => {
         ({
           infra:               () => {},
-          audit:               ()=>{},
           alerts:              ()=>{},
           dq:                  ()=>{},
           'models-datasets':   ()=>{},

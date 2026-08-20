@@ -85,6 +85,12 @@ FACILITIES_PER_WOREDA = int(os.environ.get("MBRANA_SYNTH_FACILITIES_PER_WOREDA",
 MONTHS_HISTORY = int(os.environ.get("MBRANA_SYNTH_MONTHS_HISTORY", "24"))
 MOBILE_USER_COUNT = int(os.environ.get("MBRANA_SYNTH_MOBILE_USERS", "200"))
 SOH_TARGET_ROWS = int(os.environ.get("MBRANA_SYNTH_SOH_ROWS", "7200"))
+# USSD last-mile realism: only a SUBSET of registered facilities have an active
+# HEW reporting stock-on-hand; the rest are registered but dormant. This fraction
+# drives mart_data_quality completeness (distinct logging / registered) — kept
+# believably below the strong feeds (DHIS2/HCMIS), the weakest source but not
+# artificially so.
+ACTIVE_REPORTER_FRACTION = float(os.environ.get("MBRANA_SYNTH_ACTIVE_FRAC", "0.58"))
 REQUEST_TARGET = int(os.environ.get("MBRANA_SYNTH_REQUESTS", "616"))
 ASN_TARGET = int(os.environ.get("MBRANA_SYNTH_ASNS", "184"))
 
@@ -101,7 +107,10 @@ DB = os.environ.get("MBRANA_DATABASE", "HCMISWCloud")
 # 574→617 woredas, AA sub-city names). Stamped into dbo.SynthMeta inside the
 # same transaction as the data; bundle/scripts/sources-up.sh re-synthesizes on
 # version drift so a stale packed .bak can never mask a synthesizer fix.
-SYNTH_VERSION = 3
+# v4: USSD reporting realism — only ~58% of registered facilities are ACTIVE
+# reporters (with varying month-to-month engagement), so DQ completeness reads a
+# believable ~58% (weakest feed, honestly so) instead of 100% (every site logged).
+SYNTH_VERSION = 4
 
 
 # ─── Static lookup tables (small, fixed) ───────────────────────────────────
@@ -766,22 +775,27 @@ def build_mflowussd(
             months.append(d.strftime("%Y-%m"))
         months = list(reversed(months))
 
-    lines.append(f"-- mFlowUSSD.SOHLogs (last {len(months)} months · 30% reporting rate)")
-    lines.append("SET IDENTITY_INSERT mFlowUSSD.SOHLogs ON;")
-
-    # Calibrate per-month sampling to hit ~SOH_TARGET_ROWS total.
-    # rows ≈ months * sites_sampled * commodities_sampled
-    # With 24 months * len(mobile_sites) * 35 * 0.30 we'd be way over 7,200.
-    # So: pick a fixed (sites_per_month, commodities_per_site) that lands near target.
-    target = SOH_TARGET_ROWS
+    # ── USSD last-mile realism ────────────────────────────────────────────
+    # Only ~ACTIVE_REPORTER_FRACTION of registered facilities have an active HEW
+    # actually logging stock; the rest are registered but DORMANT (never log). And
+    # active sites report with VARYING month-to-month engagement (some most months,
+    # some sporadically). So mart_data_quality completeness (distinct logging /
+    # registered) reads a believable ~58% — the weakest feed, but honestly so,
+    # not the artificial 100% every-site-logged the flat sampling produced.
     n_months = len(months)
     n_sites = len(mobile_sites)
-    # Choose commodities_per_site = 5 (HEW kits are narrow). Then:
+    site_ids = list(range(1, n_sites + 1))
+    random.shuffle(site_ids)
+    n_active = max(1, round(n_sites * ACTIVE_REPORTER_FRACTION))
+    active_sites = sorted(site_ids[:n_active])
+    # per-site engagement = share of months it reports (spread, centred ~0.6).
+    engagement = {s: 0.30 + 0.65 * random.betavariate(2.2, 2.0) for s in active_sites}
     commodities_per_site = 5
-    sites_per_month = max(1, target // max(1, n_months * commodities_per_site))
-    sites_per_month = min(sites_per_month, n_sites)
-    # 30% reporting rate gate: log a row only if random.random() < 0.30 — but
-    # we honour the target so the dashboards have sufficient density.
+
+    lines.append(
+        f"-- mFlowUSSD.SOHLogs (last {n_months} months · {n_active}/{n_sites} "
+        f"registered facilities actively reporting · varied engagement)")
+    lines.append("SET IDENTITY_INSERT mFlowUSSD.SOHLogs ON;")
 
     log_id = 1
     for month in months:
@@ -791,9 +805,14 @@ def build_mflowussd(
             base_day = date(int(y), int(m), 1)
         except Exception:
             base_day = date.today()
-        for inst_seq in random.sample(range(1, n_sites + 1), k=sites_per_month):
+        for inst_seq in active_sites:
+            # this active site reported THIS month with prob = its engagement
+            if random.random() >= engagement[inst_seq]:
+                continue
             d = base_day + timedelta(days=random.randint(0, 27))
-            for comm_id in random.sample(range(1, n_comm + 1), k=commodities_per_site):
+            # a HEW logs a VARIED subset of their narrow kit (3..5 items)
+            k = random.randint(3, commodities_per_site)
+            for comm_id in random.sample(range(1, n_comm + 1), k=min(k, n_comm)):
                 qty = random.randint(0, 5_000)
                 lines.append(
                     f"INSERT INTO mFlowUSSD.SOHLogs "

@@ -2,8 +2,13 @@
 
 Each row in ops_workspace.saved_query stores a builder_spec (the JSON
 the dashboard's form serializes: schema/table/columns/filters/limit) plus
-optional sql_text. The "Run" action just hands the spec back to
-/api/exports — no separate execution engine.
+optional sql_text. Execution does NOT live here: the Saved-Queries widget
+runs a query's sql_text through the shared, OPA-gated executor at
+/api/sql/execute (routes/sql_lab.py) — the one authorization chain for all
+SQL (SELECT-only, mandatory LIMIT, per-table mart_attrs + OPA). Only after a
+successful run does the widget POST /{id}/touch-run below to stamp
+last_run_at so the list orders by recency. This module never bypasses those
+guards; it just owns the CRUD + the recency timestamp.
 """
 from __future__ import annotations
 
@@ -114,8 +119,11 @@ async def delete_query(query_id: str,
 @router.post("/{query_id}/touch-run")
 async def touch_last_run(query_id: str,
                          user: UserCtx = Depends(get_user)) -> dict[str, Any]:
-    """Bump last_run_at on this query. Called by the dashboard after a
-    successful export so the saved-query list orders by recency."""
+    """Bump last_run_at on this query. Called by the Saved-Queries widget
+    only after a successful run (SQL executed via /api/sql/execute) or export,
+    so the list orders by recency. This endpoint does NOT execute anything and
+    performs no data authorization — it only stamps the timestamp on a row the
+    caller owns; execution + OPA gating happen in sql_lab."""
     if not user.kc_sub:
         raise HTTPException(401, "authenticated session required")
     pool = await ops_db.ensure_pool()

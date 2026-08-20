@@ -40,6 +40,14 @@ c.JupyterHub.bind_url = "http://:8000"
 c.JupyterHub.hub_bind_url = "http://:8081"
 c.JupyterHub.hub_connect_ip = os.environ.get("POD_IP") or None
 c.JupyterHub.cleanup_servers = False
+# ONE LAB PER PROJECT (owner rule 2026-07-12): every lab is a NAMED server whose
+# name IS the project id (the gateway spawns servers/<project_id>). Distinct
+# projects therefore get distinct pods + PVCs and never share a workdir, so
+# "Open in JupyterLab" on project X always lands in X's files (the old single
+# unnamed pod pinned to its first project and showed the wrong files). No cap —
+# a researcher may keep a lab open per project.
+c.JupyterHub.allow_named_servers = True
+c.JupyterHub.named_server_limit_per_user = 0
 
 # ─── OAuth (Keycloak, moh-staff) ─────────────────────────────────────────
 KEYCLOAK_BASE        = os.environ.get(
@@ -133,13 +141,18 @@ c.KubeSpawner.http_timeout = 120
 c.KubeSpawner.cmd = ["/usr/local/bin/start-nhdw.sh"]
 c.KubeSpawner.default_url = "/lab"
 c.KubeSpawner.notebook_dir = "/home/jovyan/work"
-# Per-user PVC — survives lab restarts; sized per profile below.
+# Per-user, PER-PROJECT PVC — survives lab restarts; sized per profile below.
+# {servername} is the project id (see allow_named_servers above), so each
+# project owns its own claim `dsw-<username>-<project_id>` and two projects'
+# labs never mount the same workdir. (KubeSpawner expands {servername} to the
+# escaped server name; project ids are UUIDs → DNS-safe. The default unnamed
+# server, which the NHDW flow never spawns, would map to a trailing-dash claim.)
 c.KubeSpawner.storage_pvc_ensure = True
-c.KubeSpawner.pvc_name_template = "dsw-{username}"
+c.KubeSpawner.pvc_name_template = "dsw-{username}-{servername}"
 c.KubeSpawner.storage_capacity = "5Gi"
 c.KubeSpawner.volumes = [{
     "name": "work",
-    "persistentVolumeClaim": {"claimName": "dsw-{username}"},
+    "persistentVolumeClaim": {"claimName": "dsw-{username}-{servername}"},
 }]
 c.KubeSpawner.volume_mounts = [{"name": "work", "mountPath": "/home/jovyan/work"}]
 
@@ -237,8 +250,12 @@ async def pre_spawn_hook(spawner):
         if os.environ.get(k):
             env[k] = os.environ[k]
     # Project reconciliation (user_options come from the gateway spawn proxy).
+    # The named server's own name IS the project id (gateway spawns
+    # servers/<project_id>), so fall back to spawner.name when a spawn arrives
+    # without user_options (e.g. an implicit/hub-UI start) — that still scopes
+    # the lab to the right project instead of an unscoped sandbox.
     opts = spawner.user_options or {}
-    project_id = opts.get("project_id") or ""
+    project_id = opts.get("project_id") or (spawner.name or "")
     if project_id:
         project_slug = str(opts.get("project_slug") or project_id)
         env["NHDW_PROJECT_ID"]     = str(project_id)

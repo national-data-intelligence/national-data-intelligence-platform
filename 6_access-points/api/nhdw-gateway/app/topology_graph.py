@@ -32,16 +32,15 @@ Host tokens are matched against a lookup of every Service's
 form → the workload that Service selects. Edge ``kind`` (http|db|s3|smtp|native|
 oidc) is inferred from the target service + a small port→protocol map.
 
-Two honoured EXTERNAL exceptions are synthesized (neither is a deployed k8s
-workload, but each is a real declared connection to a 0_external/ system reached
-via the k3d host route):
-  * fayda-replica — public-dashboard's
-    ``FAYDA_INTERNAL_BASE=http://host.k3d.internal:8096`` auth connection;
-  * nhdw-ollama — the gateway's ``OLLAMA_URL=http://host.k3d.internal:11434`` LLM
-    connection (the assistant model runtime moved out of k8s to 0_external/llm/
-    on 2026-07-06 — on WSL2 the GPU only works in an external container).
-All *other* ``host.k3d.internal`` refs live only inside the excluded ingestor
-Jobs, so they never surface here.
+Off-cluster dependencies reached via the k3d host route are DELIBERATELY NOT
+surfaced as topology nodes (owner directive 2026-07-13) — the map is a pure
+in-cluster view, and a node for something that isn't a k8s workload reads as a
+phantom. This covers the gateway's ``OLLAMA_URL=host.k3d.internal:11434`` LLM
+(the assistant model runtime lives in 0_external/llm/ since 2026-07-06) and the
+public-dashboard's ``FAYDA_INTERNAL_BASE=host.k3d.internal:8096`` auth replica
+(0_external/fayda). Their real backends are untouched — only their boxes are
+omitted from this diagram. All ``host.k3d.internal`` refs otherwise live inside
+the excluded ingestor Jobs, so they never surface here either.
 
 The live k8s scan (same LIST the /orchestration layer uses) reconciles every
 node: declared × observed, health from ready-replica counts, phantom when a
@@ -441,8 +440,6 @@ async def derive_graph(*, api: str, token: str, ca: str | bool,
             "traffic": None,
         }
 
-    fayda_referenced = False
-    llm_referenced = False
     for nid, meta in wl_meta.items():
         texts = _scan_texts(meta["spec"], configmaps)
         blob = "\n".join(texts)
@@ -457,36 +454,15 @@ async def derive_graph(*, api: str, token: str, ca: str | bool,
             if port is None:
                 port = alias_default_port.get(alias)
             _add_edge(nid, target, port)
-        # external fayda-replica (honoured external exception #1)
-        if _FAYDA_HOST in blob and str(_FAYDA_PORT) in blob:
-            fayda_referenced = True
-            _add_edge(nid, _FAYDA_NODE, _FAYDA_PORT)
-        # external nhdw-ollama LLM (honoured external exception #2)
-        if _LLM_HOST in blob and str(_LLM_PORT) in blob:
-            llm_referenced = True
-            _add_edge(nid, _LLM_NODE, _LLM_PORT)
+        # External off-cluster dependencies (fayda-replica identity replica,
+        # nhdw-ollama LLM — both reached via host.k3d.internal) are DELIBERATELY
+        # NOT surfaced as topology nodes: the topology represents the Kubernetes
+        # cluster, and a node for something that isn't a k8s workload reads as a
+        # phantom (owner directive 2026-07-13 — "should not have a node for the
+        # ollama if it's not in the Kubernetes cluster"). No edge is drawn to them.
 
-    # synthesize the external nodes for any external edge we drew (external ≠ a
-    # scanned k8s workload, so they never appear in the node scan above).
-    for referenced, node_key, label in (
-        (fayda_referenced, _FAYDA_NODE, "fayda-replica"),
-        (llm_referenced,   _LLM_NODE,   "nhdw-ollama"),
-    ):
-        if referenced and node_key not in nodes:
-            nodes[node_key] = {
-                "id": node_key,
-                "label": label,
-                "subtitle": None,
-                "tier": "external",
-                "zone": zone_for(node_key, "external"),
-                "kind": "external",
-                "declared": True,
-                "observed": False,     # external, not a scanned k8s workload
-                "ephemeral": False,
-                "health": "unknown",
-                "phantom": False,       # external ≠ a missing internal workload
-                "k8s": None,
-            }
+    # (external nhdw-ollama / fayda-replica node synthesis REMOVED 2026-07-13 —
+    #  the graph is a pure in-cluster view; external deps are not nodes.)
 
     # (SMTP → Mailpit edge RETIRED 2026-07-06 — app email now goes to an
     # EXTERNAL Google SMTP relay, like fayda/ollama; there's no in-cluster mail

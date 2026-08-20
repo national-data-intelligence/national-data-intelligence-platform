@@ -30,7 +30,7 @@ const def: WidgetDef = {
     ], ctx.theme, { search: false, sort: true, pageSize: 14 });
     const note = document.createElement('div');
     note.style.cssText = 'font-size:11px;color:var(--ink-4,#9ca3af);padding:6px 2px 0;';
-    note.textContent = 'Comparative reach index — expected infants = population × 3.2% CBR (labeled estimate); lowest-reach regions locate the unreached (zero-dose) children.';
+    note.textContent = 'Comparative reach index. Expected infants are estimated as 3.2% of population (crude birth rate); lowest-reach regions locate the unreached (zero-dose) children.';
     ctx.el.appendChild(note);
     return table;
   },

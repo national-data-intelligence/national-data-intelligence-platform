@@ -29,7 +29,7 @@ async function draw(ctx: WidgetCtx) {
       authFetch(`/gw/artifacts?project=${encodeURIComponent(projectId)}&limit=100`),
       authFetch(`/gw/datasets?project_id=${encodeURIComponent(projectId)}&limit=100`),
     ]);
-    if (!rA.ok && !rD.ok) { ctx.empty(`Could not load the project's artifacts — ${await errText(rA)}`); return; }
+    if (!rA.ok && !rD.ok) { ctx.empty(`Could not load the project's artifacts: ${await errText(rA)}`); return; }
     if (rA.ok) items = unwrapList<ArtifactRow>(await rA.json());
     if (rD.ok) {
       const ds = unwrapList<any>(await rD.json()).map(d => ({ ...d, kind: 'dataset' } as ArtifactRow));
@@ -38,7 +38,7 @@ async function draw(ctx: WidgetCtx) {
   } catch { ctx.empty('Could not load the project’s artifacts.'); return; }
 
   if (!items.length) {
-    ctx.empty('No artifacts or datasets in this project yet — generate a dataset and link it, or register a model into the project.');
+    ctx.empty('No artifacts or datasets in this project yet. Generate a dataset and link it, or register a model into the project.');
     return;
   }
 

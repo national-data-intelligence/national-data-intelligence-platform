@@ -13,14 +13,14 @@ import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 
 const DEFAULTS = [
   { icon: 'i-hospital', value: '17,550', label: 'Health facilities', note: 'On the master facility registry' },
-  { icon: 'i-users', value: '107.3M', label: 'Population served', note: 'National · 2024 estimate' },
-  { icon: 'i-map', value: '1,082', label: 'Woredas covered', note: 'Across 14 regions' },
-  { icon: 'i-check-circle', value: '93%', label: 'Facility reporting rate', note: 'This month · HMIS' },
+  { icon: 'i-users', value: '107.3M', label: 'Population', note: 'Catchment served' },
+  { icon: 'i-map', value: '14', label: 'Regions', note: 'Administrative regions' },
+  { icon: 'i-map', value: '1,082', label: 'Woredas covered', note: 'Districts with a facility' },
 ];
 
 const def: WidgetDef = {
   id: 'ov-benchmarks',
-  reactsTo: ['geography', 'period'],
+  reactsTo: ['geography'],
   frameless: true,   // tiles ARE the cards — host draws no wrapping card
   async render(ctx: WidgetCtx) {
     const rows = await ctx.fetchData();
@@ -44,7 +44,7 @@ const def: WidgetDef = {
           const raw = String(c.icon ?? '').trim();
           const iconId = raw ? (raw.startsWith('i-') ? raw : `i-${raw}`) : DEFAULTS[i % DEFAULTS.length].icon;
           return `
-          <div style="background:${t.paper};border:1px solid ${t.line};border-radius:16px;padding:1rem 1.1rem;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:.35rem;min-width:0">
+          <div style="background:${t.paper};border-radius:16px;padding:1.1rem 1.2rem;box-shadow:0 1px 3px rgba(15,23,42,.06),0 6px 20px rgba(15,23,42,.04);display:flex;flex-direction:column;gap:.35rem;min-width:0">
             <div style="display:flex;align-items:center;gap:.55rem">
               <span style="display:inline-grid;place-items:center;width:32px;height:32px;border-radius:8px;background:${tint(col, 0.12)};color:${col};flex-shrink:0">
                 <svg class="ico" aria-hidden="true"><use href="#${iconId}"/></svg></span>

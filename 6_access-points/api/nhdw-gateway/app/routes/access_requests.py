@@ -20,8 +20,26 @@ from typing import Any
 from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request)
 from pydantic import BaseModel, EmailStr, Field
 
+import os
+
 from ..auth import UserCtx, get_user
-from .. import ops_db, keycloak_admin
+from .. import ops_db, keycloak_admin, mailer
+
+# Login-required dashboards a provisioned user can be sent to, keyed by the
+# dashboard id stored in ops_perm.role_dashboard (the authoritative grant). The
+# `public` portal needs no login and `demo` is a stub, so both are excluded from
+# the onboarding choice list. Host base is overridable for non-dev deployments.
+_PORTAL_DOMAIN = os.environ.get("PORTAL_BASE_DOMAIN", "127.0.0.1.nip.io")
+_DASH_META: dict[str, str] = {
+    "internal-bi": "Business Intelligence dashboard",
+    "workshop":    "Community Workshop portal",
+    "admin":       "Administration console",
+}
+_DASH_ORDER = ["internal-bi", "workshop", "admin"]
+
+
+def _dash_url(dash_id: str) -> str:
+    return f"https://{dash_id}.{_PORTAL_DOMAIN}"
 # Admin access-request actions are gated by the RBAC capability, NOT opa.decide:
 # there is no rego rule for admin.* verbs, so opa.decide denies them under
 # OPA_ENFORCE. _require_capability('approve_access_request') is the working gate
@@ -52,9 +70,16 @@ class PublicSubmission(BaseModel):
     purpose:    str        = Field(min_length=10, max_length=4000)
     supervisor_email: EmailStr | None = None
     irb:        str | None = Field(default=None, max_length=120)
-    # Optional Fayda (national eID) verification attached by the public form's
-    # "Verify with Fayda" popup — carried into the row so the admin queue can
-    # see a request came from a verified citizen.
+    # Optional identity verification attached by the public form's identity
+    # step. `id_type` is one of 'fayda' / 'national-id' / 'passport'.
+    #  · Fayda: the popup actually verifies the citizen, so verified_via='fayda'
+    #    and fayda_id carries the verified identity (the admin queue renders a
+    #    "Fayda-verified" badge purely on fayda_id's presence).
+    #  · National ID / Passport: there is no backend that can verify these, so
+    #    the number is treated as "provided, pending manual verification" — it is
+    #    NEVER written to fayda_id (that would falsely trip the verified badge).
+    id_type:      str | None = Field(default=None, max_length=40)
+    id_number:    str | None = Field(default=None, max_length=120)
     fayda_id:     str | None = Field(default=None, max_length=120)
     verified_via: str | None = Field(default=None, max_length=60)
 
@@ -76,9 +101,54 @@ async def submit_public_access_request(
     client_ip = (request.client.host if request.client else None)
     user_agent = request.headers.get("user-agent")
 
+    # Honest verification marker (§6.3): 'fayda' ONLY when the Fayda popup
+    # actually verified the citizen; a National ID / Passport number is recorded
+    # as '<type>_pending' (provided, pending manual verification) and never as
+    # verified. fayda_id is written ONLY on genuine Fayda verification because
+    # the admin queue renders the "Fayda-verified" badge on its presence alone.
+    if body.verified_via == "fayda":
+        verified_via: str | None = "fayda"
+        fayda_id: str | None = body.fayda_id
+    elif body.id_type and body.id_number:
+        verified_via = f"{body.id_type}_pending"
+        fayda_id = None
+    else:
+        verified_via = body.verified_via or None
+        fayda_id = body.fayda_id
+
     pool = await ops_db.ensure_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
+            # Duplicate guard (§6.3): reject a second ACTIVE (pending) request
+            # from the same requester (matched case-insensitively on email) whose
+            # requested scope OVERLAPS an already-pending one. A disjoint scope is
+            # accepted; an identical/overlapping (or a repeated blanket) request
+            # returns 409 so the queue never accrues duplicate rows for one
+            # applicant. Kept inside the txn so a burst of identical submits from
+            # one applicant does not race two rows in.
+            existing = await conn.fetch(
+                "SELECT tracking_id, dashboards "
+                "FROM ops_governance.access_request "
+                "WHERE status = 'pending' AND lower(email) = lower($1);",
+                str(body.email))
+            new_scope = set(dashboards)
+            for ex in existing:
+                ex_scope = set(ex["dashboards"] or [])
+                overlaps = bool(new_scope & ex_scope) or (
+                    not new_scope and not ex_scope)
+                if overlaps:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "duplicate_pending",
+                            "tracking_id": ex["tracking_id"],
+                            "message": (
+                                "You already have a pending access request "
+                                f"({ex['tracking_id']}) that covers this access. "
+                                "We will review it shortly; please wait for a "
+                                "decision before submitting the same request "
+                                "again."),
+                        })
             tracking_id = await conn.fetchval(
                 "SELECT ops_governance.next_access_request_tracking_id();")
             row = await conn.fetchrow("""
@@ -94,7 +164,7 @@ async def submit_public_access_request(
                 body.org, body.role,
                 str(body.supervisor_email) if body.supervisor_email else None,
                 body.irb, dashboards, body.purpose, client_ip, user_agent,
-                body.fayda_id, body.verified_via)
+                fayda_id, verified_via)
     return {
         "tracking_id": row["tracking_id"],
         "id":          str(row["id"]),
@@ -203,6 +273,56 @@ async def _provision_account(pool, req: dict[str, Any], granted_role: str,
                             VALUES ($1::uuid, $2, $3, now(), $4::uuid)
                             ON CONFLICT (kc_sub, kind, value) DO NOTHING;
                         """, kc_sub, kind, str(v), reviewer_kc_sub)
+
+    # Which login-required dashboards can this role actually reach? Read the
+    # authoritative grant table so the user is only ever offered what their role
+    # allows, and list ALL of them (the same credentials work across all via
+    # shared SSO) instead of forcing one — the user chooses which to sign in to.
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT rd.dashboard_id
+            FROM ops_perm.role_dashboard rd
+            JOIN ops_perm.role r ON r.id = rd.role_id
+            WHERE r.code = $1
+        """, granted_role)
+    granted = {r["dashboard_id"] for r in rows}
+    dashboards = [d for d in _DASH_ORDER if d in granted and d in _DASH_META]
+
+    # Onboarding e-mail via the UNIFIED SMTP mailer (not Keycloak's fragile
+    # set-password link): username + temporary password + the dashboard(s) to
+    # sign in at, where the first login forces the password change.
+    emailed = False
+    if req.get("email") and prov.get("temp_password"):
+        if dashboards:
+            lines = "\n".join(f"  - {_DASH_META[d]}: {_dash_url(d)}" for d in dashboards)
+            access_block = (
+                "You have been granted access to the following dashboard(s). Sign in to any\n"
+                "one of them; the same credentials work across all of them.\n\n"
+                f"{lines}\n"
+            )
+        else:
+            access_block = f"You can sign in at the NHDW portal: {_dash_url('public')}\n"
+        body = (
+            f"Hello {req.get('full_name') or 'there'},\n\n"
+            f"Your request for access to the Ethiopia National Health Data Warehouse "
+            f"has been approved and an account has been created for you.\n\n"
+            f"{access_block}\n"
+            f"  Username:            {req['email']}\n"
+            f"  Temporary password:  {prov['temp_password']}\n\n"
+            f"When you sign in for the first time you will be asked to choose your own "
+            f"password. The temporary password above stops working once you set a new one.\n\n"
+            f"Granted role: {granted_role}\n\n"
+            f"If you did not request this access, please ignore this e-mail."
+        )
+        emailed = await mailer.send(
+            req["email"],
+            "Your NHDW access is ready — sign in and set your password", body)
+    prov["emailed"] = emailed
+    prov["dashboards"] = [_dash_url(d) for d in dashboards]
+    # DEV-ONLY: surface the temp credential in the log so a demo can proceed even
+    # if the e-mail relay is slow (same convenience as the Fayda OTP dev line).
+    log.info("[provision][DEV-ONLY] %s temp password = %s -> dashboards %s (emailed=%s)",
+             req.get("email"), prov.get("temp_password"), prov["dashboards"], emailed)
     return prov
 
 
@@ -240,8 +360,8 @@ async def decide_access_request(
         prov_status = "provisioned"
 
     if note is None and provisioning:
-        note = (f"Provisioned {granted_role} · set-password email "
-                f"{'sent' if provisioning['emailed'] else 'FAILED — check SMTP'}")
+        note = (f"Provisioned {granted_role}. Sign-in details "
+                f"{'emailed to the applicant' if provisioning['emailed'] else 'could not be emailed (delivery unavailable)'}")
 
     async with pool.acquire() as conn:
         result = await conn.fetchrow("""

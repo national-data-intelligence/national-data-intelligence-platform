@@ -1,82 +1,225 @@
 /**
  * Widget · pub-access-modal — access-request modal (form + success view).
- * Re-homed verbatim from sections/AccessRequestModal.tsx (mockup L1472-1576).
  *
  * POSTs to /api/proxy/access-requests (FastAPI proxies to the gateway's
- * /api/public/access-requests endpoint, which returns the tracking ID).
- * Reads closeModal from the host.
+ * /api/public/access-requests endpoint, which returns the tracking ID and,
+ * on a duplicate pending request, a 409). Reads closeModal + setPage from the
+ * host — a public requester is NEVER linked to the admin console.
+ *
+ * Identity verification (§6.3) is a REAL email-OTP round-trip against Fayda:
+ *   1. The visitor enters their Fayda FAN and clicks "Send code". We POST
+ *      /api/proxy/fayda/challenge {fan}; the gateway confirms the FAN exists in
+ *      Fayda, emails a 6-digit code to the identity's registered address, and
+ *      returns the masked email.
+ *   2. The visitor enters the code and clicks "Verify". We POST
+ *      /api/proxy/fayda/verify {fan, code}; on success the gateway returns the
+ *      verified identity and we set verified_via='fayda' + fayda_id.
+ * The section is OPTIONAL (organisation accounts don't require it). A National
+ * ID / Passport path no longer exists — Fayda is the one real verifier.
+ *
+ * Explicit states:
+ *   not-started → sending → code-sent → verifying → verified
+ *                                     ↘ (bad_code / expired stay on code-sent)
  */
-import { useState, useEffect } from 'react';
-import { loadSiblingBases, fallbackBases, type SiblingBases } from '../../hooks/accessPoints';
+import { useState } from 'react';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
+
+/** Explicit verification lifecycle — one clear status is rendered per state. */
+type VerifyState =
+  | 'not-started'   // nothing sent yet
+  | 'sending'       // challenge in flight (emailing the code)
+  | 'code-sent'     // code emailed; awaiting the 6-digit entry
+  | 'verifying'     // verify in flight
+  | 'verified';     // Fayda confirmed the code
 
 type AccessForm = {
   name: string; email: string; phone: string; org: string; role: string;
   dashboards: string[]; purpose: string;
-  // P6: pre-filled by the "Verify with Fayda" popup. Sent through to the
-  // backend so the admin queue can render a verified-Fayda badge.
-  fayda_id: string;
-  verified_via: '' | 'fayda';
+  fan: string;                        // the entered Fayda FAN
+  faydaEmail: string;                 // the email registered to that FAN (the pair)
+  code: string;                       // the 6-digit OTP the visitor received
+  verifyState: VerifyState;
+  maskedEmail: string;                // e.g. "b•••@gmail.com" — shown after send
+  fayda_id: string;                   // set ONLY on a real Fayda verify
+  verified_via: '' | 'fayda';         // 'fayda' ONLY when genuinely verified
 };
 
 const EMPTY: AccessForm = {
   name: '', email: '', phone: '', org: '', role: '', dashboards: [], purpose: '',
+  fan: '', faydaEmail: '', code: '', verifyState: 'not-started', maskedEmail: '',
   fayda_id: '', verified_via: '',
 };
 
+type FieldErr = { name?: string; email?: string; purpose?: string; fan?: string; faydaEmail?: string; code?: string };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const FAN_RE = /^\d{12,16}$/;   // Ethiopia's FIN is 12 digits, the FAN 16.
+
+/** Format-check the FAN (shape only, not a verification). */
+function validateFan(value: string): string | null {
+  const v = value.trim();
+  if (!v) return 'Enter your Fayda number first.';
+  return FAN_RE.test(v) ? null : 'Enter a valid Fayda number (12 to 16 digits).';
+}
+
+/** Turn a gateway access-request error into a friendly line. */
+function friendlyError(status: number, body: any): string {
+  const detail = body?.detail;
+  if (status === 409) {
+    if (detail && typeof detail === 'object' && detail.message) return String(detail.message);
+    if (typeof detail === 'string') return detail;
+    return 'You already have a pending request for this access. We will review it shortly.';
+  }
+  if (status === 422) {
+    const fields = new Set<string>();
+    if (Array.isArray(detail)) {
+      for (const d of detail) {
+        const loc = Array.isArray(d?.loc) ? d.loc : [];
+        const f = loc[loc.length - 1];
+        if (f === 'full_name') fields.add('full name');
+        else if (f === 'email') fields.add('email');
+        else if (f === 'purpose') fields.add('purpose');
+        else if (typeof f === 'string') fields.add(String(f));
+      }
+    }
+    return fields.size
+      ? `Please check these fields and try again: ${Array.from(fields).join(', ')}.`
+      : 'Please review the form and try again.';
+  }
+  if (status === 502 || status === 503)
+    return 'The service is temporarily unavailable. Please try again in a moment.';
+  return 'Something went wrong submitting your request. Please try again in a moment.';
+}
+
+/** Map a Fayda challenge/verify `reason` to a friendly line. */
+function faydaReason(reason: string | undefined): string {
+  switch (reason) {
+    case 'not_found':          return 'No Fayda record matches that number. Check the digits, or continue without verification.';
+    case 'invalid_fan':        return 'Enter a valid Fayda number (12 to 16 digits).';
+    case 'rate_limited':       return 'Please wait a moment before requesting another code.';
+    case 'no_email_on_record': return 'This Fayda identity has no email on record, so we cannot send a code.';
+    case 'email_required':      return 'Enter the email registered to your Fayda number.';
+    case 'email_mismatch':      return 'That email does not match this Fayda number. Check both and try again.';
+    case 'bad_code':           return 'That code is not correct. Check the digits and try again.';
+    case 'expired':            return 'That code has expired — request a new one.';
+    case 'too_many_attempts':  return 'Too many incorrect attempts. Request a new code to try again.';
+    case 'service_unavailable': return 'The Fayda verification service could not be reached. Please try again in a moment.';
+    default:                   return 'We could not complete verification. Please try again in a moment.';
+  }
+}
+
 function AccessRequestModal({ host }: { host: PublicHost }) {
   const onClose = host.closeModal;
+  const { setPage } = host;
   const [form, setForm] = useState<AccessForm>(EMPTY);
+  const [fieldErr, setFieldErr] = useState<FieldErr>({});
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>('');
-  const [verifying, setVerifying] = useState(false);
-  // Admin-queue "View in admin queue" link — resolved from /api/access-points so
-  // it points at the admin dashboard's nip.io Ingress host, not compile-time
-  // localhost. Seeded with the same-origin fallback, refined on load.
-  const [bases, setBases] = useState<SiblingBases>(fallbackBases);
-  useEffect(() => { loadSiblingBases().then(setBases); }, []);
-
-  // P6: listen for the Fayda popup's postMessage and pre-fill the form.
-  useEffect(() => {
-    const handler = (evt: MessageEvent) => {
-      const m = (evt.data ?? {}) as { type?: string; payload?: any };
-      if (m.type !== 'nhdw:fayda-verify') return;
-      setVerifying(false);
-      const p = m.payload || {};
-      if (!p.ok) { setErr(`Fayda verification failed: ${p.error || 'unknown error'}`); return; }
-      setForm(f => ({
-        ...f,
-        name:         p.name || `${p.given_name || ''} ${p.family_name || ''}`.trim() || f.name,
-        phone:        p.phone || f.phone,
-        fayda_id:     p.fayda_id || '',
-        verified_via: 'fayda',
-      }));
-    };
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, []);
-
-  function verifyWithFayda() {
-    setErr('');
-    setVerifying(true);
-    const w = window.open('/auth/fayda-start', 'fayda',
-      'popup,width=520,height=640,scrollbars=yes');
-    if (!w) {
-      setVerifying(false);
-      setErr('Popup blocked. Please allow popups from this site and retry.');
-      return;
-    }
-    // Cancel path: the user closed the popup without signing in — the
-    // postMessage never arrives, so revert the button instead of leaving it
-    // stuck on "Opening Fayda…". (Success also closes the popup, but the
-    // message handler has already flipped verified_via by then.)
-    const watch = window.setInterval(() => {
-      if (w.closed) { window.clearInterval(watch); setVerifying(false); }
-    }, 500);
-  }
+  // Inline status under the identity card: a friendly line + tone.
+  const [verifyMsg, setVerifyMsg] =
+    useState<{ tone: 'good' | 'watch' | 'alert'; text: string } | null>(null);
 
   const update = (patch: Partial<AccessForm>) => setForm(f => ({ ...f, ...patch }));
+
+  // Editing the FAN invalidates any code already sent + any prior verification.
+  const changeFan = (value: string) => {
+    setFieldErr(fe => ({ ...fe, fan: undefined }));
+    setVerifyMsg(null);
+    setForm(f => ({
+      ...f, fan: value, code: '', maskedEmail: '',
+      verifyState: 'not-started', fayda_id: '', verified_via: '',
+    }));
+  };
+
+  // Editing the email also invalidates any code already sent + prior verification.
+  const changeFaydaEmail = (value: string) => {
+    setFieldErr(fe => ({ ...fe, faydaEmail: undefined }));
+    setVerifyMsg(null);
+    setForm(f => ({
+      ...f, faydaEmail: value, code: '', maskedEmail: '',
+      verifyState: 'not-started', fayda_id: '', verified_via: '',
+    }));
+  };
+
+  // Step 1 — confirm the FAN + registered email pair, then email a code to it.
+  const sendCode = async () => {
+    const e = validateFan(form.fan);
+    if (e) { setFieldErr(fe => ({ ...fe, fan: e })); return; }
+    const em = form.faydaEmail.trim();
+    if (!EMAIL_RE.test(em)) {
+      setFieldErr(fe => ({ ...fe, faydaEmail: 'Enter the email registered to your Fayda number.' }));
+      return;
+    }
+    setFieldErr(fe => ({ ...fe, fan: undefined, faydaEmail: undefined }));
+    setVerifyMsg(null);
+    setErr('');
+    update({ verifyState: 'sending' });
+    const fan = form.fan.trim();
+    try {
+      const r = await fetch('/api/proxy/fayda/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fan, email: em }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (r.ok && body.ok) {
+        setForm(f => ({ ...f, verifyState: 'code-sent', code: '',
+                        maskedEmail: body.masked_email || '' }));
+        setVerifyMsg({ tone: 'good',
+          text: `We sent a 6-digit code to ${body.masked_email || 'your registered email'}. Enter it below to finish.` });
+      } else {
+        setForm(f => ({ ...f, verifyState: 'not-started' }));
+        setVerifyMsg({ tone: 'alert', text: faydaReason(body.reason) });
+      }
+    } catch {
+      setForm(f => ({ ...f, verifyState: 'not-started' }));
+      setVerifyMsg({ tone: 'alert',
+        text: 'We could not reach the verification service. Please try again in a moment.' });
+    }
+  };
+
+  // Step 2 — submit the code the visitor received by email.
+  const verifyCode = async () => {
+    const code = form.code.trim();
+    if (!/^\d{4,8}$/.test(code)) {
+      setFieldErr(fe => ({ ...fe, code: 'Enter the 6-digit code from the email.' }));
+      return;
+    }
+    setFieldErr(fe => ({ ...fe, code: undefined }));
+    setErr('');
+    update({ verifyState: 'verifying' });
+    const fan = form.fan.trim();
+    try {
+      const r = await fetch('/api/proxy/fayda/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fan, code }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (r.ok && body.ok) {
+        setForm(f => ({
+          ...f,
+          verifyState: 'verified',
+          verified_via: 'fayda',
+          fayda_id: body.fayda_id || fan,
+          name:  f.name  || body.name || `${body.given_name || ''} ${body.family_name || ''}`.trim(),
+          phone: f.phone || body.phone_number || '',
+        }));
+        setVerifyMsg({ tone: 'good',
+          text: `Identity verified with Fayda${body.fayda_id ? ` (${body.fayda_id})` : ''}. Reviewers will see a verified badge.` });
+      } else {
+        // Stay on 'code-sent' so the visitor can retry the code or resend.
+        setForm(f => ({ ...f, verifyState: 'code-sent' }));
+        setVerifyMsg({ tone: 'alert', text: faydaReason(body.reason) });
+      }
+    } catch {
+      setForm(f => ({ ...f, verifyState: 'code-sent' }));
+      setVerifyMsg({ tone: 'alert',
+        text: 'We could not reach the verification service. Please try again in a moment.' });
+    }
+  };
+
   const toggleDash = (id: string, on: boolean) =>
     update({ dashboards: on
       ? Array.from(new Set([...form.dashboards, id]))
@@ -86,97 +229,190 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
     if (e.target === e.currentTarget) onClose();
   };
 
+  // Mirror the backend PublicSubmission constraints so a short purpose / bad
+  // email is caught inline BEFORE we submit (no round-trip 422).
+  const validate = (): boolean => {
+    const fe: FieldErr = {};
+    if (form.name.trim().length < 2) fe.name = 'Enter your full name (at least 2 characters).';
+    if (!EMAIL_RE.test(form.email.trim())) fe.email = 'Enter a valid email address.';
+    if (form.purpose.trim().length < 10) fe.purpose = 'Describe your intended use in at least 10 characters.';
+    setFieldErr(fe);
+    return Object.keys(fe).length === 0;
+  };
+
   const submit = async () => {
-    setErr(''); setBusy(true);
+    setErr('');
+    if (!validate()) return;
+    setBusy(true);
     try {
-      const payload: any = {
-        full_name: form.name,
-        email:     form.email,
-        purpose:   form.purpose || 'Public dashboard access request.',
+      // Only send filled optionals — empty strings become omitted so nothing
+      // invalid reaches the backend.
+      const payload: Record<string, unknown> = {
+        full_name: form.name.trim(),
+        email:     form.email.trim(),
+        purpose:   form.purpose.trim(),
       };
-      if (form.phone)     payload.phone = form.phone;
-      if (form.org)       payload.org   = form.org;
-      if (form.role)      payload.role  = form.role;
+      if (form.phone.trim()) payload.phone = form.phone.trim();
+      if (form.org.trim())   payload.org   = form.org.trim();
+      if (form.role.trim())  payload.role  = form.role.trim();
       if (form.dashboards.length) payload.dashboards = form.dashboards;
-      // P6: include Fayda verification when present
-      if (form.fayda_id)     payload.fayda_id = form.fayda_id;
-      if (form.verified_via) payload.verified_via = form.verified_via;
+      // Identity: id_type/fayda_id/verified_via='fayda' ONLY on a genuine verify.
+      if (form.verifyState === 'verified' && form.verified_via === 'fayda') {
+        payload.id_type = 'fayda';
+        payload.fayda_id = form.fayda_id || form.fan.trim();
+        payload.verified_via = 'fayda';
+      }
       const r = await fetch('/api/proxy/access-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const body = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(body.detail || ('HTTP ' + r.status));
+      if (!r.ok) { setErr(friendlyError(r.status, body)); return; }
       setSubmitted(body.tracking_id);
-    } catch (e: any) {
-      setErr(e.message || 'submit failed');
+      // Reset the form after a successful submit so a re-open starts clean.
+      setForm(EMPTY);
+      setFieldErr({});
+      setVerifyMsg(null);
+    } catch {
+      setErr('We could not reach the server. Please check your connection and try again.');
     } finally {
       setBusy(false);
     }
   };
 
-  const reset = () => { setForm(EMPTY); setSubmitted(null); setErr(''); onClose(); };
+  // Success-view actions — user-authorized only, never a link to the admin console.
+  const closeAll = () => { setSubmitted(null); setForm(EMPTY); setFieldErr({}); setErr(''); setVerifyMsg(null); onClose(); };
+  const returnToDatasets = () => { setSubmitted(null); setForm(EMPTY); setFieldErr({}); setErr(''); setVerifyMsg(null); setPage('data'); onClose(); };
+
+  const verified = form.verifyState === 'verified';
+  const codeSent = form.verifyState === 'code-sent' || form.verifyState === 'verifying';
+  const sending  = form.verifyState === 'sending';
+  const toneColor = (t: 'good' | 'watch' | 'alert') =>
+    t === 'good' ? 'var(--good, #1d8b5a)'
+    : t === 'alert' ? 'var(--alert, #c0392b)'
+    : 'var(--watch, #b7791f)';
 
   return (
     <div className="modal-bg" onClick={onBackdrop}>
       <div className="modal" style={{ maxWidth: 640 }}>
 
         {!submitted && (
-          <div>
+          <>
             <div className="modal-hdr">
               <h2>Request NHDW access</h2>
-              <p>Tell us who you are and what you need · response within 2 business days</p>
+              <p>Tell us who you are and what you need. We respond within 2 business days.</p>
             </div>
             <div className="modal-body">
-              {/* P6: optional Fayda verification — pre-fills name + sets verified badge */}
+              {/* Identity verification (optional) — Fayda email-OTP round-trip */}
               <div style={{
-                background: form.verified_via === 'fayda' ? 'var(--good-50, #e7f5ee)' : 'var(--paper-2)',
-                border: form.verified_via === 'fayda' ? '1px solid var(--good, #1d8b5a)' : '1px solid var(--border)',
+                background: verified ? 'var(--good-50, #e7f5ee)' : 'var(--paper-2)',
+                border: verified ? '1px solid var(--good, #1d8b5a)' : '1px solid var(--border)',
                 borderRadius: 'var(--radius-lg)', padding: '0.9rem 1.1rem',
-                marginBottom: '1rem', display: 'flex', gap: '0.85rem',
-                alignItems: 'center', flexWrap: 'wrap',
-              }}>
-                <span className="ico-circle tint-navy" style={{ flexShrink: 0 }}>
-                  <svg><use href="#i-shield-check" /></svg>
-                </span>
-                <div style={{ flex: '1 1 12rem', minWidth: 0 }}>
-                  {form.verified_via === 'fayda' ? (
-                    <>
-                      <p className="text-sm" style={{ margin: 0, fontWeight: 600, color: 'var(--good, #1d8b5a)' }}>
-                        ✓ Fayda-verified · {form.fayda_id}
-                      </p>
-                      <p className="text-xs muted" style={{ margin: '0.2rem 0 0' }}>
-                        Reviewers will see this badge in the admin queue. Your government-issued identity has been verified.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm" style={{ margin: 0, fontWeight: 600 }}>
-                        Optional · verify your Ethiopian National ID (Fayda)
-                      </p>
-                      <p className="text-xs muted" style={{ margin: '0.2rem 0 0' }}>
-                        Citizens can pre-verify their identity to fast-track approval. Not required for org-tier accounts.
-                      </p>
-                    </>
+                marginBottom: '1rem',
+              }} data-verify-state={form.verifyState}>
+                <div style={{ display: 'flex', gap: '0.85rem', alignItems: 'flex-start' }}>
+                  <span className="ico-circle tint-navy" style={{ flexShrink: 0 }}>
+                    <svg><use href="#i-shield-check" /></svg>
+                  </span>
+                  <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                    <p className="text-sm" style={{ margin: 0, fontWeight: 600 }}>
+                      Verify your identity with Fayda (optional)
+                    </p>
+                    <p className="text-xs muted" style={{ margin: '0.2rem 0 0' }}>
+                      Enter your Fayda number and the email registered to it; we send a one-time
+                      code to that address to confirm it is you. Helps reviewers approve faster. Not
+                      required for organisation accounts.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Step 1 — FAN + registered email (the pair) + Send code */}
+                <div className="field-group" style={{ marginTop: '0.8rem' }}>
+                  <label>Fayda number (FAN)</label>
+                  <input type="text" inputMode="numeric"
+                         value={form.fan} placeholder="e.g. 1000000000000001"
+                         aria-invalid={!!fieldErr.fan}
+                         disabled={verified}
+                         onChange={e => changeFan(e.target.value)} />
+                  {fieldErr.fan && (
+                    <p className="text-xs" style={{ margin: '0.35rem 0 0', color: 'var(--alert, #c0392b)' }}>
+                      {fieldErr.fan}
+                    </p>
                   )}
                 </div>
-                {form.verified_via !== 'fayda' && (
-                  <button className="btn btn-sm btn-primary" onClick={verifyWithFayda} disabled={verifying} style={{ flexShrink: 0 }}>
-                    {verifying ? 'Opening Fayda…' : 'Verify with Fayda'}
-                  </button>
+                <div className="field-group" style={{ marginTop: '0.6rem' }}>
+                  <label>Email on your Fayda record</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input type="email" inputMode="email"
+                           value={form.faydaEmail} placeholder="you@example.com"
+                           aria-invalid={!!fieldErr.faydaEmail}
+                           disabled={verified}
+                           onChange={e => changeFaydaEmail(e.target.value)}
+                           style={{ flex: '1 1 auto', minWidth: 0 }} />
+                    <button type="button" className="btn btn-sm btn-primary"
+                            onClick={sendCode}
+                            disabled={sending || verified || form.verifyState === 'verifying'}
+                            style={{ flexShrink: 0 }}>
+                      {sending ? 'Sending' : verified ? 'Verified' : codeSent ? 'Resend code' : 'Send code'}
+                    </button>
+                  </div>
+                  {fieldErr.faydaEmail && (
+                    <p className="text-xs" style={{ margin: '0.35rem 0 0', color: 'var(--alert, #c0392b)' }}>
+                      {fieldErr.faydaEmail}
+                    </p>
+                  )}
+                </div>
+
+                {/* Step 2 — code entry (revealed after a code is sent) */}
+                {codeSent && !verified && (
+                  <div className="field-group" style={{ marginTop: '0.7rem' }}>
+                    <label>6-digit code</label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input type="text" inputMode="numeric" maxLength={8}
+                             value={form.code} placeholder="123456"
+                             aria-invalid={!!fieldErr.code}
+                             onChange={e => { setFieldErr(fe => ({ ...fe, code: undefined }));
+                                              update({ code: e.target.value }); }}
+                             style={{ flex: '1 1 auto', minWidth: 0, letterSpacing: '0.25em' }} />
+                      <button type="button" className="btn btn-sm btn-primary"
+                              onClick={verifyCode}
+                              disabled={form.verifyState === 'verifying'}
+                              style={{ flexShrink: 0 }}>
+                        {form.verifyState === 'verifying' ? 'Verifying' : 'Verify'}
+                      </button>
+                    </div>
+                    {fieldErr.code && (
+                      <p className="text-xs" style={{ margin: '0.35rem 0 0', color: 'var(--alert, #c0392b)' }}>
+                        {fieldErr.code}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {verifyMsg && (
+                  <p className="text-xs" role="status" aria-live="polite"
+                     style={{ margin: '0.6rem 0 0', fontWeight: 500, color: toneColor(verifyMsg.tone) }}>
+                    {verifyMsg.text}
+                  </p>
                 )}
               </div>
 
               <div className="grid grid-2 gap-sm">
                 <div className="field-group"><label>Full name</label>
                   <input type="text" value={form.name} placeholder="Dr Tigist Bekele"
-                         onChange={e => update({ name: e.target.value })} /></div>
+                         aria-invalid={!!fieldErr.name}
+                         onChange={e => { update({ name: e.target.value }); if (fieldErr.name) setFieldErr(fe => ({ ...fe, name: undefined })); }} />
+                  {fieldErr.name && <p className="text-xs" style={{ margin: '0.25rem 0 0', color: 'var(--alert, #c0392b)' }}>{fieldErr.name}</p>}
+                </div>
                 <div className="field-group"><label>Email</label>
                   <input type="email" value={form.email} placeholder="tigist.bekele@moh.gov.et"
-                         onChange={e => update({ email: e.target.value })} /></div>
+                         aria-invalid={!!fieldErr.email}
+                         onChange={e => { update({ email: e.target.value }); if (fieldErr.email) setFieldErr(fe => ({ ...fe, email: undefined })); }} />
+                  {fieldErr.email && <p className="text-xs" style={{ margin: '0.25rem 0 0', color: 'var(--alert, #c0392b)' }}>{fieldErr.email}</p>}
+                </div>
                 <div className="field-group"><label>Phone</label>
-                  <input type="tel" value={form.phone} placeholder="+251 911 ..."
+                  <input type="tel" value={form.phone} placeholder="+251 911 000000"
                          onChange={e => update({ phone: e.target.value })} /></div>
                 <div className="field-group"><label>Organisation</label>
                   <input type="text" value={form.org} placeholder="FMoH / RHB / EPHI / Partner"
@@ -185,7 +421,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
               <div className="field-group">
                 <label>Role / job title</label>
                 <input type="text" value={form.role}
-                       placeholder="Programme M&E officer, RHB director, Researcher, ..."
+                       placeholder="Programme M&amp;E officer, RHB director, Researcher"
                        onChange={e => update({ role: e.target.value })} />
               </div>
               <div className="field-group">
@@ -210,31 +446,32 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
               <div className="field-group">
                 <label>Purpose &amp; intended use</label>
                 <textarea rows={3} value={form.purpose}
-                          placeholder="Briefly describe how you intend to use the data, your project, and the time horizon..."
-                          onChange={e => update({ purpose: e.target.value })} />
+                          aria-invalid={!!fieldErr.purpose}
+                          placeholder="Briefly describe how you intend to use the data, your project, and the time horizon."
+                          onChange={e => { update({ purpose: e.target.value }); if (fieldErr.purpose) setFieldErr(fe => ({ ...fe, purpose: undefined })); }} />
+                {fieldErr.purpose && <p className="text-xs" style={{ margin: '0.25rem 0 0', color: 'var(--alert, #c0392b)' }}>{fieldErr.purpose}</p>}
               </div>
               <div className="field-group">
                 <label>Supporting documentation</label>
                 <input type="file" multiple />
-                <p className="text-xs muted">Supervisor letter, IRB approval, project proposal, employment verification (PDF/DOCX, ≤ 10MB each)</p>
+                <p className="text-xs muted">Supervisor letter, IRB approval, project proposal, employment verification (PDF/DOCX, up to 10MB each)</p>
               </div>
               <p className="text-xs muted">
                 By submitting, you accept the FMoH <a href="#">data use agreement</a> and confirm you will not redistribute restricted data.
               </p>
-              {err && <p className="text-sm" style={{ color: 'var(--alert)' }}>{err}</p>}
+              {err && <p className="text-sm" role="alert" style={{ color: 'var(--alert)' }}>{err}</p>}
             </div>
             <div className="modal-foot">
               <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="btn btn-primary" onClick={submit}
-                      disabled={busy || !form.name || !form.email || !form.purpose}>
-                {busy ? 'Submitting…' : 'Submit request'}
+              <button className="btn btn-primary" onClick={submit} disabled={busy}>
+                {busy ? 'Submitting' : 'Submit request'}
               </button>
             </div>
-          </div>
+          </>
         )}
 
         {submitted && (
-          <div>
+          <>
             <div className="modal-hdr">
               <h2><svg className="ico"><use href="#i-check-circle" /></svg> Request submitted</h2>
               <p>Your request has been queued for FMoH IT review.</p>
@@ -253,43 +490,23 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                 }}>
                   <span>{submitted}</span>
                 </p>
-                <p className="text-sm muted">Keep this ID. You'll receive an email confirmation, and the FMoH IT team will respond within 2 business days.</p>
+                <p className="text-sm muted">Keep this ID. You will receive an email confirmation, and the FMoH IT team will respond within 2 business days.</p>
               </div>
 
               <div style={{ background: 'var(--paper-2)', borderRadius: 'var(--radius-lg)', padding: '0.95rem 1.1rem', marginTop: '0.6rem' }}>
                 <p className="text-sm" style={{ marginBottom: '0.4rem' }}><strong>What happens next</strong></p>
                 <ol className="text-sm" style={{ paddingLeft: '1.2rem', color: 'var(--ink-2)', margin: 0 }}>
-                  <li>Your request lands in the <strong>Infrastructure &amp; Access Management</strong> queue</li>
-                  <li>A system administrator reviews scope &amp; supporting documents</li>
-                  <li>You receive an approval/denial email with sign-in instructions</li>
-                  <li>Approved? Open the dashboard you were granted from the <strong>Dashboards</strong> menu and sign in there</li>
+                  <li>A system administrator reviews your scope and supporting documents</li>
+                  <li>You receive an approval or denial email with sign-in instructions</li>
+                  <li>Once approved, open the dashboard you were granted from the <strong>Dashboards</strong> menu and sign in there</li>
                 </ol>
-              </div>
-
-              <div style={{
-                marginTop: '1rem', padding: '0.95rem 1.1rem',
-                background: 'var(--paper-2)', borderRadius: 'var(--radius-lg)',
-                color: 'var(--ink-2)', boxShadow: 'var(--shadow-1)',
-                display: 'flex', gap: '0.85rem', alignItems: 'flex-start', flexWrap: 'wrap',
-              }}>
-                <span className="ico-circle tint-watch"><svg><use href="#i-info" /></svg></span>
-                <div style={{ flex: '1 1 12rem', minWidth: 0 }}>
-                  <p className="text-xs" style={{ fontWeight: 600, marginBottom: '0.2rem', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Demo mockup</p>
-                  <p className="text-sm" style={{ margin: 0, color: 'var(--ink-2)' }}>
-                    Since this is a design mockup, you can <strong>preview the admin side</strong> and
-                    see your request appear in the IT operations queue in real-time.
-                  </p>
-                </div>
               </div>
             </div>
             <div className="modal-foot">
-              <button className="btn btn-ghost" onClick={reset}>Close</button>
-              <a className="btn btn-primary"
-                 href={`${bases.admin}/?new_request=${submitted}`}>
-                <svg className="ico"><use href="#i-shield" /></svg> View in admin queue (demo) <svg className="ico"><use href="#i-arrow-right" /></svg>
-              </a>
+              <button className="btn btn-ghost" onClick={closeAll}>Close</button>
+              <button className="btn btn-primary" onClick={returnToDatasets}>Return to datasets</button>
             </div>
-          </div>
+          </>
         )}
 
       </div>

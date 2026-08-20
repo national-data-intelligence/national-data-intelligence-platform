@@ -22,11 +22,28 @@ NS=nhdw
 for a in "$@"; do case "$a" in --namespace=*) NS="${a#--namespace=}";; esac; done
 
 OPS_DB=nhdw_ops
-SEC_DIR="$REPO/bundle/seeds/security"
+SEC_DIR="$REPO/bundle/seed-pack/app/security"
 LOADER="$REPO/7_security/scripts/load_security_seed.py"
 PGADMIN_PW=$(kubectl -n "$NS" get secret postgres-vault-secrets -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
 
 echo "== APP/SECURITY seeding (→ ${OPS_DB}) =="
+
+# ── compat gate (P1.7): refuse a seed pack that targets a different system ────
+# The pack declares targets_system; the system stamps VERSION. If they disagree,
+# refuse BEFORE writing anything — the fail-closed "seeds can't break the system"
+# guarantee. Gracefully skipped if VERSION / manifest / validator is absent.
+_VER_FILE="$REPO/VERSION"; _MANIFEST="$REPO/bundle/seed-pack/manifest.yaml"
+_VALIDATE="$REPO/bundle/scripts/seed-pack-engine/validate.py"
+if [ -f "$_VER_FILE" ] && [ -f "$_MANIFEST" ] && [ -f "$_VALIDATE" ]; then
+  _SYSVER="$(cat "$_VER_FILE")"
+  if python3 "$_VALIDATE" "$_MANIFEST" --system-version "$_SYSVER" >/dev/null 2>&1; then
+    echo "▸ [compat-gate] seed pack compatible with system ${_SYSVER} ✓"
+  else
+    echo "== FATAL: seed pack incompatible with system ${_SYSVER} — refusing to seed =="
+    python3 "$_VALIDATE" "$_MANIFEST" --system-version "$_SYSVER" 2>&1 | sed 's/^/  /'
+    exit 1
+  fi
+fi
 
 # ── 0. reconcile the ops_perm / ops_identity SCHEMA before the RBAC loader ────
 # restore-state (bootstrap) `pg_restore --clean`s an OLDER packed nhdw_ops dump
@@ -39,7 +56,7 @@ echo "== APP/SECURITY seeding (→ ${OPS_DB}) =="
 # CREATE/ALTER ... IF NOT EXISTS (best-effort; duplicate-object errors are skipped)
 # → safe on a virgin boot too, where initdb already ran them.
 echo "▸ [perm-schema-heal] re-apply ops_perm schema (survives restore-state --clean)"
-for sql in 17_perm_schemas.sql 23_perm_admin_grants.sql 25_perm_scope_migration.sql; do
+for sql in 17_perm_schemas.sql 23_perm_admin_grants.sql 25_perm_scope_migration.sql 32_permission_store.sql; do
   f="$REPO/3_storage/postgres/init/${sql}"
   [ -f "$f" ] || { echo "  ! ${sql} missing — skipping"; continue; }
   kubectl -n "$NS" exec -i postgres-vault-0 -- \
@@ -52,7 +69,7 @@ done
 # The host has no pip and the postgres pod has no python, so run the loader as a
 # K8s Job: python:3.12-slim, the loader + security YAML mounted from a configMap,
 # talking to the postgres-vault Service over cluster DNS. Idempotent (ON CONFLICT).
-echo "▸ [security-rbac] load_security_seed.py over bundle/seeds/security/"
+echo "▸ [security-rbac] load_security_seed.py over bundle/seed-pack/app/security/"
 if [ ! -f "$LOADER" ] || [ ! -d "$SEC_DIR" ]; then
   echo "  ! loader or seed dir missing — skipping"
 else
@@ -69,9 +86,13 @@ else
     echo "  ✗ collect-catalog.py FAILED — fix the authored catalog files" >&2
     exit 1
   fi
+  # #88: the permission store is normalized from bundle/roles/*.yaml (the OPA
+  # data-permission source), which lives OUTSIDE the seed dir — mount those too
+  # (as r-*.yaml keys) and point the loader at /opt/seed via NHDW_ROLES_DIR.
   kubectl -n "$NS" create configmap security-seed-files \
     --from-file="$LOADER" --from-file="$CATFILE" \
     $(for y in "$SEC_DIR"/*.yaml; do echo "--from-file=$y"; done) \
+    $(for r in "$REPO"/bundle/roles/r-*.yaml; do echo "--from-file=$r"; done) \
     --dry-run=client -o yaml | kubectl -n "$NS" apply -f - >/dev/null
   rm -rf "$CATTMP"
 
@@ -100,6 +121,8 @@ spec:
             - { name: POSTGRES_PORT, value: "5432" }
             - { name: POSTGRES_USER, value: vault_admin }
             - { name: OPS_DB_NAME,   value: ${OPS_DB} }
+            # #88: role YAMLs are mounted alongside the seed files in /opt/seed.
+            - { name: NHDW_ROLES_DIR, value: /opt/seed }
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef: { name: postgres-vault-secrets, key: POSTGRES_PASSWORD }
@@ -127,8 +150,8 @@ fi
 
 # ── 1b. public-dashboard articles CMS (ops_governance.public_article) ─────────
 ART_LOADER="$REPO/7_security/scripts/load_public_articles.py"
-ART_DIR="$REPO/bundle/seeds/articles"
-echo "▸ [public-articles] load_public_articles.py over bundle/seeds/articles/"
+ART_DIR="$REPO/bundle/seed-pack/app/articles"
+echo "▸ [public-articles] load_public_articles.py over bundle/seed-pack/app/articles/"
 if [ ! -f "$ART_LOADER" ] || [ ! -f "$ART_DIR/articles.yaml" ]; then
   echo "  ! articles loader or seed missing — skipping"
 else
@@ -184,7 +207,7 @@ fi
 echo "▸ [workshop-groups] 15_workshop_groups_seed.sh"
 if kubectl -n "$NS" exec -i postgres-vault-0 -- \
       env POSTGRES_USER=vault_admin OPS_DB_NAME="$OPS_DB" PGPASSWORD="$PGADMIN_PW" \
-      bash -s < "$REPO/3_storage/postgres/init/15_workshop_groups_seed.sh" >/dev/null 2>&1; then
+      bash -s < "$REPO/bundle/seed-pack/app/workshop-groups/15_workshop_groups_seed.sh" >/dev/null 2>&1; then
   n=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGADMIN_PW" \
         psql -U vault_admin -d "$OPS_DB" -At -c "SELECT count(*) FROM ops_artifact.workshop_group" 2>/dev/null)
   m=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGADMIN_PW" \
@@ -195,15 +218,19 @@ else
   FAILED=1
 fi
 
-# ── 3. program-demo tables (03) — directly-seeded APP data, NOT pipeline-derivable ─
-# programme_metrics / submission_funnel / stock_status back the facility-detail BI
-# components. 03_program_demo.sql lives in the initdb configMap too, but initdb only
-# fires on a VIRGIN data dir — re-running it here (TRUNCATE + INSERT, idempotent)
-# guarantees the tables are populated on every boot in BOTH modes.
-echo "▸ [program-demo] 03_program_demo.sql (facility-detail demo tables)"
-if kubectl -n "$NS" exec -i postgres-vault-0 -- \
-      env PGPASSWORD="$PGADMIN_PW" psql -U vault_admin -d nhdw_vault -v ON_ERROR_STOP=1 -q \
-      < "$REPO/3_storage/postgres/init/03_program_demo.sql" >/dev/null 2>&1; then
+# ── 3. program-demo SCHEMA (init) + DATA (seed-pack) — directly-seeded APP data ─
+# programme_metrics / submission_funnel / stock_status + the bi_programme views back
+# the facility-detail BI components. The SCHEMA (tables + views + grants) lives in
+# 3_storage/postgres/init/03_program_demo.sql (also in the initdb configMap); the DEMO
+# DATA is the swappable seed pack (bundle/seed-pack/app/program-demo). initdb only
+# fires on a VIRGIN data dir, so re-apply BOTH here — schema (CREATE OR REPLACE) then
+# data (idempotent TRUNCATE + INSERT) — so tables/views stay current and populated on
+# every boot in BOTH modes.
+echo "▸ [program-demo] schema (init) + data (seed-pack)"
+if cat "$REPO/3_storage/postgres/init/03_program_demo.sql" \
+       "$REPO/bundle/seed-pack/app/program-demo/program_demo_data.sql" \
+     | kubectl -n "$NS" exec -i postgres-vault-0 -- \
+       env PGPASSWORD="$PGADMIN_PW" psql -U vault_admin -d nhdw_vault -v ON_ERROR_STOP=1 -q >/dev/null 2>&1; then
   pm=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGADMIN_PW" \
         psql -U vault_admin -d nhdw_vault -At -c "SELECT count(*) FROM bi_facility.programme_metrics" 2>/dev/null)
   echo "  ✓ program-demo tables seeded (programme_metrics=${pm})"
@@ -239,7 +266,7 @@ fi
 #                            NOT take at initdb on a fresh boot (11/27 split), so
 #                            the runner's write_drift hit UndefinedColumn 'kind'.
 #                            Runs BEFORE seed-ml (7.5), so drift/score work. Idempotent.
-for mig in 22_project.sh 26_artifact_project.sh 28_dataset_project_link.sh 29_project_review.sh 27_ml_monitoring.sh; do
+for mig in 22_project.sh 26_artifact_project.sh 28_dataset_project_link.sh 29_project_review.sh 27_ml_monitoring.sh 33_workshop_group_flows.sh; do
   echo "▸ [ops-migration] ${mig}"
   if kubectl -n "$NS" exec -i postgres-vault-0 -- \
         env POSTGRES_USER=vault_admin OPS_DB_NAME="$OPS_DB" PGPASSWORD="$PGADMIN_PW" \
@@ -250,6 +277,16 @@ for mig in 22_project.sh 26_artifact_project.sh 28_dataset_project_link.sh 29_pr
     FAILED=1
   fi
 done
+
+# ── group invite/request DEMO content (after 33 tables + 15 groups exist) ────
+echo "▸ [workshop-group-flows] 34_workshop_group_flows_seed.sh"
+if kubectl -n "$NS" exec -i postgres-vault-0 -- \
+      env POSTGRES_USER=vault_admin OPS_DB_NAME="$OPS_DB" PGPASSWORD="$PGADMIN_PW" \
+      bash -s < "$REPO/bundle/seed-pack/app/workshop-groups/34_workshop_group_flows_seed.sh" >/dev/null 2>&1; then
+  echo "  ✓ group invite/request demo content seeded"
+else
+  echo "  ! group-flow demo seed skipped (non-fatal)"
+fi
 
 if [ "${FAILED:-0}" -ne 0 ]; then
   echo "== app/security seeding FAILED (see ✗ above) =="

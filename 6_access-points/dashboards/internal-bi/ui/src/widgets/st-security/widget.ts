@@ -74,7 +74,7 @@ async function draw(ctx: WidgetCtx, reveal?: { token: string; warning: string })
 
   const revealHtml = reveal ? `
     <div style="margin:.4rem 0 .9rem;padding:.7rem .8rem;border:1px solid ${theme.status.good};border-radius:8px;background:${theme.status.good}12">
-      <div style="font-size:.8rem;font-weight:700;color:${theme.status.good};margin-bottom:.35rem">New token — copy it now</div>
+      <div style="font-size:.8rem;font-weight:700;color:${theme.status.good};margin-bottom:.35rem">New token, copy it now</div>
       <div style="display:flex;gap:.5rem;align-items:center">
         <code style="flex:1;font-family:${theme.fontMono};font-size:.82rem;word-break:break-all;background:${theme.paper};padding:.4rem .5rem;border-radius:6px">${esc(reveal.token)}</code>
         <button class="btn btn-sm btn-primary" data-act="copy">Copy</button>
@@ -83,7 +83,7 @@ async function draw(ctx: WidgetCtx, reveal?: { token: string; warning: string })
     </div>` : '';
 
   const tableHtml = loadErr
-    ? `<p style="font-size:.86rem;color:${theme.status.alert};margin:.2rem 0">Couldn't load your access tokens — the service is unreachable. Try again shortly.</p>`
+    ? `<p style="font-size:.86rem;color:${theme.status.alert};margin:.2rem 0">Couldn't load your access tokens; the service is unreachable. Try again shortly.</p>`
     : denied
     ? `<p style="font-size:.86rem;color:${theme.ink[2]};margin:.2rem 0">You don't have access to issue or view API tokens.</p>`
     : tokens.length
@@ -99,7 +99,7 @@ async function draw(ctx: WidgetCtx, reveal?: { token: string; warning: string })
     <div style="display:flex;flex-direction:column;gap:.5rem">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.5rem .7rem;border:1px solid ${theme.line};border-radius:8px">
         <span style="font-size:.84rem;color:${theme.ink[2]}">
-          <strong style="color:${theme.ink[1]}">Password &amp; sessions</strong> · ${esc(sessLabel)} (managed by Keycloak).
+          <strong style="color:${theme.ink[1]}">Password &amp; sessions</strong>, ${esc(sessLabel)} (managed by Keycloak).
           A reset link is emailed to your account.
         </span>
         <button class="btn btn-sm btn-ghost" data-act="reset-pw">Reset password</button>
@@ -134,7 +134,7 @@ async function draw(ctx: WidgetCtx, reveal?: { token: string; warning: string })
       if (r.ok && j.sent) {
         if (msg) msg.innerHTML = `<span style="color:${theme.status.good}">✓ A set-password link was emailed to ${esc(j.email || 'your account')}.</span>`;
       } else {
-        if (msg) msg.innerHTML = `<span style="color:${theme.status.alert}">${esc(j.detail || 'Could not send the reset email — try again shortly.')}</span>`;
+        if (msg) msg.innerHTML = `<span style="color:${theme.status.alert}">${esc(j.detail || 'Could not send the reset email. Try again shortly.')}</span>`;
       }
     } catch {
       if (msg) msg.innerHTML = `<span style="color:${theme.status.alert}">Network error sending the reset email.</span>`;
@@ -159,7 +159,7 @@ async function draw(ctx: WidgetCtx, reveal?: { token: string; warning: string })
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { if (errEl) { errEl.textContent = j.detail || `Could not issue token (${r.status}).`; errEl.style.display = 'block'; } return; }
-      await draw(ctx, { token: j.token, warning: j.warning || 'Save the token now — it cannot be retrieved later.' });
+      await draw(ctx, { token: j.token, warning: j.warning || 'Save the token now; it cannot be retrieved later.' });
     } catch { if (errEl) { errEl.textContent = 'Network error issuing token.'; errEl.style.display = 'block'; } }
   });
   ctx.el.querySelectorAll<HTMLButtonElement>('[data-act="revoke"]').forEach(btn => {

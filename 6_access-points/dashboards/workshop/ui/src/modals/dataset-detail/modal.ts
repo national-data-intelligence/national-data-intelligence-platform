@@ -261,7 +261,7 @@ const def: ModalDef = {
             <select class="ws-project-picker" ${opBusy || options.length === 0 ? 'disabled' : ''}
                     style="flex:1 1 12rem;min-width:10rem">
               ${options.length
-                ? `<option value="">— choose a project —</option>` +
+                ? `<option value="">Choose a project</option>` +
                   options.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')
                 : `<option value="">${pickable.length ? 'linked to all your projects' : 'no projects available'}</option>`}
             </select>

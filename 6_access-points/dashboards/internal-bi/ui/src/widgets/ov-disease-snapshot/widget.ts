@@ -47,7 +47,7 @@ const def: WidgetDef = {
     return statCard(ctx.el, {
       subtitle: 'New cases reported this week',
       value: Number(r.new_cases ?? 0).toLocaleString(),
-      note: `${alertCount} model alert${alertCount === 1 ? '' : 's'} · top 3 by P(alarm)`,
+      note: `${alertCount} model alert${alertCount === 1 ? '' : 's'}, top 3 by P(alarm)`,
       body: list,
     }, t);
   },

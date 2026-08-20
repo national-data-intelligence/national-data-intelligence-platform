@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: gate
-          image: nhdw-registry:5500/nhdw/tool-gate:dev
+          image: nhdw-registry:5500/nhdw/tool-gate:1.0.0
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 80, name: http } ]
           env:
@@ -62,7 +62,7 @@ spec:
     spec:
       containers:
         - name: gate
-          image: nhdw-registry:5500/nhdw/tool-gate:dev
+          image: nhdw-registry:5500/nhdw/tool-gate:1.0.0
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 80, name: http } ]
           env:
@@ -103,7 +103,7 @@ spec:
     spec:
       containers:
         - name: gate
-          image: nhdw-registry:5500/nhdw/tool-gate:dev
+          image: nhdw-registry:5500/nhdw/tool-gate:1.0.0
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 80, name: http } ]
           env:
@@ -152,7 +152,7 @@ spec:
     spec:
       containers:
         - name: gate
-          image: nhdw-registry:5500/nhdw/tool-gate:dev
+          image: nhdw-registry:5500/nhdw/tool-gate:1.0.0
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 80, name: http } ]
           env:

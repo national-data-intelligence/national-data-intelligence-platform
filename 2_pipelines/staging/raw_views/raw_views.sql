@@ -83,6 +83,22 @@ CREATE OR REPLACE VIEW raw_hcmiswdm__dim_environment AS
 CREATE OR REPLACE VIEW raw_hcmiswdm__vaccine_purchaseorder AS
     SELECT * FROM s3(nhdw_minio, url = 'http://minio-datalake.nhdw.svc.cluster.local:9000/nhdw-raw/hcmiswdm/vaccine_purchaseorder/**/*.parquet', format = 'Parquet');
 
+-- Dispatch plan (EPSS route-optimization export — Supply Control Tower)
+CREATE OR REPLACE VIEW raw_hcmiswdm__dim_dispatchhub AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://minio-datalake.nhdw.svc.cluster.local:9000/nhdw-raw/hcmiswdm/dim_dispatchhub/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_hcmiswdm__dim_dispatchfacility AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://minio-datalake.nhdw.svc.cluster.local:9000/nhdw-raw/hcmiswdm/dim_dispatchfacility/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_hcmiswdm__dim_dispatchperiod AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://minio-datalake.nhdw.svc.cluster.local:9000/nhdw-raw/hcmiswdm/dim_dispatchperiod/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_hcmiswdm__fact_dispatch AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://minio-datalake.nhdw.svc.cluster.local:9000/nhdw-raw/hcmiswdm/fact_dispatch/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_hcmiswdm__fact_dispatchrun AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://minio-datalake.nhdw.svc.cluster.local:9000/nhdw-raw/hcmiswdm/fact_dispatchrun/**/*.parquet', format = 'Parquet');
+
 -- ╭─ mBrana (HCMISWCloud) ──────────────────────────────────────────────────╮
 CREATE OR REPLACE VIEW raw_mbrana__mflowussd_sohlogs AS
     SELECT * FROM s3(nhdw_minio, url = 'http://minio-datalake.nhdw.svc.cluster.local:9000/nhdw-raw/mbrana/mflowussd_sohlogs/**/*.parquet', format = 'Parquet');

@@ -137,7 +137,7 @@ function UsersPanel() {
       <div className="card card-elev">
         <p className="text-sm muted" style={{ margin: '0.4rem 0' }}>
           <svg className="ico ico-sm"><use href="#i-lock" /></svg>{' '}
-          The gateway declined the user directory for your role — browsing and
+          The gateway declined the user directory for your role. Browsing and
           assigning roles requires the <code>manage_users</code> capability.
         </p>
       </div>
@@ -223,14 +223,14 @@ function UsersPanel() {
               <tr data-testid="user-scope-editor">
                 <td colSpan={6} style={{ background: 'var(--paper-2, #f7f9fa)' }}>
                   <strong className="text-sm">Data scope</strong>
-                  <span className="text-xs muted"> — per-user row-level narrowing
+                  <span className="text-xs muted">: per-user row-level narrowing
                     (ops_identity.user_scope, intersected with the role scope; empty = unrestricted).</span>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '0.5rem', margin: '0.5rem 0' }}>
                     {SCOPE_DIMS.map(dim => (
                       <label key={dim} className="text-xs">
                         <code>{dim}</code>
                         <input style={{ width: '100%' }} data-testid={`uscope-${dim}`}
-                               placeholder="— unrestricted —"
+                               placeholder="unrestricted"
                                value={(scopeEdit.scope[dim] ?? []).join(', ')}
                                onChange={e => {
                                  const vals = e.target.value.split(',').map(x => x.trim()).filter(Boolean);
@@ -254,7 +254,7 @@ function UsersPanel() {
             )}
             {users && users.length === 0 && (
               <tr><td colSpan={6} className="muted" style={{ padding: '1rem', textAlign: 'center' }}>
-                No role assignments recorded yet — users appear here once a role is granted.
+                No role assignments recorded yet. Users appear here once a role is granted.
               </td></tr>
             )}
             {!users && (
@@ -266,7 +266,7 @@ function UsersPanel() {
       <TablePager kit={kit} />
       <p className="text-xs muted" style={{ marginTop: '0.5rem' }}>
         Rows are the live <code>ops_perm</code> user-role assignments (there is no separate user
-        directory) — revoking a user's last role removes them from this view, not from Keycloak.
+        directory). Revoking a user's last role removes them from this view, not from Keycloak.
         Deeper role editing lives on <strong>Roles and Permissions</strong>.
       </p>
     </div>
@@ -319,6 +319,13 @@ function UsersAccess() {
           Could not load requests: {app.accessError}
         </p>
       )}
+
+      {/* ═══ Users & role assignment ═══ */}
+      <div className="section-hdr">
+        <h3>Users</h3>
+        <span className="meta">live from ops_perm role assignments · assign / revoke inline</span>
+      </div>
+      <UsersPanel />
 
       {/* ═══ Access requests ═══ */}
       <div className="section-hdr">
@@ -399,13 +406,6 @@ function UsersAccess() {
         </div>
         <TablePager kit={resolvedKit} />
       </div>
-
-      {/* ═══ Users & role assignment ═══ */}
-      <div className="section-hdr">
-        <h3>Users</h3>
-        <span className="meta">live from ops_perm role assignments · assign / revoke inline</span>
-      </div>
-      <UsersPanel />
     </section>
     <ReviewModal />
     </>

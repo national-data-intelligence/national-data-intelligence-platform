@@ -17,6 +17,12 @@ import { useEffect, useMemo, useState } from 'react';
 import * as dq from '../../api/dq';
 import '../../styles/dq.css';
 
+// Operator-tool hosts follow the host this admin SPA is served on (admin.<base> -> <sub>.<base>),
+// so the whole system re-homes on a single hostBase with no rebuild. No window (SSR) -> dev fallback.
+const HOST_BASE = (typeof window !== 'undefined' ? window.location.host.replace(/^admin\./, '') : '127.0.0.1.nip.io');
+const toolUrl = (sub: string, path = ''): string => `https://${sub}.${HOST_BASE}${path}`;
+
+
 // dbt-manifest lineage tiers. NB: the "source" tier counts dbt source()
 // TABLE declarations (one per raw table we read), NOT the six source
 // SYSTEMS — hence the "Source tables" label, so ~29 is never mistaken for
@@ -44,13 +50,13 @@ const SOURCE_META: Record<string, string> = {
 
 const TOOLS = [
   { label: 'dbt Docs', sub: 'Full interactive lineage DAG',
-    href: 'https://dbt-docs.127.0.0.1.nip.io/', ico: 'i-database' },
+    href: toolUrl('dbt-docs', '/'), ico: 'i-database' },
   // The browsable MinIO CONSOLE (:9001), not the S3 API host (minio.* → :9000,
   // which isn't a web UI and fails to load). See ing-minio-console.
   { label: 'MinIO Console', sub: 'Browse the raw data lake · nhdw-raw',
-    href: 'https://minio-console.127.0.0.1.nip.io/', ico: 'i-folder' },
+    href: toolUrl('minio-console', '/'), ico: 'i-folder' },
   { label: 'Airflow', sub: 'Ingestion + build run history',
-    href: 'https://airflow.127.0.0.1.nip.io/', ico: 'i-refresh' },
+    href: toolUrl('airflow', '/'), ico: 'i-refresh' },
 ];
 
 const DIM_ORDER: Array<{ key: keyof dq.Dimensions['dimensions']; label: string; hint: string }> = [
@@ -255,8 +261,8 @@ function DQ() {
   return (
     <section className="dq-page">
       <p className="page-lede">
-        Live pipeline-health headline for every ingested source — dbt build health, per-source
-        freshness &amp; quality in one view, cross-source reconciliation, and lineage — read straight
+        Live pipeline-health headline for every ingested source: dbt build health, per-source
+        freshness &amp; quality in one view, cross-source reconciliation, and lineage, read straight
         from each run's artifacts and the marts. The full interactive DAG lives in dbt Docs.
       </p>
 
@@ -306,7 +312,7 @@ function DQ() {
           <div>
             <h3 className="ps-title"><svg className="ico"><use href="#i-pulse" /></svg> Source health</h3>
             <p className="ps-sub">
-              One row per ingested system — ingestion freshness and data quality together.
+              One row per ingested system: ingestion freshness and data quality together.
             </p>
           </div>
           <div className="ps-meta">
@@ -376,14 +382,46 @@ function DQ() {
             {sources?.note && <span className="muted"><svg className="ico ico-sm"><use href="#i-info" /></svg> Quality: {sources.note}</span>}
             {ingestion?.note && <span className="muted"><svg className="ico ico-sm"><use href="#i-info" /></svg> Freshness: {ingestion.note}</span>}
             {!sources?.note && !ingestion?.note && (
-              <span className="muted">Blank quality cells mean the source carries no honest signal for that dimension yet — never a fabricated score.</span>
+              <span className="muted">Blank quality cells mean the source carries no honest signal for that dimension yet, never a fabricated score.</span>
             )}
           </div>
         </div>
       </div>
 
       {/* ═══ Quality dimensions & reconciliation ═══ */}
+      {/* Compact band (owner 2026-07-13): dense inline-stat rows so this
+          reconciliation summary stops wasting vertical space. All CSS is
+          scoped locally to this widget (dqc-* / .dq-qr-compact) so it never
+          touches the shared globals. Real data (dims + recon) unchanged. */}
       <div className="page-section">
+        <style>{`
+          .dq-qr-compact { margin-top: 0.2rem; align-items: stretch; }
+          .dq-qr-compact > .card { display: flex; flex-direction: column; padding: 0.85rem 1rem 0.95rem; }
+          .dq-qr-compact .card-hdr { margin-bottom: 0.45rem; }
+          .dq-qr-compact .card-hdr h4 { font-size: 0.9rem; }
+          .dqc-list { display: flex; flex-direction: column; }
+          .dqc-dim { display: grid; grid-template-columns: 7.25rem 1fr 3rem; align-items: center; gap: 0.7rem; padding: 0.42rem 0; }
+          .dqc-dim + .dqc-dim, .dqc-row + .dqc-row { border-top: 1px solid var(--border); }
+          .dqc-dim-name { font-size: 0.8rem; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+          .dqc-dim .dq-meter, .dqc-row .dq-meter { height: 5px; }
+          .dqc-dim-pct { text-align: right; font-size: 0.92rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+          .dqc-dim.good  .dqc-dim-pct { color: var(--good); }
+          .dqc-dim.watch .dqc-dim-pct { color: var(--watch); }
+          .dqc-dim.alert .dqc-dim-pct { color: var(--alert); }
+          .dqc-row { padding: 0.5rem 0; }
+          .dqc-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
+          .dqc-row-name { font-size: 0.82rem; font-weight: 700; color: var(--ink); }
+          .dqc-row-sys { font-size: 0.68rem; color: var(--ink-4); }
+          .dqc-row-pct { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; color: var(--ink-3); }
+          .dqc-row-pct.good  { color: var(--good); }
+          .dqc-row-pct.watch { color: var(--watch); }
+          .dqc-row-pct.alert { color: var(--alert); }
+          .dqc-row .dq-meter { margin: 0.32rem 0 0.3rem; }
+          .dqc-row-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.35rem 0.6rem; font-size: 0.7rem; color: var(--ink-3); }
+          .dqc-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+          .dqc-chip { display: inline-flex; padding: 0.08rem 0.42rem; border-radius: 999px; font-size: 0.64rem; font-weight: 600; background: var(--bg-2); color: var(--ink-3); white-space: nowrap; }
+          .dqc-empty { margin: 0.3rem 0; font-size: 0.8rem; color: var(--ink-4); }
+        `}</style>
         <div className="ps-hdr">
           <div>
             <h3 className="ps-title"><svg className="ico"><use href="#i-shield-check" /></svg> Quality &amp; reconciliation</h3>
@@ -391,56 +429,53 @@ function DQ() {
           </div>
         </div>
 
-        <div className="grid grid-2 gap-lg dq-qr">
-          {/* Dimension scorecard */}
+        <div className="grid grid-2 dq-qr-compact" style={{ gap: '1rem' }}>
+          {/* Dimension scorecard — dense inline rows (name · meter · %) */}
           <div className="card card-elev">
             <div className="card-hdr">
               <h4>DQ dimension scorecard</h4>
               <span className="meta">rolled up across the warehouse</span>
             </div>
-            <div className="dq-dim-list">
+            <div className="dqc-list">
               {DIM_ORDER.map(d => {
                 const v = dims?.dimensions?.[d.key] ?? null;
                 const tone = pctTone(v);
                 return (
-                  <div className={`dq-dim ${tone}`} key={d.key}>
-                    <div className="dq-dim-head">
-                      <span className="dq-dim-name">{d.label}</span>
-                      <span className="dq-dim-pct">{fmtPct(v)}</span>
-                    </div>
+                  <div className={`dqc-dim ${tone}`} key={d.key} title={dims?.basis?.[d.key] ?? d.hint}>
+                    <span className="dqc-dim-name">{d.label}</span>
                     <Meter pct={v} tone={tone} />
-                    <div className="dq-dim-hint">{dims?.basis?.[d.key] ?? d.hint}</div>
+                    <span className="dqc-dim-pct">{fmtPct(v)}</span>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Cross-source reconciliation */}
+          {/* Cross-source reconciliation — compact stacked rows */}
           <div className="card card-elev">
             <div className="card-hdr">
               <h4>Cross-source reconciliation</h4>
               <span className="meta">business-vault same-as links</span>
             </div>
             {recon && recon.checks.length > 0 ? (
-              <div className="dq-recon-list">
+              <div className="dqc-list">
                 {recon.checks.map(c => {
                   const tone = pctTone(c.agreement_pct, 85, 60);
                   return (
-                    <div className="dq-recon" key={c.check}>
-                      <div className="dq-recon-head">
+                    <div className="dqc-row" key={c.check}>
+                      <div className="dqc-row-head">
                         <div>
-                          <div className="dq-recon-name">{c.check}</div>
-                          <div className="dq-recon-sys muted">{c.systems}</div>
+                          <div className="dqc-row-name">{c.check}</div>
+                          <div className="dqc-row-sys">{c.systems}</div>
                         </div>
-                        <div className={`dq-recon-pct ${tone}`}>{fmtPct(c.agreement_pct)}</div>
+                        <div className={`dqc-row-pct ${tone}`}>{fmtPct(c.agreement_pct)}</div>
                       </div>
                       <Meter pct={c.agreement_pct} tone={tone} />
-                      <div className="dq-recon-foot">
-                        <span>{fmtNum(c.matched)} of {fmtNum(c.conformed)} recognised by ≥2 sources</span>
-                        <span className="dq-recon-chips">
+                      <div className="dqc-row-foot">
+                        <span>{fmtNum(c.matched)} of {fmtNum(c.conformed)} matched by ≥2 sources</span>
+                        <span className="dqc-chips">
                           {c.sources.map(s => (
-                            <span className="dq-chip" key={s.source}>{s.source} · {fmtNum(s.count)}</span>
+                            <span className="dqc-chip" key={s.source}>{s.source} · {fmtNum(s.count)}</span>
                           ))}
                         </span>
                       </div>
@@ -449,7 +484,7 @@ function DQ() {
                 })}
               </div>
             ) : (
-              <p className="muted dq-empty">
+              <p className="dqc-empty">
                 {recon?.note ?? 'Loading cross-source agreement…'}
               </p>
             )}
@@ -474,7 +509,7 @@ function DQ() {
           {failingTests.length === 0 ? (
             <p className="dq-allgreen">
               <svg className="ico"><use href="#i-check-circle" /></svg>
-              No failing or warning tests in the latest <code>dbt build</code> — pipeline green.
+              No failing or warning tests in the latest <code>dbt build</code>. Pipeline green.
             </p>
           ) : (
             <div className="dq-table-scroll">
@@ -555,7 +590,7 @@ function DQ() {
             {modelTestRollup.warn > 0 && <span className="pill watch">{modelTestRollup.warn} warn</span>}
             {modelTestRollup.fail > 0 && <span className="pill alert">{modelTestRollup.fail} fail</span>}
             {modelTestRollup.untested > 0 && <span className="pill neutral">{modelTestRollup.untested} untested</span>}
-            <a href="https://dbt-docs.127.0.0.1.nip.io/" target="_blank" rel="noreferrer" className="btn btn-primary btn-sm dq-dbt-link">
+            <a href={toolUrl('dbt-docs', "/")} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm dq-dbt-link">
               Open full lineage in dbt Docs <svg className="ico ico-sm"><use href="#i-external" /></svg>
             </a>
           </div>

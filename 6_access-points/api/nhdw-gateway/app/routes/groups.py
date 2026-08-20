@@ -42,7 +42,10 @@ async def list_groups(user: UserCtx = Depends(get_user)) -> dict[str, Any]:
                 (SELECT MAX(a.updated_at) FROM ops_artifact.artifact a
                    WHERE a.workshop_group = g.id)                   AS last_activity_at,
                 EXISTS (SELECT 1 FROM ops_artifact.workshop_group_member m
-                          WHERE m.group_id = g.id AND m.kc_sub = $1::uuid) AS i_am_a_member
+                          WHERE m.group_id = g.id AND m.kc_sub = $1::uuid) AS i_am_a_member,
+                (g.owner = $1::uuid
+                 OR EXISTS (SELECT 1 FROM ops_artifact.workshop_group_member m
+                             WHERE m.group_id = g.id AND m.kc_sub = $1::uuid AND m.role = 'owner')) AS i_own
             FROM ops_artifact.workshop_group g
             ORDER BY g.name;
         """, user.kc_sub or "00000000-0000-0000-0000-000000000000")
@@ -132,32 +135,239 @@ async def create_group(
     return dict(group)
 
 
-@router.post("/{group_id}/join")
-async def join_group(group_id: str,
-                     user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+# ═══════════════════════════════════════════════════════════════════════════
+# Invite / request flows — membership is GATED (owner rule 2026-07-13). There is
+# NO self-serve join: you become a member ONLY by accepting an invite an owner
+# sent you, or by an owner approving a join-request you sent.
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def _assert_group_owner(conn, group_id: str, kc: str) -> None:
+    """Only the group's owner may invite / approve / decline / revoke. Owner is
+    workshop_group.owner (the creator) OR a member whose role is 'owner'."""
+    ok = await conn.fetchval("""
+        SELECT 1 FROM ops_artifact.workshop_group g
+        WHERE g.id = $1::uuid AND (
+            g.owner = $2::uuid
+            OR EXISTS (SELECT 1 FROM ops_artifact.workshop_group_member m
+                        WHERE m.group_id = g.id AND m.kc_sub = $2::uuid AND m.role = 'owner'));
+    """, group_id, kc)
+    if not ok:
+        raise HTTPException(403, "only the group owner can manage its membership")
+
+
+async def _is_member(conn, group_id: str, kc: str) -> bool:
+    return bool(await conn.fetchval("""
+        SELECT 1 FROM ops_artifact.workshop_group_member
+        WHERE group_id = $1::uuid AND kc_sub = $2::uuid;
+    """, group_id, kc))
+
+
+# ── request to join (replaces the retired immediate self-join) ───────────────
+@router.post("/{group_id}/request-join")
+async def request_join(group_id: str,
+                       user: UserCtx = Depends(get_user),
+                       message: str | None = Body(default=None, embed=True)) -> dict[str, Any]:
     pool = await ops_db.ensure_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
             kc = await _require_identity(conn, user)
-            visibility = await conn.fetchval("""
-                SELECT visibility FROM ops_artifact.workshop_group
-                WHERE id = $1::uuid;
-            """, group_id)
-            if visibility is None:
+            g = await conn.fetchval("SELECT 1 FROM ops_artifact.workshop_group WHERE id=$1::uuid;", group_id)
+            if not g:
                 raise HTTPException(404, "group not found")
-            if visibility != "open":
-                raise HTTPException(
-                    403, f"this group is '{visibility}' — self-serve join is "
-                         "only available for open groups")
-            await conn.execute("""
-                INSERT INTO ops_artifact.workshop_group_member
-                    (group_id, kc_sub, role)
-                VALUES ($1::uuid, $2::uuid, 'member')
-                ON CONFLICT (group_id, kc_sub) DO NOTHING;
-            """, group_id, kc)
-    await ops_db.log_data_event(
-        user=user, kind="group.joined", payload={"group_id": group_id})
-    return {"joined": True, "group_id": group_id}
+            if await _is_member(conn, group_id, kc):
+                raise HTTPException(409, "you are already a member of this group")
+            # An owner already invited them → accept that instead of duplicating.
+            row = await conn.fetchrow("""
+                INSERT INTO ops_artifact.workshop_group_join_request (group_id, requester, message, status)
+                VALUES ($1::uuid, $2::uuid, $3, 'pending')
+                ON CONFLICT (group_id, requester) DO UPDATE
+                    SET status='pending', message=EXCLUDED.message, created_at=now(), decided_at=NULL
+                RETURNING id;
+            """, group_id, kc, message)
+    await ops_db.log_data_event(user=user, kind="group.join_requested",
+                                payload={"group_id": group_id})
+    return {"requested": True, "group_id": group_id, "request_id": str(row["id"])}
+
+
+# ── owner invites a user into their group ────────────────────────────────────
+@router.post("/{group_id}/invite", status_code=201)
+async def invite_to_group(group_id: str,
+                          user: UserCtx = Depends(get_user),
+                          username: str = Body(..., embed=True),
+                          message: str | None = Body(default=None, embed=True)) -> dict[str, Any]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            kc = await _require_identity(conn, user)
+            await _assert_group_owner(conn, group_id, kc)
+            invitee = await conn.fetchval(
+                'SELECT kc_sub FROM ops_identity."user" WHERE lower(username)=lower($1);',
+                username.strip())
+            if invitee is None:
+                raise HTTPException(404, f"no user named {username!r}")
+            if await _is_member(conn, group_id, str(invitee)):
+                raise HTTPException(409, "that user is already a member")
+            row = await conn.fetchrow("""
+                INSERT INTO ops_artifact.workshop_group_invite (group_id, invitee, invited_by, message, status)
+                VALUES ($1::uuid, $2::uuid, $3::uuid, $4, 'pending')
+                ON CONFLICT (group_id, invitee) DO UPDATE
+                    SET status='pending', invited_by=EXCLUDED.invited_by,
+                        message=EXCLUDED.message, created_at=now(), decided_at=NULL
+                RETURNING id;
+            """, group_id, invitee, kc, message)
+    await ops_db.log_data_event(user=user, kind="group.invited",
+                                payload={"group_id": group_id, "invitee": str(invitee)})
+    return {"invited": True, "group_id": group_id, "invite_id": str(row["id"]), "invitee": username}
+
+
+# ── my inbox: invitations sent TO me + join-requests to groups I OWN ─────────
+@router.get("/invites/received")
+async def invites_received(user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT i.id, i.group_id, g.name AS group_name, i.message, i.created_at,
+                   u.username AS invited_by
+            FROM ops_artifact.workshop_group_invite i
+            JOIN ops_artifact.workshop_group g ON g.id = i.group_id
+            LEFT JOIN ops_identity."user" u ON u.kc_sub = i.invited_by
+            WHERE i.invitee = $1::uuid AND i.status = 'pending'
+            ORDER BY i.created_at DESC;
+        """, user.kc_sub or "00000000-0000-0000-0000-000000000000")
+    return {"invites": [dict(r) for r in rows]}
+
+
+@router.get("/requests/incoming")
+async def requests_incoming(user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT r.id, r.group_id, g.name AS group_name, r.message, r.created_at,
+                   u.username AS requester
+            FROM ops_artifact.workshop_group_join_request r
+            JOIN ops_artifact.workshop_group g ON g.id = r.group_id
+            LEFT JOIN ops_identity."user" u ON u.kc_sub = r.requester
+            WHERE r.status = 'pending' AND (
+                g.owner = $1::uuid
+                OR EXISTS (SELECT 1 FROM ops_artifact.workshop_group_member m
+                            WHERE m.group_id = g.id AND m.kc_sub = $1::uuid AND m.role='owner'))
+            ORDER BY r.created_at DESC;
+        """, user.kc_sub or "00000000-0000-0000-0000-000000000000")
+    return {"requests": [dict(r) for r in rows]}
+
+
+# ── my outbox: join-requests I sent + invites I sent as an owner ─────────────
+@router.get("/requests/mine")
+async def requests_mine(user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        reqs = await conn.fetch("""
+            SELECT r.id, r.group_id, g.name AS group_name, r.status, r.created_at
+            FROM ops_artifact.workshop_group_join_request r
+            JOIN ops_artifact.workshop_group g ON g.id = r.group_id
+            WHERE r.requester = $1::uuid
+            ORDER BY r.created_at DESC;
+        """, user.kc_sub or "00000000-0000-0000-0000-000000000000")
+        sent = await conn.fetch("""
+            SELECT i.id, i.group_id, g.name AS group_name, i.status, i.created_at,
+                   u.username AS invitee
+            FROM ops_artifact.workshop_group_invite i
+            JOIN ops_artifact.workshop_group g ON g.id = i.group_id
+            LEFT JOIN ops_identity."user" u ON u.kc_sub = i.invitee
+            WHERE i.invited_by = $1::uuid
+            ORDER BY i.created_at DESC;
+        """, user.kc_sub or "00000000-0000-0000-0000-000000000000")
+    return {"requests": [dict(r) for r in reqs], "invites_sent": [dict(r) for r in sent]}
+
+
+# ── decisions ────────────────────────────────────────────────────────────────
+async def _add_member(conn, group_id, kc) -> None:
+    await conn.execute("""
+        INSERT INTO ops_artifact.workshop_group_member (group_id, kc_sub, role)
+        VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (group_id, kc_sub) DO NOTHING;
+    """, group_id, kc)
+
+
+@router.post("/invites/{invite_id}/accept")
+async def accept_invite(invite_id: str, user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            kc = await _require_identity(conn, user)
+            inv = await conn.fetchrow("""
+                SELECT group_id, invitee, status FROM ops_artifact.workshop_group_invite
+                WHERE id = $1::uuid FOR UPDATE;
+            """, invite_id)
+            if inv is None or str(inv["invitee"]) != kc:
+                raise HTTPException(404, "invite not found")
+            if inv["status"] != "pending":
+                raise HTTPException(409, f"invite already {inv['status']}")
+            await _add_member(conn, inv["group_id"], kc)
+            await conn.execute("UPDATE ops_artifact.workshop_group_invite SET status='accepted', decided_at=now() WHERE id=$1::uuid;", invite_id)
+    await ops_db.log_data_event(user=user, kind="group.invite_accepted", payload={"invite_id": invite_id})
+    return {"accepted": True, "group_id": str(inv["group_id"])}
+
+
+@router.post("/invites/{invite_id}/decline")
+async def decline_invite(invite_id: str, user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        kc = await _require_identity(conn, user)
+        res = await conn.execute("""
+            UPDATE ops_artifact.workshop_group_invite SET status='declined', decided_at=now()
+            WHERE id=$1::uuid AND invitee=$2::uuid AND status='pending';
+        """, invite_id, kc)
+    if res.endswith("0"):
+        raise HTTPException(404, "invite not found or not pending")
+    return {"declined": True}
+
+
+@router.post("/invites/{invite_id}/revoke")
+async def revoke_invite(invite_id: str, user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        kc = await _require_identity(conn, user)
+        inv = await conn.fetchrow("SELECT group_id, invited_by FROM ops_artifact.workshop_group_invite WHERE id=$1::uuid;", invite_id)
+        if inv is None:
+            raise HTTPException(404, "invite not found")
+        if str(inv["invited_by"]) != kc:
+            await _assert_group_owner(conn, str(inv["group_id"]), kc)
+        await conn.execute("UPDATE ops_artifact.workshop_group_invite SET status='revoked', decided_at=now() WHERE id=$1::uuid AND status='pending';", invite_id)
+    return {"revoked": True}
+
+
+@router.post("/requests/{request_id}/approve")
+async def approve_request(request_id: str, user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            kc = await _require_identity(conn, user)
+            req = await conn.fetchrow("""
+                SELECT group_id, requester, status FROM ops_artifact.workshop_group_join_request
+                WHERE id = $1::uuid FOR UPDATE;
+            """, request_id)
+            if req is None:
+                raise HTTPException(404, "request not found")
+            await _assert_group_owner(conn, str(req["group_id"]), kc)
+            if req["status"] != "pending":
+                raise HTTPException(409, f"request already {req['status']}")
+            await _add_member(conn, req["group_id"], req["requester"])
+            await conn.execute("UPDATE ops_artifact.workshop_group_join_request SET status='approved', decided_at=now(), decided_by=$2::uuid WHERE id=$1::uuid;", request_id, kc)
+    await ops_db.log_data_event(user=user, kind="group.request_approved", payload={"request_id": request_id})
+    return {"approved": True}
+
+
+@router.post("/requests/{request_id}/decline")
+async def decline_request(request_id: str, user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        kc = await _require_identity(conn, user)
+        req = await conn.fetchrow("SELECT group_id FROM ops_artifact.workshop_group_join_request WHERE id=$1::uuid;", request_id)
+        if req is None:
+            raise HTTPException(404, "request not found")
+        await _assert_group_owner(conn, str(req["group_id"]), kc)
+        await conn.execute("UPDATE ops_artifact.workshop_group_join_request SET status='declined', decided_at=now(), decided_by=$2::uuid WHERE id=$1::uuid AND status='pending';", request_id, kc)
+    return {"declined": True}
 
 
 @router.post("/{group_id}/leave")

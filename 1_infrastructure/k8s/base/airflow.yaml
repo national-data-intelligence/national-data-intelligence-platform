@@ -70,7 +70,7 @@ spec:
         # entrypoint honours the _AIRFLOW_* envs, then runs `airflow version`).
         # Idempotent — re-running migrate/user-create on a live DB is a no-op.
         - name: airflow-init
-          image: nhdw-registry:5500/nhdw/airflow:v1
+          image: nhdw-registry:5500/nhdw/airflow:1.0.0
           imagePullPolicy: Always
           args: [ "version" ]
           env:
@@ -90,7 +90,7 @@ spec:
         # Env block is duplicated across containers because YAML anchors don't
         # survive kustomize — keep the two blocks identical when editing.
         - name: scheduler
-          image: nhdw-registry:5500/nhdw/airflow:v1
+          image: nhdw-registry:5500/nhdw/airflow:1.0.0
           imagePullPolicy: Always
           args: [ "scheduler" ]
           env:
@@ -114,8 +114,8 @@ spec:
               valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: OPS_READER_PASSWORD } }
             # Runner image launched by ml_batch_predict (KubernetesPodOperator).
             # kustomize image remaps can't reach into the DAG's python, so the
-            # dev overlay patches THIS env var to nhdw/ml-runner:dev.
-            - { name: ML_RUNNER_IMAGE, value: "nhdw-registry:5500/nhdw/ml-runner:v1" }
+            # dev overlay patches THIS env var to nhdw/ml-runner:1.0.0.
+            - { name: ML_RUNNER_IMAGE, value: "nhdw-registry:5500/nhdw/ml-runner:1.0.0" }
             # alert_evaluation DAG → gateway POST /api/alerts/evaluate.
             - { name: NHDW_GATEWAY_URL, value: "http://nhdw-gateway.nhdw.svc.cluster.local:8000" }
             - { name: ALERT_EVAL_TOKEN, valueFrom: { secretKeyRef: { name: alert-eval-secrets, key: TOKEN } } }
@@ -128,7 +128,7 @@ spec:
             periodSeconds: 60
             timeoutSeconds: 20
         - name: webserver
-          image: nhdw-registry:5500/nhdw/airflow:v1
+          image: nhdw-registry:5500/nhdw/airflow:1.0.0
           imagePullPolicy: Always
           args: [ "webserver" ]
           ports: [ { containerPort: 8080, name: http } ]
@@ -153,8 +153,8 @@ spec:
               valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: OPS_READER_PASSWORD } }
             # Runner image launched by ml_batch_predict (KubernetesPodOperator).
             # kustomize image remaps can't reach into the DAG's python, so the
-            # dev overlay patches THIS env var to nhdw/ml-runner:dev.
-            - { name: ML_RUNNER_IMAGE, value: "nhdw-registry:5500/nhdw/ml-runner:v1" }
+            # dev overlay patches THIS env var to nhdw/ml-runner:1.0.0.
+            - { name: ML_RUNNER_IMAGE, value: "nhdw-registry:5500/nhdw/ml-runner:1.0.0" }
             # ── Native Keycloak OIDC (Tool-SSO C) — read by webserver_config.py.
             # Split-URL: the browser authorizes on the PUBLIC host; the pod
             # exchanges the code / fetches JWKS / reads userinfo on INTERNAL svc

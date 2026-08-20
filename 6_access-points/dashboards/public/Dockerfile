@@ -16,8 +16,7 @@ RUN pip install --no-cache-dir \
         fastapi==0.115.6 \
         uvicorn[standard]==0.32.1 \
         httpx==0.28.1 \
-        asyncpg==0.30.0 \
-        itsdangerous==2.2.0
+        asyncpg==0.30.0
 
 WORKDIR /app
 COPY app    /app/app

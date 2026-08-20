@@ -45,7 +45,7 @@ class MartAttrsMissing(Exception):
     """Raised when a mart isn't cataloged. Means we cannot enforce OPA on it."""
     def __init__(self, schema: str, table: str):
         super().__init__(f"mart_attrs catalog has no entry for {schema}.{table} — "
-                         f"add a row to bundle/seeds/security/mart_attrs.yaml")
+                         f"add a row to bundle/seed-pack/app/security/mart_attrs.yaml")
         self.schema = schema
         self.table  = table
 
@@ -80,6 +80,18 @@ async def lookup(schema: str, table: str) -> MartAttrs:
     if not hit:
         raise MartAttrsMissing(schema, table)
     return hit
+
+
+async def catalog_keys() -> set[tuple[str, str]]:
+    """Every (schema, table) the catalog knows — i.e. the set of marts that are
+    actually QUERYABLE (a mart absent here is 403'd by the ad-hoc SQL executor
+    and get_mart under OPA_ENFORCE). This is the single source of truth the mart
+    browser should list, so it never offers an uncataloged intermediate table."""
+    global _cache
+    if _cache is None:
+        _cache = await _load_cache()
+        log.info("mart_attrs cache loaded · %d entries", len(_cache))
+    return set(_cache.keys())
 
 
 async def invalidate() -> None:

@@ -4,6 +4,18 @@ version: 2
 # Edit the generator, not this file. Re-run after adding models.
 
 models:
+  - name: hub_mfr_device
+    description: 'Hub for the mfr device business entity.'
+    columns:
+      - name: hk_mfr_device
+        description: 'Hash key (PK). Uniqueness is the contract — duplicate inserts break DV semantics.'
+        tests:
+          - not_null
+          - unique
+      - name: device_id
+        description: 'Business (natural) key the hash key is derived from.'
+        tests:
+          - not_null
   - name: hub_mfr_facility
     description: 'Hub for the mfr facility business entity.'
     columns:
@@ -72,6 +84,23 @@ models:
           - relationships:
               to: ref('hub_mfr_organization')
               field: hk_mfr_organization
+  - name: sat_mfr_device
+    description: 'Satellite carrying the descriptive payload for hk_mfr_device.'
+    columns:
+      - name: hk_mfr_device
+        description: 'FK to parent hub_mfr_device.'
+        tests:
+          - not_null
+          - relationships:
+              to: ref('hub_mfr_device')
+              field: hk_mfr_device
+      - name: hashdiff
+        description: 'Hash diff over payload. Distinguishes change events.'
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [hk_mfr_device, load_ts]
   - name: sat_mfr_facility
     description: 'Satellite carrying the descriptive payload for hk_mfr_facility.'
     columns:

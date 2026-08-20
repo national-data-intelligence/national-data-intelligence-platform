@@ -1,0 +1,21 @@
+# NHDW inventory — SINGLE NODE (a laptop / one machine).
+#
+# This is the "define the host machines in a config file" contract: the deploy
+# reads this to know WHERE to install. Going from a laptop to a fleet is a change
+# of inventory (+ the matching values profile) only — no code changes.
+#
+# Single-node: the control-plane node also runs all workloads (no separate agents).
+# `nhdw_topology: single` selects the values-single profile (replicas=1, local-path
+# storage) at the workload-deploy step (P3.2).
+all:
+  vars:
+    nhdw_topology: single
+    nhdw_cluster_name: nhdw
+    # k3s is installed locally on this same machine (no SSH).
+  children:
+    control_plane:
+      hosts:
+        localhost:
+          ansible_connection: local
+    workers:
+      hosts: {}          # none — single-node runs workloads on the control-plane node

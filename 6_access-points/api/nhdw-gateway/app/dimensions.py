@@ -33,6 +33,11 @@ DIM_COLUMNS: dict[str, list[str]] = {
     "geography": ["region_id", "region", "woreda_uid", "woreda_name"],
     "programme": ["programme_id", "programme", "program", "program_id"],
     "facility":  ["facility_id", "facility_uid", "facility"],
+    # 'commodity' is a PLAIN UI narrowing dimension (like 'period'): it is
+    # deliberately ABSENT from FILTER_DIMENSION below (no role/user scope caps it —
+    # users are never commodity-scoped), so it is always wildcard and narrows only
+    # via the fetchers' commodity_col WHERE + the generic row_filter application.
+    "commodity": ["commodity_name", "commodity", "commodity_code"],
 }
 
 # filter-catalog id -> the scope dimension it narrows (role_scope.dimension /

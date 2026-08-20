@@ -92,7 +92,7 @@ async function draw(ctx: WidgetCtx) {
     try {
       const r = await authFetch(`/gw/datasets?${qs}`);
       if (!r.ok) {
-        out.innerHTML = `<div class="widget-empty">Could not load datasets — ${esc(await errText(r))}</div>`;
+        out.innerHTML = `<div class="widget-empty">Could not load datasets: ${esc(await errText(r))}</div>`;
         return;
       }
       const j = await r.json();
@@ -128,7 +128,7 @@ async function draw(ctx: WidgetCtx) {
                 </td>
                 <td>${(a.linked_projects && a.linked_projects.length)
                   ? `<span style="display:flex;flex-wrap:wrap;gap:.25rem">${a.linked_projects.map(p => `<span class="pill neutral" title="${esc(p.name)}">${esc(p.name)}</span>`).join('')}</span>`
-                  : '<span class="muted" title="Independent — not linked to any project">unlinked</span>'}</td>
+                  : '<span class="muted" title="Independent, not linked to any project">unlinked</span>'}</td>
                 <td><span class="art-tier ${esc(a.tier)}">${esc(tierLabel(a.tier))}</span></td>
                 <td>${esc(a.owner_username || '—')}</td>
                 <td>${esc(fmtDate(a.updated_at))}</td>

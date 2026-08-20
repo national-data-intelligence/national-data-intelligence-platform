@@ -6,10 +6,10 @@ import { regionName } from '../_shared/reference';
 
 const def: WidgetDef = {
   id: 'rm-events',
-  reactsTo: ['geography'],
+  reactsTo: ['geography', 'commodity'],
   async render(ctx) {
     const rows = await ctx.fetchData();
-    if (!rows || !rows.length) { ctx.empty('No stockout events in the current scope — stock levels are healthy.'); return; }
+    if (!rows || !rows.length) { ctx.empty('No stockout events in the current scope; stock levels are healthy.'); return; }
     const shaped = rows.map(r => ({
       when: r.episode_start_month ?? '-',
       commodity: r.commodity_name ?? '-',

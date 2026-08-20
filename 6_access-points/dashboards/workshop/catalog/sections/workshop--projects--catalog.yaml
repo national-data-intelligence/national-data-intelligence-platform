@@ -1,24 +1,23 @@
 id: workshop/projects/catalog
 page_id: workshop/projects
-title: Projects
-eyebrow: The unit of work — everything belongs to one
+# No section header: the workshop topbar already renders the "Projects" masthead
+# + subtitle, so a section title here would double the heading. The band is just
+# the two-card master-detail grid.
+title: ""
 ordering: 10
 columns: 12
-dense: true
+dense: false
 widgets:
+# LEFT — narrow catalogue list (~1/3). RIGHT — wide project detail (~2/3), which
+# composes the Visibility control and the Project-files tree side-by-side inside
+# itself (the grid can't nest a detail column, so ws-project-files is mounted
+# within ws-project-detail). ws-project-artifacts is retired from this page — the
+# master-detail reference layout shows Visibility + Files only.
 - id: ws-projects-table
-  col_span: 12
+  col_span: 4
   row_span: 1
   ordering: 0
 - id: ws-project-detail
-  col_span: 12
+  col_span: 8
   row_span: 1
   ordering: 10
-- id: ws-project-files
-  col_span: 6
-  row_span: 1
-  ordering: 20
-- id: ws-project-artifacts
-  col_span: 6
-  row_span: 1
-  ordering: 30

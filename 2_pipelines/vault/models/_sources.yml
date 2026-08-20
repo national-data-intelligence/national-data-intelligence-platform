@@ -69,6 +69,16 @@ sources:
         description: "Item / SKU dimension."
       - name: stg_hcmiswdm__vaccine_purchaseorder
         description: "Vaccine procurement pipeline — open + recently-closed purchase orders."
+      - name: stg_hcmiswdm__dim_dispatchhub
+        description: "EPSS dispatch-plan hubs (warehouses) — coords + fleet (Supply Control Tower)."
+      - name: stg_hcmiswdm__dim_dispatchfacility
+        description: "EPSS dispatch-plan delivery facilities (nodes) — the supply facility dimension."
+      - name: stg_hcmiswdm__dim_dispatchperiod
+        description: "EPSS dispatch-plan planning periods + plan-level KPI/savings summary."
+      - name: stg_hcmiswdm__fact_dispatch
+        description: "EPSS dispatch-plan movement lines (hub→facility × commodity per period)."
+      - name: stg_hcmiswdm__fact_dispatchrun
+        description: "EPSS dispatch-plan vehicle runs (stops + road path as JSON)."
 
       # ── mBrana (mFlow USSD reports → daily) ──
       - name: stg_mbrana__mflowussd_sohlogs

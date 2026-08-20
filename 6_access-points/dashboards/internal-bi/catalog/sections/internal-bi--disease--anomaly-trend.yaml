@@ -6,18 +6,10 @@ columns: 12
 dense: true
 widgets:
 - id: dz-signal-chart
-  col_span: 6
+  col_span: 12
   row_span: 3
   ordering: 0
-- id: dz-zscore-grid
-  col_span: 6
-  row_span: 3
-  ordering: 1
 - id: dz-woreda-table
   col_span: 12
   row_span: 2
-  ordering: 2
-- id: dz-forecast-backtest
-  col_span: 12
-  row_span: 3
-  ordering: 3
+  ordering: 1

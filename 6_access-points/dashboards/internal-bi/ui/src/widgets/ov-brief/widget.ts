@@ -1,15 +1,19 @@
-/** Decision brief — the Policy-Maker persona's morning read (HLR §2.2 /
- *  FR4.1): one cross-domain brief only the warehouse can write. Five lines,
- *  each from a different mart family (outbreak×supply, surveillance, supply,
- *  reporting trust, service cascades), severity-chipped. */
+/** Decision brief — the Policy-Maker persona's morning read (HLR §2.2 / FR4.1):
+ *  one cross-domain brief only the warehouse can write. Each line from a
+ *  different mart family (outbreak×supply, surveillance, supply, reporting trust,
+ *  service cascades). Rendered as a clean table (owner 2026-07-13): area · signal
+ *  · priority, minimal colour — one subtle severity pill, no loud highlights. */
 import type { WidgetDef } from '../../runtime/types';
 
-const CHIP: Record<string, string> = {
-  stockout: 'var(--alert)', critical: 'var(--alert)', tight: 'var(--watch)',
-  ok: 'var(--good)', info: 'var(--info)',
+const esc = (s: unknown) =>
+  String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+
+const TONE: Record<string, string> = {
+  stockout: 'alert', critical: 'alert', tight: 'watch', ok: 'good', info: 'info',
 };
-const ICON: Record<string, string> = {
-  act: '⚑', surveillance: '⚠', supply: '▣', trust: '◎', service: '↯',
+const AREA: Record<string, string> = {
+  act: 'Act now', surveillance: 'Surveillance', supply: 'Supply',
+  trust: 'Data trust', service: 'Service',
 };
 
 const def: WidgetDef = {
@@ -18,21 +22,27 @@ const def: WidgetDef = {
   async render(ctx) {
     const rows = await ctx.fetchData();
     if (!rows || !rows.length) { ctx.empty('No brief available.'); return; }
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding:4px 2px;';
-    for (const r of rows) {
-      const line = document.createElement('div');
-      line.style.cssText = 'display:flex;align-items:baseline;gap:10px;font-size:14px;line-height:1.45;';
+    const t = ctx.theme;
+    const body = rows.map((r: any) => {
       const sev = String(r.severity ?? 'info');
-      line.innerHTML =
-        `<span style="color:${CHIP[sev] ?? 'var(--info)'};font-size:15px;flex:none;">${ICON[String(r.kind)] ?? '•'}</span>` +
-        `<span style="flex:1;">${String(r.headline ?? '')}</span>` +
-        `<span class="pill" style="flex:none;font-size:11px;padding:2px 8px;border-radius:10px;` +
-        `background:color-mix(in srgb, ${CHIP[sev] ?? 'var(--info)'} 14%, transparent);` +
-        `color:${CHIP[sev] ?? 'var(--info)'};">${sev}</span>`;
-      wrap.appendChild(line);
-    }
-    ctx.el.appendChild(wrap);
+      const area = AREA[String(r.kind)] ?? '—';
+      return `<tr>
+        <td style="white-space:nowrap;color:${t.ink[2]};font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.03em">${esc(area)}</td>
+        <td style="color:${t.ink[0]};line-height:1.45">${esc(r.headline ?? '')}</td>
+        <td style="text-align:right;white-space:nowrap"><span class="pill ${TONE[sev] ?? 'neutral'}">${esc(sev)}</span></td>
+      </tr>`;
+    }).join('');
+    ctx.el.innerHTML = `
+      <div class="scrollable" style="overflow:auto">
+        <table class="dash" style="margin:0;width:100%">
+          <thead><tr>
+            <th style="text-align:left">Area</th>
+            <th style="text-align:left">Decision signal</th>
+            <th style="text-align:right">Priority</th>
+          </tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
   },
 };
 export default def;

@@ -27,12 +27,12 @@
  * calling its render(ctx). Data is REAL-or-EMPTY (dataHook) — never synthetic.
  */
 import type { ResolvedPage, ResolvedSection, ResolvedWidget } from '../api/spec';
-import type { WidgetCtx, WidgetDef } from './types';
+import type { WidgetCtx, WidgetDef, WidgetData } from './types';
 import { getWidgetDef } from './registry';
 import { resolveTheme } from './theme';
 import { filterBus } from './filterBus';
 import { fetchWidgetData, fetchEntity } from './dataHook';
-import { GLOBAL_DIMS, isWidgetHiddenAtScope, packRows } from './reactivity';
+import { GLOBAL_DIMS, isWidgetHiddenAtScope, packRows, filterParamsForWidget, effectiveReactsTo } from './reactivity';
 import { host } from './host';
 
 /** Section-id slug → sprite icon (docs/final-mockkups: section markers are icons, not ①②③). */
@@ -58,6 +58,21 @@ export function emptyState(el: HTMLElement, message?: string): void {
       <svg class="ico" aria-hidden="true"><use href="#i-database"/></svg>
       <span>${message || 'No data available for the current scope.'}</span>
     </div>`;
+}
+
+/** AI-C1 — read_widget data registry. Stash each widget's last-fetched tabular
+ *  data (columns + row objects) keyed by widget id, so the AI assistant's
+ *  read_widget (api/dashboardApi) returns the REAL rows the widget is showing —
+ *  not the legacy `sv` store (always null for catalog-runtime widgets). A
+ *  non-tabular or empty fetch records null; read_widget falls back to its
+ *  text_preview then. Recording never alters the fetched result. */
+function recordWidgetData(widgetId: string, data: WidgetData): void {
+  if (typeof window === 'undefined') return;
+  const reg = ((window as any).__nhdwWidgetData ??= {}) as
+    Record<string, { columns: string[]; rows: Record<string, any>[] } | null>;
+  reg[widgetId] = (Array.isArray(data) && data.length)
+    ? { columns: Object.keys(data[0]), rows: data }
+    : null;
 }
 
 /** A mounted widget the section can manage: dispose it, or tell it it just
@@ -109,7 +124,18 @@ export function mountWidgetManaged(
       filters: filterBus.get(),
       bus: filterBus,
       host,
-      fetchData: (params) => fetchWidgetData(widget.data_url, params),
+      fetchData: (params) => {
+        // Inject the active global-filter values so the widget re-queries NARROWED
+        // data (gated by reactsTo ∩ supports; national/opted-out widgets inject
+        // nothing). Server caps every value against role_scope ∩ user_scope, so
+        // this can only intersect a role's scope. Widget-supplied params win.
+        const reacts = effectiveReactsTo(d.reactsTo, widget.reacts_to, widget.supports);
+        const p = fetchWidgetData(widget.data_url,
+          { ...filterParamsForWidget(widget, reacts, filterBus.get()), ...params });
+        // AI-C1: record the fetched rows for read_widget (does NOT alter the result).
+        p.then(rows => recordWidgetData(widget.id, rows)).catch(() => { /* noop */ });
+        return p;
+      },
       fetchEntity: (path, params) => fetchEntity(path, params),
       empty: (m) => emptyState(slot, m),
     };
@@ -131,7 +157,7 @@ export function mountWidgetManaged(
     if (disposed) return;
     started = d;
     if (!isHidden?.()) draw(d);
-    const reacts = (d.reactsTo && d.reactsTo.length) ? d.reactsTo : (widget.reacts_to || []);
+    const reacts = effectiveReactsTo(d.reactsTo, widget.reacts_to, widget.supports);
     unsub = reacts.length
       ? filterBus.subscribe(reacts, () => {
           if (disposed || isHidden?.()) return;   // hidden → defer; notifyShown redraws
@@ -196,14 +222,12 @@ function renderSection(section: ResolvedSection, page: ResolvedPage, mount: HTML
     const hdr = document.createElement('div');
     hdr.className = 'ps-hdr';
     const title = (section.title || '').replace(/^[①-⑳]\s*/, '');
-    // Appropriate section icon (sprite) keyed by the section-id slug — replaces
-    // the ①②③ circled-digit markers (which also render as tofu in some fonts).
-    const slug = (section.id.split('/').pop() || '');
-    const icon = SECTION_ICON[slug] || 'i-list';
+    // Section titles are icon-free (owner 2026-07-13 — no icons on section titles).
+    void SECTION_ICON;
     hdr.innerHTML = `
       <div>
         ${section.eyebrow ? `<div class="ps-eyebrow">${section.eyebrow}</div>` : ''}
-        ${title ? `<h3 class="ps-title"><svg class="ico" aria-hidden="true"><use href="#${icon}"/></svg>${title}</h3>` : ''}
+        ${title ? `<h3 class="ps-title">${title}</h3>` : ''}
         ${section.description ? `<p class="ps-sub">${section.description}</p>` : ''}
       </div>`;
     hdr.appendChild(noteEl);   // .ps-hdr is flex space-between → right-aligned
@@ -228,6 +252,15 @@ function renderSection(section: ResolvedSection, page: ResolvedPage, mount: HTML
   // Cascades) keep a section-like vertical cadence instead of cramming rows 16px apart.
   grid.style.columnGap = '1rem';
   grid.style.rowGap = '1.4rem';
+  // X9: 'start' (not 'stretch') so a short card keeps its NATURAL height instead
+  // of stretching to match its tallest row-neighbour and showing a big internal
+  // void. Widgets carry intrinsic heights (charts via bindAspect, the 380px table
+  // scroll box, KPI tiles), so nothing collapses; ragged bottoms read as a natural
+  // masonry rather than empty stretched cards. Per-section row_span tuning is a
+  // separate follow-up for the remaining grid-track whitespace.
+  // Equal-height rule (overhaul §1): stretch grid items so cards sharing a row
+  // are the same height. Cards are flex-column with a flex:1 body, so they fill
+  // the cell cleanly; row height is set by the tallest card in the row.
   grid.style.alignItems = 'stretch';
   band.appendChild(grid);
 
@@ -265,7 +298,24 @@ function renderSection(section: ResolvedSection, page: ResolvedPage, mount: HTML
     // the friend's design leaves these KPI-strip widgets untitled, so a raw id like
     // "ov-benchmarks" must never render as a user-facing heading. Frameless
     // widgets are self-labelling — never draw card chrome above them.
-    const showTitle = !frameless && !!w.title && w.title.trim().toLowerCase() !== String(w.id).toLowerCase();
+    // Clean the user-facing title (overhaul §1): drop the "Domain · " catalog
+    // prefix, convert machine-looking punctuation (middot, em/en dash, ×) into
+    // plain words, and drop a trailing "(...)" note. The full catalog title is
+    // kept in the title attribute for the assistant's DOM reader.
+    const rawTitle = (w.title || '').trim();
+    const cleanTitle = rawTitle
+      .replace(/^[A-Za-z][A-Za-z ]*?\s*·\s*/, '')   // leading "Overview · " style prefix
+      .replace(/\s*·\s*/g, ', ')                     // any remaining middot separator
+      .replace(/\s*[—–]\s*/g, ': ')                  // em/en dash to a colon
+      .replace(/\s*×\s*/g, ' by ')                   // multiplication sign to "by"
+      .replace(/\s*\([^)]*\)\s*$/, '')               // trailing parenthetical note
+      .trim();
+    const secTitleLc = (section.title || '').trim().toLowerCase();
+    // Suppress a title that is just the widget id, or that repeats the section
+    // name (overhaul §1: an inner title must not restate its section).
+    const showTitle = !frameless && !!cleanTitle
+      && cleanTitle.toLowerCase() !== String(w.id).toLowerCase()
+      && cleanTitle.toLowerCase() !== secTitleLc;
     if (showTitle) {
       const h = document.createElement('div');
       h.className = 'widget-hd';
@@ -273,7 +323,7 @@ function renderSection(section: ResolvedSection, page: ResolvedPage, mount: HTML
       // widgets have no in-tree def) declares reacts_to dimensions.
       const reacts = (wdef?.reactsTo && wdef.reactsTo.length) ||
                      (w.reacts_to && w.reacts_to.length);
-      h.innerHTML = `<h4 class="widget-title" title="${String(w.title).replace(/"/g, '&quot;')}">${w.title}</h4>` +
+      h.innerHTML = `<h4 class="widget-title" title="${String(rawTitle).replace(/"/g, '&quot;')}">${cleanTitle}</h4>` +
         (reacts ? '' : '<span class="widget-badge" title="This widget is not affected by the current filters">unfiltered</span>');
       card.appendChild(h);
     }

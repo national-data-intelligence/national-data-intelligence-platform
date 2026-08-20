@@ -1,0 +1,37 @@
+# NHDW Helm values — the per-environment knobs. The topology profiles
+# (values-single.yaml / values-fleet.yaml) override these; "laptop → fleet" is a
+# `-f values-fleet.yaml` swap, no template changes. See README.md.
+namespace: nhdw
+
+image:
+  # dev (k3d-loaded images): "nhdw" → nhdw/<component>:<tag>.
+  # prod: a real registry, e.g. "registry.example.com/nhdw".
+  repository: nhdw
+  tag: "1.0.0"                 # immutable release version (P2.1) — bump per release, matches VERSION
+  pullPolicy: IfNotPresent
+
+# Consistent-hostname base for OIDC redirects + ingress hosts (the OIDC consistent-hostname contract).
+hostBase: 127.0.0.1.nip.io
+keycloak:
+  # publicBase derives from hostBase (https://keycloak.<hostBase>) via the nhdw.kcPublicBase
+  # helper — leave empty so ONE hostBase knob moves the whole OIDC issuer. Set only to override.
+  publicBase: ""
+  internalBase: http://keycloak.nhdw.svc.cluster.local:8080
+fayda:
+  internalBase: http://host.k3d.internal:8096   # external Fayda replica (email-OTP); prod → real Fayda
+
+# Alertmanager email is opt-IN. Default false ⇒ a from-bare/cold rebuild renders a null
+# receiver and NEVER emails a real inbox, even though smtp-secrets carries a live app-password.
+# Set true only when you deliberately want live alert emails.
+alertmanager:
+  email: false
+
+storageClass: local-path
+
+# Per-component replicas + resources. Fleet profile raises these.
+components:
+  internal-bi:      { replicas: 1, resources: {} }
+  public-dashboard: { replicas: 1, resources: {} }
+  admin:            { replicas: 1, resources: {} }
+  workshop:         { replicas: 1, resources: {} }
+  gateway:          { replicas: 1, resources: {} }

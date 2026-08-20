@@ -36,7 +36,7 @@ const check = (c, l) => { console.log((c ? '  ✓ ' : '  ✗ ') + l); if (!c) fa
     const page = api.read_page();
     const heroTitle = (page.widgets.find(w => w.id === 'rm-hero') || {}).title;
     const w = api.read_widget({ widget_id: 'rm-hero' });
-    const wPipe = api.read_widget({ widget_id: 'rm-pipeline' });
+    const wPipe = api.read_widget({ widget_id: 'rm-hotspots' });
     return {
       page_id: page.page_id,
       widget_ids: page.widgets.map(x => x.id),
@@ -51,11 +51,11 @@ const check = (c, l) => { console.log((c ? '  ✓ ' : '  ✗ ') + l); if (!c) fa
   else {
     check(out.page_id === 'internal-bi/resource', `navigate + read_page on Resource (page_id=${out.page_id})`);
     const rm = out.widget_ids.filter(id => id.startsWith('rm-'));
-    check(rm.length >= 12, `read_page SEES catalog rm-* widgets (${rm.length} found: ${rm.slice(0,4).join(',')}…)`);
+    check(rm.length >= 10, `read_page SEES catalog rm-* widgets (${rm.length} found: ${rm.slice(0,4).join(',')}…)`);
     check(out.titled >= 12, `widgets carry real titles (${out.titled} titled)`);
     check(!!out.heroTitle && out.heroTitle !== 'rm-hero', `rm-hero has a human title ("${out.heroTitle}")`);
     check(out.heroPreview.length > 0, `read_widget(rm-hero) returns a text preview ("${out.heroPreview}…")`);
-    check(out.pipeOk, `read_widget(rm-pipeline) ok with preview`);
+    check(out.pipeOk, `read_widget(rm-hotspots) ok with preview`);
   }
 
   await browser.close();

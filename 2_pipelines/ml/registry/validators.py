@@ -151,7 +151,7 @@ def validate_resources(tar_path: Path) -> ValidatorResult:
 # at build time. This is what allows --network=none to be a real isolation
 # guarantee: nothing inside the sandbox can resolve DNS or reach PyPI.
 # Override via SANDBOX_IMAGE if a different image is preferred per env.
-SANDBOX_IMAGE = os.environ.get("SANDBOX_IMAGE", "nhdw/ml-sandbox:dev")
+SANDBOX_IMAGE = os.environ.get("SANDBOX_IMAGE", "nhdw/ml-sandbox:1.0.0")
 SANDBOX_NETWORK = "none"            # K3D namespace equivalent
 SANDBOX_TIMEOUT_S = 60
 

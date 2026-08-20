@@ -118,8 +118,8 @@ export default function App() {
             )}
             {!denied && loaded && !spec && (
               <div className="widget-empty" style={{ padding: '3rem' }}>
-                The dashboard catalog could not be loaded from the gateway —
-                try reloading once the gateway is reachable.
+                The dashboard catalog could not be loaded from the gateway.
+                Try reloading once the gateway is reachable.
               </div>
             )}
             {!denied && activeId && (

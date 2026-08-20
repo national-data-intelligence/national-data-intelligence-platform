@@ -94,6 +94,14 @@ up_llm() {
   }
   ensure_model 3b
   [ "$have_gpu" = 1 ] && ensure_model 14b
+  # Preload the model the gateway will use into (V)RAM + pin it resident, so the
+  # first assistant request isn't a cold load (which surfaces as "model
+  # unreachable"). 14b on GPU hosts, 3b on CPU — matches the gateway's model pick.
+  local warm_model="qwen2.5:3b"; [ "$have_gpu" = 1 ] && warm_model="qwen2.5:14b"
+  curl -s --max-time 120 "http://127.0.0.1:11434/api/generate" \
+    -d "{\"model\":\"$warm_model\",\"keep_alive\":\"24h\",\"prompt\":\"warmup\",\"stream\":false,\"options\":{\"num_predict\":1}}" \
+    >/dev/null 2>&1 && log "$warm_model preloaded + pinned resident" \
+    || warn "$warm_model preload failed (first assistant call will cold-start)"
 }
 
 up_fayda() {
@@ -163,11 +171,15 @@ up_hcmis_mbrana() {
   FACTS=$(SQLQ "SELECT COUNT(*) FROM HCMISWDM.Fact.DailyRecord")
   WDM_HAVE=$(SQLQ "SELECT ISNULL(MAX(SynthVersion),0) FROM HCMISWDM.dbo.SynthMeta")
   WDM_WANT=$(synth_ver "$SRC/HCMISWDM/scripts/synthesize_analytics.py")
-  if [ "${FACTS:-0}" -gt 0 ] && [ "${WDM_HAVE:-0}" = "${WDM_WANT:-1}" ]; then
-    log "HCMISWDM already carries current facts (DailyRecord=${FACTS}, synth v${WDM_HAVE}) — skipping synthesize"
+  # Dispatch plan (Supply Control Tower) rides the same restore — its own marker
+  # so a pack that predates the dispatch loader re-synthesizes to add it.
+  DISP_HAVE=$(SQLQ "SELECT ISNULL(MAX(SynthVersion),0) FROM HCMISWDM.dbo.DispatchSynthMeta")
+  DISP_WANT=$(grep -oE 'DISPATCH_SYNTH_VERSION *= *[0-9]+' "$SRC/HCMISWDM/scripts/synthesize_dispatch.py" | head -1 | grep -oE '[0-9]+')
+  if [ "${FACTS:-0}" -gt 0 ] && [ "${WDM_HAVE:-0}" = "${WDM_WANT:-1}" ] && [ "${DISP_HAVE:-0}" = "${DISP_WANT:-1}" ]; then
+    log "HCMISWDM already carries current facts (DailyRecord=${FACTS}, synth v${WDM_HAVE}, dispatch v${DISP_HAVE}) — skipping synthesize"
   else
-    [ "${FACTS:-0}" -gt 0 ] && log "HCMISWDM synth-version drift (have v${WDM_HAVE:-0}, want v${WDM_WANT:-1}) — re-synthesizing"
-    ( cd "$SRC/HCMISWDM" && python3 scripts/synthesize.py && python3 scripts/synthesize_analytics.py ) \
+    [ "${FACTS:-0}" -gt 0 ] && log "HCMISWDM synth-version drift (analytics have v${WDM_HAVE:-0}/want v${WDM_WANT:-1}, dispatch have v${DISP_HAVE:-0}/want v${DISP_WANT:-1}) — re-synthesizing"
+    ( cd "$SRC/HCMISWDM" && python3 scripts/synthesize.py && python3 scripts/synthesize_analytics.py && python3 scripts/synthesize_dispatch.py ) \
       && log "HCMISWDM synthesized" || warn "HCMISWDM synthesize failed (facts may be empty — resilient views tolerate this)"
   fi
   log "restoring mBrana (HCMISWCloud) into the same instance"

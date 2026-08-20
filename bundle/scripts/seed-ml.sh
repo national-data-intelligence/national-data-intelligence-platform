@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# seed-ml.sh — boot step 7.5: seed the ML tier from bundle/seeds/ml/.
+# seed-ml.sh — boot step 7.5: seed the ML tier from bundle/seed-pack/app/ml/.
 #
 # The SINGLE ingestion path (plan Part B): seed packages take the SAME road a
 # community upload takes — package → MinIO ml-packages/<name>/current/ →
@@ -8,7 +8,7 @@
 # forecast widgets have data on day one) → runner drift-check + score-performance
 # Jobs (seed the ops_ml.model_drift / model_performance baselines the nightly
 # ml_drift_check DAG then maintains, so the monitoring charts are non-empty on
-# boot). model_deployment rows come from bundle/seeds/ml/deployments.yaml
+# boot). model_deployment rows come from bundle/seed-pack/app/ml/deployments.yaml
 # (upsert — provenance-friendly, re-runnable).
 #
 # CONVERGENT (like every other seed): a model whose registry entry already has
@@ -16,12 +16,12 @@
 # don't retrain); pass --retrain to force.
 #
 # Runner Jobs mirror the gateway's job builder (routes/ml.py _runner_env) —
-# same env contract, same image seam (nhdw/ml-runner:dev locally; prod remaps).
+# same env contract, same image seam (nhdw/ml-runner:1.0.0 locally; prod remaps).
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS=nhdw
-SEEDS="$REPO/bundle/seeds/ml"
-RUNNER_IMAGE="${ML_RUNNER_IMAGE:-nhdw/ml-runner:dev}"
+SEEDS="$REPO/bundle/seed-pack/app/ml"
+RUNNER_IMAGE="${ML_RUNNER_IMAGE:-nhdw/ml-runner:1.0.0}"
 FORCE_RETRAIN=false
 [ "${1:-}" = "--retrain" ] && FORCE_RETRAIN=true
 export PATH="$HOME/.local/bin:$PATH"

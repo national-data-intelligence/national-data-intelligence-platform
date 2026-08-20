@@ -1,38 +1,38 @@
-/** ws-model-workbench — the combined model detail + interact panel.
+/** ws-model-workbench — the workshop Model "card + how to use" panel.
  *  reactsTo `ws_model` (published by ws-models-table); instructive empty
  *  state until a model is selected.
  *
- *   GET  /gw/ml/{model}                 facts: aliases, deployment, last run,
- *                                       registry description (the model card
- *                                       text the runner set from the package
- *                                       manifest — the only real card source)
- *   GET  /gw/ml/{model}/versions        registry versions (aliases merged from
- *                                       the detail payload — the versions
- *                                       route's per-version aliases are empty)
- *   GET  /gw/ml/{model}/predictions?limit=6   latest stored batch sample
- *   POST /gw/ml/{model}/predict         async ad-hoc predict → runner Job;
- *   GET  /gw/ml/jobs/{id}               poll ~10-30 s → presigned result CSV
- *   GET  /gw/ml/{model}/runs            the runner's VERBATIM error after a
- *                                       failed Job (the k8s condition only
- *                                       says "backoff limit reached")
+ *  USAGE-ONLY (2026-07-14): a publicly-available model must expose only what
+ *  a caller needs to USE it — never stored prediction results/"memory" and
+ *  never real-time health/drift/performance (those are admin-only). So this
+ *  widget shows: minimal model info + a few honest catalogue metrics + the
+ *  model's INPUT and OUTPUT schema + a typed form to RUN the model on the
+ *  user's OWN input, with the result shown ONCE (never persisted to a list).
  *
- * Ported faithfully from the bespoke sections/ModelDetail.tsx (incl. the
- * PredictRunner paste/file modes and error surfacing). */
+ *   GET  /gw/ml/{model}            facts: aliases, deployment, registry
+ *                                  description (the package model-card text)
+ *   GET  /gw/ml/{model}/versions   registry versions (aliases merged from the
+ *                                  detail payload — the versions route's
+ *                                  per-version aliases are empty)
+ *   GET  /gw/ml/{model}/schema     input/output signature + input_example
+ *                                  (catalogue metadata; no stored predictions)
+ *   POST /gw/ml/{model}/predict    async ad-hoc predict on the user's row →
+ *   GET  /gw/ml/jobs/{id}          poll ~10-30 s → presigned result CSV
+ *   GET  /gw/ml/{model}/runs       the runner's VERBATIM error after a failed
+ *                                  Job (the k8s condition only says "backoff
+ *                                  limit reached")
+ *
+ *  The stored-batch-sample section and the /predictions read were REMOVED here
+ *  (privacy + security): a public model must not surface other users' results. */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import {
-  getModel, listVersions, listPredictions, submitPredict, getJob, listRuns,
-  fmtEpochMs, fmtDateTime, fmtNum, fmtProb, aliasPillClass,
-  type MlModelDetail, type MlVersion, type MlPredictionRow, type MlJobStatus,
+  getModel, listVersions, getSchema, submitPredict, getJob, listRuns,
+  fmtEpochMs, fmtDateTime, fmtNum, aliasPillClass,
+  type MlModelDetail, type MlVersion, type MlSchema, type MlJobStatus,
 } from '../../api/ml';
 import { esc } from '../_shared/helpers';
 
-const SAMPLE_LIMIT = 6;
-
-function runStatusPill(status: string): string {
-  return status === 'success' ? 'good'
-       : status === 'failed' ? 'alert'
-       : 'watch';
-}
+const NUMERIC_RE = /^(long|integer|int|double|float|decimal|number)$/i;
 
 function fact(icon: string, label: string, valueHtml: string): string {
   return `
@@ -43,6 +43,16 @@ function fact(icon: string, label: string, valueHtml: string): string {
         <div class="mdl-fact-val">${valueHtml}</div>
       </div>
     </div>`;
+}
+
+/** Friendly one-word type for a signature field. */
+function typeLabel(t: string | null | undefined): string {
+  if (!t) return '';
+  const s = String(t).toLowerCase();
+  if (NUMERIC_RE.test(s)) return s === 'double' || s === 'float' ? 'number' : 'integer';
+  if (s === 'datetime' || s === 'date') return 'date';
+  if (s === 'boolean' || s === 'bool') return 'boolean';
+  return 'text';
 }
 
 function versionsHtml(versions: MlVersion[] | null, err: string | null,
@@ -77,55 +87,68 @@ function versionsHtml(versions: MlVersion[] | null, err: string | null,
     </div>`;
 }
 
-function predictionsHtml(rows: MlPredictionRow[] | null, err: string | null): string {
-  if (err) return `<p class="mdl-note alert">Failed to load predictions: ${esc(err)}</p>`;
-  if (rows === null) return `<p class="muted">Loading predictions…</p>`;
-  if (!rows.length) {
-    return `<p class="mdl-note">No stored predictions yet — rows appear in
-      <code>ops_ml.ml_predictions</code> after the model's first successful batch run.</p>`;
+/** Output schema — the SHAPE the model returns (names + types), never values. */
+function outputSchemaHtml(schema: MlSchema | null, err: string | null): string {
+  if (err) return `<p class="mdl-note alert">Failed to load schema: ${esc(err)}</p>`;
+  if (schema === null) return `<p class="muted">Loading schema…</p>`;
+  if (!schema.outputs.length) {
+    return `<p class="mdl-note">The output schema is not published for this model.</p>`;
   }
-  const hasDisease = rows.some(r => r.disease !== '');
   return `
-    <p class="mdl-note">Sample from the latest successful batch run — most recent target
-      week first, highest alarm probability at the top (first ${rows.length} rows shown).</p>
     <div class="art-schema mdl-scroll-x">
       <table>
-        <thead><tr>
-          ${hasDisease ? '<th>Disease</th>' : ''}
-          <th>${hasDisease ? 'District' : 'District / item'}</th>
-          <th>Week</th><th>Forecast (95% band)</th><th>Alarm</th>
-        </tr></thead>
+        <thead><tr><th>Field</th><th>Type</th></tr></thead>
         <tbody>
-          ${rows.map(r => `
+          ${schema.outputs.map(o => `
             <tr>
-              ${hasDisease ? `<td><code>${esc(r.disease || '—')}</code></td>` : ''}
-              <td><code>${esc(r.district)}</code></td>
-              <td>${esc(r.year)}·W${esc(r.week)}</td>
-              <td>${esc(fmtNum(r.pred_cases_mean))}${(r.pred_cases_lwr95 != null && r.pred_cases_upr95 != null)
-                ? ` <span class="muted">[${esc(fmtNum(r.pred_cases_lwr95))}–${esc(fmtNum(r.pred_cases_upr95))}]</span>` : ''}</td>
-              <td>${r.alarm_flag === 1
-                ? `<span class="pill alert">alarm · ${esc(fmtProb(r.alarm_prob))}</span>`
-                : `<span class="muted">${esc(fmtProb(r.alarm_prob))}</span>`}</td>
+              <td><code>${esc(o.name)}</code></td>
+              <td><span class="mdl-field-type">${esc(typeLabel(o.type))}</span>
+                  ${o.type ? `<span class="muted"> · ${esc(o.type)}</span>` : ''}</td>
             </tr>`).join('')}
         </tbody>
       </table>
     </div>`;
 }
 
-/* ── async predict runner (ported PredictRunner) ─────────────────────── */
+/* ── the typed run form (input schema → fill → run → result shown once) ── */
 
 type RunPhase = 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed';
 
-function mountPredictRunner(el: HTMLElement, model: string): () => void {
+const FLOAT_RE = /^(double|float|decimal|number)$/i;
+
+/** Serialize a field value into a CSV-safe cell for the runner. Everything
+ *  travels as text (the gateway builds a CSV the runner reads with pandas, then
+ *  MLflow enforces the signature). For double/float columns we MUST keep a
+ *  decimal point even for whole numbers ("71" → "71.0") — otherwise pandas
+ *  infers int64 and MLflow refuses the int64→float64 coercion. */
+function toCsvCell(v: string, type: string | null | undefined): string {
+  const s = v.trim();
+  if (!s) return s;
+  if (type && FLOAT_RE.test(String(type))) {
+    const n = Number(s);
+    if (Number.isFinite(n)) return Number.isInteger(n) ? n.toFixed(1) : String(n);
+  }
+  return s;
+}
+
+/** Naive CSV split — the runner's output columns hold no embedded commas for
+ *  the seeded forecast schemas; the download link remains authoritative. */
+function parseCsv(text: string): { cols: string[]; rows: string[][] } {
+  const lines = text.replace(/﻿/g, '').trim().split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return { cols: [], rows: [] };
+  const cols = lines[0].split(',');
+  const rows = lines.slice(1, 9).map(l => l.split(','));
+  return { cols, rows };
+}
+
+function mountRunForm(el: HTMLElement, model: string, schema: MlSchema): () => void {
+  const values: Record<string, string> = {};
   const state = {
-    mode: 'paste' as 'paste' | 'file',
-    pasteText: '',
-    fileText: '',
-    fileName: '',
     phase: 'idle' as RunPhase,
     jobId: null as string | null,
     job: null as MlJobStatus | null,
     error: null as string | null,
+    resultHtml: null as string | null,
     elapsed: 0,
     start: 0,
   };
@@ -138,11 +161,46 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
     if (tickIv) { window.clearInterval(tickIv); tickIv = undefined; }
   };
 
-  const csv = () => (state.mode === 'file' ? state.fileText : state.pasteText);
+  const buildRow = (): Record<string, unknown> => {
+    const row: Record<string, unknown> = {};
+    for (const f of schema.inputs) {
+      const raw = (values[f.name] ?? '').trim();
+      const chosen = raw !== '' ? raw
+        : (f.example != null ? String(f.example) : '');
+      row[f.name] = toCsvCell(chosen, f.type);
+    }
+    return row;
+  };
+
+  /** Best-effort inline preview of the run's OWN result — fetched once from the
+   *  presigned URL, never stored. Falls back to the download link on any error
+   *  (e.g. CORS). */
+  const loadResultPreview = async (url: string): Promise<void> => {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(String(r.status));
+      const text = await r.text();
+      const { cols, rows } = parseCsv(text);
+      if (!cols.length || !rows.length) return;
+      state.resultHtml = `
+        <div class="mdl-run-out">
+          <div class="art-schema mdl-scroll-x">
+            <table>
+              <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+              <tbody>
+                ${rows.map(rw => `<tr>${cols.map((_, i) =>
+                  `<td><code>${esc(rw[i] ?? '')}</code></td>`).join('')}</tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          <p class="mdl-run-out-note">Showing your run's first ${rows.length} output row(s).
+            This result is shown once and is <strong>not saved</strong> to any list.</p>
+        </div>`;
+      if (!disposed && state.phase === 'succeeded') paint();
+    } catch { /* keep the download-only rendering */ }
+  };
 
   const startPolling = () => {
-    // Poll the runner Job every 2.5 s while it runs. Transient poll errors
-    // don't abort the loop — the Job keeps running server-side regardless.
     pollIv = window.setInterval(async () => {
       if (state.phase !== 'running' || !state.jobId) return;
       try {
@@ -153,11 +211,11 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
           state.phase = 'succeeded';
           stopTimers();
           paint();
+          if (j.result_url) void loadResultPreview(j.result_url);
         } else if (j.status === 'failed') {
           // The Job condition only carries the generic "backoff limit" text;
-          // the runner's real error (e.g. the exact signature mismatch) is
-          // recorded in ops_ml.ml_run.error_msg — fetch the matching ad-hoc
-          // run and surface it verbatim.
+          // the runner's real error (e.g. the exact signature mismatch) is in
+          // ops_ml.ml_run.error_msg — fetch the matching ad-hoc run + surface it.
           let msg = j.error || 'runner job failed (no error message reported)';
           try {
             const runs = await listRuns(model, 10);
@@ -175,7 +233,6 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
         }
       } catch { /* transient — next tick retries */ }
     }, 2500);
-    // 1-second elapsed ticker while the job is in flight.
     tickIv = window.setInterval(() => {
       state.elapsed = Math.round((Date.now() - state.start) / 1000);
       const t = el.querySelector<HTMLElement>('.mdl-run-elapsed');
@@ -184,16 +241,16 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
   };
 
   const run = async () => {
-    if (!csv().trim()) return;
     state.error = null;
     state.job = null;
     state.jobId = null;
+    state.resultHtml = null;
     state.start = Date.now();
     state.elapsed = 0;
     state.phase = 'submitting';
     paint();
     try {
-      const sub = await submitPredict(model, { csv: csv() });
+      const sub = await submitPredict(model, { rows: [buildRow()] });
       if (disposed) return;
       state.jobId = sub.job_id;
       state.phase = 'running';
@@ -214,41 +271,49 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
     state.jobId = null;
     state.job = null;
     state.error = null;
+    state.resultHtml = null;
     state.elapsed = 0;
     paint();
   };
 
+  function formFieldsHtml(): string {
+    if (!schema.inputs.length) {
+      return `<p class="mdl-note">The input schema is not published for this model,
+        so a typed run form isn't available.</p>`;
+    }
+    return `
+      <div class="mdl-form">
+        ${schema.inputs.map(f => `
+          <label class="mdl-field">
+            <span class="mdl-field-lbl">
+              <code>${esc(f.name)}</code>
+              <span class="mdl-field-type">${esc(typeLabel(f.type))}</span>
+              ${f.required ? '<span class="mdl-field-req" title="required">*</span>' : ''}
+            </span>
+            <input type="text" data-field="${esc(f.name)}"
+              value="${esc(values[f.name] ?? '')}"
+              placeholder="${f.example != null ? esc(String(f.example)) : ''}"
+              autocomplete="off" spellcheck="false" />
+          </label>`).join('')}
+      </div>`;
+  }
+
   function paint() {
-    const busy = state.phase === 'submitting' || state.phase === 'running';
     let body: string;
     if (state.phase === 'idle' || state.phase === 'failed') {
       body = `
-        <div class="art-scope mdl-run-mode" role="group" aria-label="Input mode">
-          <button type="button" class="art-scope-btn${state.mode === 'paste' ? ' active' : ''}" data-mode="paste">Paste CSV</button>
-          <button type="button" class="art-scope-btn${state.mode === 'file' ? ' active' : ''}" data-mode="file">Upload CSV</button>
-        </div>
-        ${state.mode === 'paste'
-          ? `<textarea class="mdl-run-csv" rows="5" aria-label="CSV input"
-               placeholder="header row, then data rows — e.g.\ncol_a,col_b,…\nvalue,value,…">${esc(state.pasteText)}</textarea>`
-          : `<label class="mdl-run-file">
-               <input type="file" accept=".csv,text/csv">
-               <svg class="ico"><use href="#i-upload"/></svg>
-               <span>${state.fileName
-                 ? `${esc(state.fileName)} · ${state.fileText.length.toLocaleString()} characters`
-                 : 'Choose a .csv file'}</span>
-             </label>`}
+        ${formFieldsHtml()}
         ${state.phase === 'failed' && state.error ? `
           <div class="alert-banner" style="background:var(--alert-50);color:var(--alert)">
             <div style="min-width:0;flex:1">
-              <div>Prediction failed${state.jobId ? ` — runner job <code>${esc(state.jobId)}</code> reported:` : ':'}</div>
+              <div>Prediction failed${state.jobId ? `. Runner job <code>${esc(state.jobId)}</code> reported:` : ':'}</div>
               <pre class="mdl-run-err">${esc(state.error)}</pre>
             </div>
           </div>` : ''}
         <div class="mdl-run-actions">
-          <button class="btn btn-primary" data-act="run"${csv().trim() ? '' : ' disabled'}>
+          <button class="btn btn-primary" data-act="run"${schema.inputs.length ? '' : ' disabled'}>
             <svg class="ico"><use href="#i-play"/></svg>
-            ${state.phase === 'failed' ? 'Try again' : 'Run prediction'}</button>
-          ${state.phase === 'failed' ? '<button class="btn btn-ghost" data-act="reset">Clear</button>' : ''}
+            ${state.phase === 'failed' ? 'Try again' : 'Run on these inputs'}</button>
         </div>`;
     } else if (state.phase === 'succeeded' && state.job) {
       const job = state.job;
@@ -257,14 +322,15 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
           <p><span class="pill good">succeeded</span>
             Runner job <code>${esc(job.job_id)}</code> finished${job.completion_time ? ` at ${esc(fmtDateTime(job.completion_time))}` : ''}
             (${state.elapsed}s from submit).</p>
+          ${state.resultHtml ?? ''}
           ${job.result_url
             ? `<a class="btn btn-primary" href="${esc(job.result_url)}">
                  <svg class="ico"><use href="#i-download"/></svg> Download result CSV</a>`
             : `<div class="alert-banner" style="background:var(--watch-50);color:var(--watch)">
                  The result CSV is stored at <code>${esc(job.result_uri || 'unknown')}</code>, but a
-                 browser download link could not be signed — ask an operator to fetch it.</div>`}
+                 browser download link could not be signed; ask an operator to fetch it.</div>`}
           <div class="mdl-run-actions">
-            <button class="btn btn-ghost btn-sm" data-act="reset">Run another prediction</button>
+            <button class="btn btn-ghost btn-sm" data-act="reset">Run again</button>
           </div>
         </div>`;
     } else {
@@ -273,11 +339,11 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
           <span class="mdl-spinner" aria-hidden="true"></span>
           <div>
             <strong>${state.phase === 'submitting'
-              ? 'Uploading your CSV and creating the runner job…'
+              ? 'Submitting your inputs and creating the runner job…'
               : 'Model running in the cluster…'}</strong>
             <div class="muted">
               ${state.jobId ? `job <code>${esc(state.jobId)}</code> · ` : ''}
-              <span class="mdl-run-elapsed">${state.elapsed}s</span> elapsed — typically 10–30s.
+              <span class="mdl-run-elapsed">${state.elapsed}s</span> elapsed, typically 10 to 30s.
               The job keeps running if you navigate away.</div>
           </div>
         </div>`;
@@ -287,44 +353,24 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
       <div class="mdl-run">
         <div class="mdl-run-hdr">
           <svg class="ico"><use href="#i-play"/></svg>
-          <h4>Run this model on your data</h4>
+          <h4>Run this model on your inputs</h4>
         </div>
         <p class="mdl-note">
-          Submitting creates a one-off runner job in the cluster that loads
-          <code>${esc(model)}@champion</code>, scores your CSV and stores the result —
-          <strong>this takes roughly 10–30 seconds</strong>; the result is a
-          downloadable CSV, not an instant answer.</p>
-        <p class="mdl-note">
-          Your CSV must match the model's input signature
-          (<code>feature_spec.yaml → input.signature</code> in the model package).
-          The gateway does not expose the signature, so the required columns can't
-          be listed here — the runner validates the upload against the real
-          signature and any mismatch is reported below verbatim.</p>
+          Fill the fields below (they are pre-filled with example values as
+          placeholders) and submit. This creates a one-off runner job that loads
+          <code>${esc(model)}@champion</code>, scores your row and returns a
+          result CSV. <strong>This takes roughly 10 to 30 seconds.</strong>
+          Your result is shown once here and is never saved to a shared list.</p>
         ${body}
       </div>`;
 
     // wire events for the current phase
-    el.querySelectorAll<HTMLButtonElement>('button[data-mode]').forEach(b =>
-      b.addEventListener('click', () => { state.mode = b.dataset.mode as 'paste' | 'file'; paint(); }));
-    const ta = el.querySelector<HTMLTextAreaElement>('textarea.mdl-run-csv');
-    if (ta) ta.addEventListener('input', () => {
-      state.pasteText = ta.value;
-      const btn = el.querySelector<HTMLButtonElement>('button[data-act="run"]');
-      if (btn) btn.disabled = !csv().trim();
-    });
-    const fi = el.querySelector<HTMLInputElement>('.mdl-run-file input[type="file"]');
-    if (fi) fi.addEventListener('change', async () => {
-      const f = fi.files?.[0];
-      if (!f) return;
-      state.fileName = f.name;
-      state.fileText = await f.text();
-      if (!disposed) paint();
-    });
+    el.querySelectorAll<HTMLInputElement>('input[data-field]').forEach(inp =>
+      inp.addEventListener('input', () => { values[inp.dataset.field!] = inp.value; }));
     el.querySelector<HTMLButtonElement>('button[data-act="run"]')
       ?.addEventListener('click', () => { void run(); });
     el.querySelectorAll<HTMLButtonElement>('button[data-act="reset"]').forEach(b =>
       b.addEventListener('click', reset));
-    void busy;
   }
 
   paint();
@@ -336,7 +382,7 @@ function mountPredictRunner(el: HTMLElement, model: string): () => void {
 async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   const model = ctx.filters.ws_model || '';
   if (!model) {
-    ctx.empty('Select a model in the catalogue above to open its workbench — facts, versions, latest predictions and the predict runner.');
+    ctx.empty('Select a model in the catalogue above to open its card: model info, honest metrics, the input/output schema and a form to run it on your own input.');
     return;
   }
 
@@ -344,24 +390,28 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
   let detailErr = '';
   let versions: MlVersion[] | null = null;
   let versionsErr: string | null = null;
-  let preds: MlPredictionRow[] | null = null;
-  let predsErr: string | null = null;
-  const [dRes, vRes, pRes] = await Promise.allSettled([
+  let schema: MlSchema | null = null;
+  let schemaErr: string | null = null;
+  const [dRes, vRes, sRes] = await Promise.allSettled([
     getModel(model),
     listVersions(model),
-    listPredictions(model, { limit: SAMPLE_LIMIT }),
+    getSchema(model),
   ]);
   if (dRes.status === 'fulfilled') detail = dRes.value; else detailErr = dRes.reason?.message || String(dRes.reason);
   if (vRes.status === 'fulfilled') versions = vRes.value; else versionsErr = vRes.reason?.message || String(vRes.reason);
-  if (pRes.status === 'fulfilled') preds = pRes.value; else predsErr = pRes.reason?.message || String(pRes.reason);
+  if (sRes.status === 'fulfilled') schema = sRes.value; else schemaErr = sRes.reason?.message || String(sRes.reason);
 
   if (!detail) {
-    ctx.empty(`Failed to load model “${model}” — ${detailErr}`);
+    ctx.empty(`Failed to load model “${model}”: ${detailErr}`);
     return;
   }
 
   const aliases = Object.entries(detail.aliases ?? {});
-  const run = detail.last_run;
+
+  // Honest headline metrics — catalogue metadata ONLY (no stored predictions,
+  // no health/drift/performance).
+  const inputCount = schema ? schema.inputs.length : null;
+  const outputCount = schema ? schema.outputs.length : null;
 
   ctx.el.innerHTML = `
     <div class="mdl-detail" style="position:static;max-height:none;border:none;box-shadow:none;padding:0">
@@ -376,25 +426,25 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
 
       ${detail.description
         ? `<p class="mdl-detail-desc">${esc(detail.description)}</p>`
-        : `<p class="mdl-note">This model has no description in the registry — its package manifest carried none.</p>`}
+        : `<p class="mdl-note">This model has no description in the registry; its package manifest carried none.</p>`}
 
       <div class="mdl-facts">
         ${fact('i-shield-check', 'Serving version', detail.champion_version
           ? `v${esc(detail.champion_version)} <span class="muted">via @${esc(detail.deployment?.model_alias || 'champion')}</span>`
           : 'none promoted')}
+        ${fact('i-package', 'Task type', `<code>${esc(detail.deployment_kind)}</code>`)}
         ${fact('i-calendar', 'Schedule', detail.schedule
           ? `weekly batch · <code>${esc(detail.schedule)}</code>`
           : detail.deployment_kind === 'batch' ? 'batch (no schedule row)' : 'on demand')}
-        ${fact('i-refresh', 'Last run', run
-          ? `<span class="pill ${esc(runStatusPill(run.status))}">${esc(run.status)}</span>
-             ${esc(fmtDateTime(run.finished_at || run.started_at))}${run.row_count != null ? ` <span class="muted">· ${esc(fmtNum(run.row_count, 0))} rows</span>` : ''}`
-          : 'no runs recorded')}
         ${fact('i-clock', 'Registry updated',
           `${esc(fmtEpochMs(detail.last_updated))}${detail.latest_version ? ` <span class="muted">· latest v${esc(detail.latest_version)}</span>` : ''}`)}
+        ${fact('i-list', 'Registered versions',
+          versions ? `${esc(fmtNum(versions.length, 0))}` : '<span class="muted">—</span>')}
+        ${fact('i-database', 'Schema fields',
+          (inputCount != null && outputCount != null)
+            ? `${esc(String(inputCount))} in · ${esc(String(outputCount))} out`
+            : '<span class="muted">—</span>')}
       </div>
-      ${run?.status === 'failed' && run.error_msg ? `
-        <div class="alert-banner" style="background:var(--alert-50);color:var(--alert)">
-          Last run failed: ${esc(run.error_msg)}</div>` : ''}
 
       <div class="mdl-section">
         <h4 class="mdl-section-h">Versions</h4>
@@ -402,16 +452,30 @@ async function draw(ctx: WidgetCtx): Promise<void | (() => void)> {
       </div>
 
       <div class="mdl-section">
-        <h4 class="mdl-section-h">Latest stored predictions</h4>
-        ${predictionsHtml(preds, predsErr)}
+        <h4 class="mdl-section-h">Input schema</h4>
+        <p class="mdl-note">The fields this model expects. Fill them in the run
+          form below — example values are shown as placeholders.</p>
+        <div class="ws-runform-slot"></div>
       </div>
 
-      <div class="mdl-section ws-predict-slot"></div>
+      <div class="mdl-section">
+        <h4 class="mdl-section-h">Output schema</h4>
+        <p class="mdl-note">The shape the model returns for each scored row
+          (field names and types — no stored values).</p>
+        ${outputSchemaHtml(schema, schemaErr)}
+      </div>
     </div>`;
 
-  const runnerCleanup = mountPredictRunner(
-    ctx.el.querySelector<HTMLElement>('.ws-predict-slot')!, model);
-  return () => { runnerCleanup(); };
+  let runnerCleanup: (() => void) | null = null;
+  const slot = ctx.el.querySelector<HTMLElement>('.ws-runform-slot')!;
+  if (schema && !schemaErr) {
+    runnerCleanup = mountRunForm(slot, model, schema);
+  } else {
+    slot.innerHTML = `<p class="mdl-note alert">The input/output schema could not
+      be loaded${schemaErr ? `: ${esc(schemaErr)}` : ''}. A run form is unavailable
+      until the schema is published.</p>`;
+  }
+  return () => { runnerCleanup?.(); };
 }
 
 const def: WidgetDef = {

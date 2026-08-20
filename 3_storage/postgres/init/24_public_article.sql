@@ -5,7 +5,7 @@
 -- The public SPA reads these anonymously through the gateway's
 -- /api/public/articles route (R-PUB-ANON, no Bearer) — the same
 -- public_router pattern as ops_governance.access_request. Content is seeded
--- from bundle/seeds/articles/*.yaml by the security-seed Job (idempotent
+-- from bundle/seed-pack/app/articles/*.yaml by the security-seed Job (idempotent
 -- upsert, managed_by='seed'); runtime edits (managed_by='runtime') survive a
 -- pack because pg_dump of nhdw_ops captures the table.
 --

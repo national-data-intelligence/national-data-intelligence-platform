@@ -72,7 +72,7 @@ export default function NotificationPanel() {
             </div>
           ) : (
             <p className="muted text-sm" data-testid="notif-empty">
-              No alerts yet — you’ll be notified here (and by email) when a forecast
+              No alerts yet. You’ll be notified here (and by email) when a forecast
               crosses one of your subscription thresholds.
             </p>
           )}

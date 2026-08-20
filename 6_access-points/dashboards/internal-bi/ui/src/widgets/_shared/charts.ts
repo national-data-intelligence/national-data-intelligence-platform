@@ -86,7 +86,7 @@ export function funnel(el: HTMLElement, data: { name: string; value: number }[],
     series: [{
       type: 'funnel', sort: 'descending', min: 0, max: base, gap: 2,
       label: {
-        position: 'inside', formatter: '{b} · {c}', fontSize: 10.5, color: '#fff',
+        position: 'inside', formatter: '{b}: {c}', fontSize: 10.5, color: '#fff',
         fontWeight: 600, textShadowColor: 'rgba(0,0,0,0.35)', textShadowBlur: 2,
       },
       data: styled,
@@ -196,7 +196,26 @@ export function funnelCascade(el: HTMLElement, data: { name: string; pct: number
   return () => { /* pure DOM */ };
 }
 
-export interface TableColumn { id: string; label: string; format?: 'pct' | 'pill' | 'text'; }
+export interface TableColumn {
+  id: string;
+  label: string;
+  format?: 'pct' | 'pill' | 'text' | 'link';
+  /** For 'pill' cells: map a raw cell VALUE → a status token (good/watch/alert/
+   *  info/neutral), restoring domain-label colours (e.g. active→alert,
+   *  contained→good, High→alert). Falls back to the literal-token match when a
+   *  value has no tone entry — so existing pill callers are unaffected. */
+  tone?: Record<string, string>;
+  /** Conditional per-cell styling — returns an inline-style fragment (e.g.
+   *  `color:#EF4444;font-weight:700`) merged into the <td>'s style attribute.
+   *  Receives the cell value, its full row, and the row's absolute index in the
+   *  current (sorted, pre-pagination) view — for red-on-negative, top-N
+   *  highlight, band colour. Return '' for no extra styling. */
+  cellClass?: (value: any, row: Record<string, any>, index: number) => string;
+  /** For 'link' cells: id of a companion row field holding the href. When
+   *  omitted the cell value itself is the href. Only http(s) URLs render as an
+   *  <a> — anything else falls back to a muted dash (scheme validation). */
+  href?: string;
+}
 
 /** Client-paginated / searchable / sortable table. Owns its own view state in a
  *  closure (search, sort, page). Returns a no-op cleanup. */
@@ -207,17 +226,33 @@ export function paginatedTable(
   theme: Theme,
   opts: { pageSize?: number; search?: boolean; sort?: boolean } = {},
 ): () => void {
-  const state = { search: '', sort: null as string | null, page: 0, pageSize: opts.pageSize ?? 12 };
+  const state = { search: '', sort: null as string | null, sortDir: -1 as 1 | -1, page: 0, pageSize: opts.pageSize ?? 15 };
   const pillClass = (v: any) => {
     const known = ['good', 'watch', 'alert', 'info', 'neutral'];
     const s = String(v ?? '').toLowerCase();
     return known.includes(s) ? s : 'neutral';
   };
-  const cell = (r: Record<string, any>, col: TableColumn) => {
+  const escAttr = (s: any) =>
+    String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+  const cell = (r: Record<string, any>, col: TableColumn, index: number) => {
     const v = r[col.id];
-    if (col.format === 'pct') return `<td class="num">${v != null ? v + '%' : '-'}</td>`;
-    if (col.format === 'pill') return `<td><span class="pill ${pillClass(v)}">${v != null ? v : '-'}</span></td>`;
-    return `<td>${v != null ? v : '-'}</td>`;
+    // Optional conditional styling → merged into the <td>'s style attribute.
+    const extra = col.cellClass ? col.cellClass(v, r, index) : '';
+    const sa = extra ? ` style="${extra}"` : '';
+    if (col.format === 'pct') return `<td class="num"${sa}>${v != null ? v + '%' : '-'}</td>`;
+    if (col.format === 'pill') {
+      const tok = col.tone?.[String(v)] ?? pillClass(v);
+      return `<td${sa}><span class="pill ${tok}">${v != null ? v : '-'}</span></td>`;
+    }
+    if (col.format === 'link') {
+      const raw = col.href ? r[col.href] : v;
+      const ok = typeof raw === 'string' && /^https?:\/\//i.test(raw);
+      const label = v != null && v !== '' ? String(v) : 'Open';
+      return ok
+        ? `<td${sa}><a href="${escAttr(raw)}" target="_blank" rel="noopener" style="color:${theme.navy['700'] || '#1d3557'};font-weight:600;text-decoration:none">${label}</a></td>`
+        : `<td${sa}><span style="color:${theme.ink[3]}">—</span></td>`;
+    }
+    return `<td${sa}>${v != null ? v : '-'}</td>`;
   };
   const draw = () => {
     let view = rows.slice();
@@ -227,11 +262,13 @@ export function paginatedTable(
     }
     if (state.sort) view.sort((a, b) => {
       const va = a[state.sort!], vb = b[state.sort!];
-      return typeof va === 'number' ? (vb as number) - (va as number) : String(vb).localeCompare(String(va));
+      const cmp = typeof va === 'number' ? (va as number) - (vb as number) : String(va).localeCompare(String(vb));
+      return cmp * state.sortDir;
     });
     const totalPages = Math.max(1, Math.ceil(view.length / state.pageSize));
     if (state.page >= totalPages) state.page = totalPages - 1;
-    const pageRows = view.slice(state.page * state.pageSize, state.page * state.pageSize + state.pageSize);
+    const startIdx = state.page * state.pageSize;
+    const pageRows = view.slice(startIdx, startIdx + state.pageSize);
 
     el.innerHTML = '';
     if (opts.search || opts.sort) {
@@ -249,11 +286,23 @@ export function paginatedTable(
     }
     const wrap = document.createElement('div');
     wrap.className = 'scrollable';
+    wrap.style.maxHeight = '380px';   // X5: fixed height — rows scroll under a sticky header
+    wrap.style.overflow = 'auto';
+    const stickyTh = `position:sticky;top:0;z-index:1;background:var(--surface,#fff)${opts.sort ? ';cursor:pointer;user-select:none' : ''}`;
+    const arrow = (c: TableColumn) => state.sort === c.id ? (state.sortDir < 0 ? ' ↓' : ' ↑') : '';
     wrap.innerHTML = `<table class="dash">
-      <thead><tr>${columns.map(c => `<th>${c.label}</th>`).join('')}</tr></thead>
-      <tbody>${pageRows.map(r => `<tr>${columns.map(c => cell(r, c)).join('')}</tr>`).join('')}</tbody>
+      <thead><tr>${columns.map(c => `<th data-col="${c.id}" style="${stickyTh}">${c.label}${opts.sort ? arrow(c) : ''}</th>`).join('')}</tr></thead>
+      <tbody>${pageRows.map((r, i) => `<tr>${columns.map(c => cell(r, c, startIdx + i)).join('')}</tr>`).join('')}</tbody>
     </table>`;
     el.appendChild(wrap);
+    if (opts.sort) wrap.querySelectorAll<HTMLElement>('th[data-col]').forEach(th => {
+      th.onclick = () => {
+        const col = th.dataset.col!;
+        if (state.sort === col) state.sortDir = (state.sortDir === -1 ? 1 : -1);
+        else { state.sort = col; state.sortDir = -1; }
+        draw();
+      };
+    });
 
     if (view.length > state.pageSize) {
       const pager = document.createElement('div');
@@ -268,7 +317,6 @@ export function paginatedTable(
     }
   };
   draw();
-  void theme;   // theme reserved for future token-driven cell styling
   return () => { /* pure DOM, nothing to dispose */ };
 }
 
@@ -352,54 +400,217 @@ export function donut(el: HTMLElement, segments: { name: string; value: number; 
   return bindResize(chart);
 }
 
-// ── Heatmap (category × category). Default = 0..1 alarm ramp; opts override
-//    the scale/ramp/format (e.g. months-of-stock 0..max with the stock ramp). ─
+// ── Heatmap (category × category) — X6 standard ────────────────────────
+//   A DOM/CSS-grid matrix (NOT echarts): the reference redesign wants crisp
+//   HORIZONTAL row/column TITLES, sticky headers, BOTH-axis scroll + row
+//   pagination (space is no longer a constraint — every cell reachable), a
+//   gradient legend PINNED RIGHT, and a "locate a pair" layer:
+//     • hovering any cell cross-highlights its whole row + column and turns
+//       their header labels into navy guide-labels, and
+//     • the search box filters rows by name and DIMS non-matching columns, so a
+//       single commodity×region pair is trivial to find ("insulin, tigray").
+//   Colours come ONLY from `ramp` (reused STOCK_RAMP/ALARM_RAMP) interpolated
+//   per value, and all chrome from the resolved `theme` (light/dark aware).
+//   Signature preserved (old callers keep working); `cellH`→row height,
+//   `gridLeft`→row-header width; new opts (rowTitle/colTitle/rowNoun/cellW/
+//   pageSize) are optional. Default scale = 0..1 alarm ramp; opts override it.
 export function heatmap(
   el: HTMLElement, rows: { name: string; probs: (number | null)[] }[], cols: string[], theme: Theme,
-  opts: { min?: number; max?: number; ramp?: string[]; fmt?: (v: number) => string; label?: string; cellH?: number; gridLeft?: number } = {},
+  opts: {
+    min?: number; max?: number; ramp?: string[]; fmt?: (v: number) => string; label?: string;
+    cellH?: number; gridLeft?: number;
+    rowTitle?: string; colTitle?: string; rowNoun?: string; cellW?: number; pageSize?: number;
+  } = {},
 ): () => void {
   const min = opts.min ?? 0;
   const max = opts.max ?? 1;
   const ramp = opts.ramp ?? ALARM_RAMP;
   const fmt = opts.fmt ?? ((v: number) => `${Math.round(v * 100)}%`);
   const label = opts.label ?? 'P(alarm)';
-  const cellH = opts.cellH ?? 26;
-  const gridLeft = opts.gridLeft ?? 200;
-  const host = document.createElement('div'); host.style.width = '100%'; host.style.height = `${Math.max(180, rows.length * cellH + 80)}px`; el.appendChild(host);
-  const chart = echarts.init(host);
-  const data: [number, number, number][] = [];
-  rows.forEach((d, di) => d.probs.forEach((p, wi) => { if (p != null) data.push([wi, di, +(+p).toFixed(2)]); }));
-  // Dynamic in-cell label ink: interpolate the cell's ramp colour for a value, then pick black or
-  // white by its relative luminance (WCAG crossover ≈0.21) so every label stays legible.
+  const ROW_H = opts.cellH ?? 38;          // per-row (and header-row) height — airy soft-card rows
+  const HEAD_W = opts.gridLeft ?? 200;     // sticky row-header column width
+  const CELL_W = opts.cellW ?? 78;         // min cell width → columns scroll when many, stretch (1fr) when few
+  const rowTitle = opts.rowTitle ?? 'Resource';
+  const colTitle = opts.colTitle ?? 'Region';
+  const rowNoun = opts.rowNoun ?? 'rows';
+  const VIS_ROWS = 12;                      // rows shown before the body scrolls vertically
+
+  // Cell fill = ramp interpolated at the value's position in [min,max] (reuses the
+  // shared rampInterp — no hardcoded colours). Per-cell ink flips black/white by
+  // the fill's relative luminance (WCAG crossover ≈0.21) so every value stays legible.
+  const interp = rampInterp(ramp);
+  const tOf = (v: number) => (max > min ? Math.max(0, Math.min(1, (v - min) / (max - min))) : 0);
+  const colorFor = (v: number) => interp(tOf(v));
   const rampRgb = ramp.map(h => { const m = /^#?([0-9a-f]{6})$/i.exec(h); const n = m ? parseInt(m[1], 16) : 0; return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; });
   const relLum = (rgb: number[]) => { const s = rgb.map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }); return 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2]; };
-  const labelInk = (v: number) => {
-    const tt = max > min ? Math.max(0, Math.min(1, (v - min) / (max - min))) : 0;
-    const x = tt * (rampRgb.length - 1), i = Math.floor(x), f = x - i;
+  const inkFor = (v: number) => {
+    const x = tOf(v) * (rampRgb.length - 1), i = Math.floor(x), f = x - i;
     const a = rampRgb[i], b = rampRgb[Math.min(rampRgb.length - 1, i + 1)];
     return relLum([0, 1, 2].map(k => a[k] + (b[k] - a[k]) * f)) > 0.21 ? theme.ink[0] : '#ffffff';
   };
-  chart.setOption({
-    textStyle: { fontFamily: theme.fontSans },
-    tooltip: { position: 'top', formatter: (p: any) => `<b>${rows[p.value[1]].name}</b><br/>${cols[p.value[0]]}<br/>${label} ${fmt(p.value[2])}` },
-    grid: { left: gridLeft, right: 24, top: 12, bottom: 34 },
-    xAxis: { type: 'category', data: cols, axisLabel: { fontSize: 10, color: theme.ink[2], interval: Math.max(0, Math.floor(cols.length / 14)), rotate: -25 }, axisTick: { show: false } },
-    yAxis: { type: 'category', data: rows.map(d => d.name), axisLabel: { fontSize: 10.5, color: theme.ink[1] }, axisLine: { show: false }, axisTick: { show: false } },
-    visualMap: { min, max, calculable: true, orient: 'vertical', left: 12, top: 'middle', itemWidth: 10, itemHeight: 160, textStyle: { fontSize: 10, color: theme.ink[2] }, inRange: { color: ramp }, precision: max <= 1 ? 1 : 0, text: [fmt(max), fmt(min)] },
-    series: [{
-      type: 'heatmap', data, itemStyle: { borderColor: theme.paper, borderWidth: 2, borderRadius: 3 },
-      // In-cell values, page font. Dynamic black/white ink per cell (see labelInk) + an adaptive
-      // halo so mid-tone slate cells (where neither pure ink is high-contrast) stay legible.
-      label: {
-        show: true, fontFamily: theme.fontSans, fontSize: 10.5, fontWeight: 700,
-        formatter: (p: any) => fmt(p.value[2]),
-        color: (p: any) => labelInk(p.value[2]),
-        textBorderColor: (p: any) => (labelInk(p.value[2]) === '#ffffff' ? 'rgba(15,23,42,0.55)' : 'rgba(255,255,255,0.8)'),
-        textBorderWidth: 2.5,
-      },
-    }],
+  const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+
+  // ── static shell (built once so the search input keeps focus across repaints) ──
+  el.innerHTML = '';
+  const root = document.createElement('div');
+  root.className = 'rmhm';
+  root.innerHTML = `<style>
+    .rmhm{display:flex;flex-direction:column;gap:.55rem;font-family:${theme.fontSans};color:${theme.ink[1]}}
+    .rmhm-top{display:flex;align-items:center;gap:1rem}
+    .rmhm-search{max-width:260px}
+    .rmhm-axisttl{margin-left:1.25rem;font-size:.78rem;font-weight:700;letter-spacing:.02em;color:${theme.navy['700']};display:inline-flex;align-items:center;gap:.35rem;white-space:nowrap}
+    .rmhm-body{display:flex;gap:.7rem;align-items:stretch;min-height:0}
+    .rmhm-scroll{flex:1 1 auto;overflow:auto;border:1px solid ${theme.line};border-radius:10px;background:${theme.paper}}
+    .rmhm-grid{display:grid;grid-auto-rows:${ROW_H}px}
+    .rmhm-corner,.rmhm-col,.rmhm-row,.rmhm-cell{background:${theme.paper}}
+    .rmhm-corner{position:sticky;top:0;left:0;z-index:4;display:flex;align-items:center;gap:.35rem;padding:0 .75rem;font-size:.76rem;font-weight:700;color:${theme.navy['700']};border-bottom:1px solid ${theme.line};border-right:1px solid ${theme.line}}
+    .rmhm-col{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:center;padding:0 .4rem;border-bottom:1px solid ${theme.line};transition:opacity .12s ease,background .12s ease}
+    .rmhm-col .t{font-size:.73rem;font-weight:600;color:${theme.ink[1]};text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .rmhm-row{position:sticky;left:0;z-index:2;display:flex;align-items:center;padding:0 .75rem;border-right:1px solid ${theme.line};transition:background .12s ease}
+    .rmhm-row .t{font-size:.79rem;color:${theme.ink[0]};overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .rmhm-cell{padding:3px;transition:opacity .12s ease}
+    .rmhm-fill{width:100%;height:100%;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;font-variant-numeric:tabular-nums}
+    .rmhm-na .rmhm-fill{color:${theme.ink[3]};background:transparent}
+    .rmhm-cell.cr .rmhm-fill{box-shadow:inset 0 0 0 2px ${theme.navy['700']}}
+    .rmhm-col.cr,.rmhm-row.cr{background:${theme.navy['700']}}
+    .rmhm-col.cr .t,.rmhm-row.cr .t{color:#fff}
+    .rmhm-dim{opacity:.2}
+    .rmhm-legend{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:.4rem;padding:.1rem 0}
+    .rmhm-legcap{font-size:.64rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:${theme.ink[2]}}
+    .rmhm-legscale{flex:1;display:flex;gap:.35rem;min-height:130px}
+    .rmhm-leglabels{display:flex;flex-direction:column;justify-content:space-between;text-align:right;font-size:.65rem;color:${theme.ink[2]};font-variant-numeric:tabular-nums}
+    .rmhm-legbar{width:12px;height:100%;border-radius:6px;border:1px solid ${theme.line}}
+    .rmhm-foot{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:${theme.ink[3]};flex-wrap:wrap}
+    .rmhm-foot .sp{flex:1}
+    .rmhm-foot .rpp{display:inline-flex;align-items:center;gap:.4rem;margin-right:.3rem}
+    .rmhm-foot select{padding:.22rem .4rem;border:1px solid ${theme.line};border-radius:6px;font-size:.76rem;background:${theme.paper};color:${theme.ink[1]};font-family:${theme.fontSans}}
+    .rmhm-pg{min-width:28px;height:28px;padding:0 .3rem;display:inline-grid;place-items:center;border:1px solid ${theme.line};border-radius:50%;background:${theme.paper};color:${theme.ink[2]};cursor:pointer;font-size:.76rem;font-family:${theme.fontSans}}
+    .rmhm-pg:hover:not(:disabled){border-color:${theme.navy['500']};color:${theme.navy['700']}}
+    .rmhm-pg:disabled{opacity:.4;cursor:not-allowed}
+    /* numbered pages read as bare figures (reference); only the active one is a filled navy chip */
+    .rmhm-pg[data-p]{border-color:transparent;background:transparent;color:${theme.ink[2]};font-weight:600}
+    .rmhm-pg[data-p]:hover{color:${theme.navy['700']};background:transparent}
+    .rmhm-pg.on{background:${theme.navy['700']};color:#fff;border-color:${theme.navy['700']};font-weight:700}
+    .rmhm-none{padding:2rem;text-align:center;color:${theme.ink[3]};font-size:.85rem}
+  </style>
+  <div class="rmhm-top">
+    <span class="search-row rmhm-search"><span class="search-ico"><svg class="ico ico-sm"><use href="#i-search"/></svg></span><input type="text" class="search-input" placeholder="Find ${esc(rowTitle.toLowerCase())} or ${esc(colTitle.toLowerCase())}…"></span>
+    <span class="rmhm-axisttl">${esc(colTitle)}<svg class="ico ico-sm"><use href="#i-arrow-right"/></svg></span>
+  </div>
+  <div class="rmhm-body">
+    <div class="rmhm-scroll scrollable"></div>
+    <div class="rmhm-legend">
+      <div class="rmhm-legcap">${esc(label)}</div>
+      <div class="rmhm-legscale">
+        <div class="rmhm-leglabels"><span>${esc(fmt(max))}</span><span>${esc(fmt((min + max) / 2))}</span><span>${esc(fmt(min))}</span></div>
+        <div class="rmhm-legbar" style="background:linear-gradient(to top, ${ramp.join(',')})"></div>
+      </div>
+    </div>
+  </div>
+  <div class="rmhm-foot"></div>`;
+  el.appendChild(root);
+
+  const scroll = root.querySelector('.rmhm-scroll') as HTMLDivElement;
+  const foot = root.querySelector('.rmhm-foot') as HTMLDivElement;
+  const input = root.querySelector('.search-input') as HTMLInputElement;
+
+  const state = { q: '', page: 0, pageSize: opts.pageSize ?? 10 };
+
+  // locate-a-pair search: comma-separated tokens. A token naming a ROW filters
+  // the row list (brings the match into view); a token naming ONLY a COLUMN dims
+  // the non-matching columns (columns aren't paginated — just scrolled). A token
+  // matching neither is kept as a (failing) row filter → clean "no matches".
+  const parse = () => {
+    const toks = state.q.toLowerCase().split(',').map(t => t.trim()).filter(Boolean);
+    const rowHit = (t: string) => rows.some(r => r.name.toLowerCase().includes(t));
+    const colHit = (t: string) => cols.some(c => c.toLowerCase().includes(t));
+    return {
+      rowToks: toks.filter(t => rowHit(t) || !colHit(t)),
+      colToks: toks.filter(t => colHit(t) && !rowHit(t)),
+    };
+  };
+
+  // numbered pager with ellipsis (first · last · current±1).
+  function pageNums(page: number, total: number): string {
+    if (total <= 1) return '';
+    const want = [...new Set([0, total - 1, page - 1, page, page + 1])].filter(p => p >= 0 && p < total).sort((a, b) => a - b);
+    let html = '', prev = -1;
+    for (const p of want) {
+      if (prev >= 0 && p - prev > 1) html += `<span style="padding:0 .1rem">…</span>`;
+      html += `<button class="rmhm-pg${p === page ? ' on' : ''}" data-p="${p}">${p + 1}</button>`;
+      prev = p;
+    }
+    return html;
+  }
+
+  const paint = () => {
+    const { rowToks, colToks } = parse();
+    const viewRows = rowToks.length ? rows.filter(r => rowToks.some(t => r.name.toLowerCase().includes(t))) : rows;
+    const colDim = (i: number) => (colToks.length ? !colToks.some(t => cols[i].toLowerCase().includes(t)) : false);
+
+    const total = viewRows.length;
+    const totalPages = Math.max(1, Math.ceil(total / state.pageSize));
+    if (state.page >= totalPages) state.page = totalPages - 1;
+    const startIdx = state.page * state.pageSize;
+    const pageRows = viewRows.slice(startIdx, startIdx + state.pageSize);
+
+    // fixed body footprint: header + up to VIS_ROWS rows, then it scrolls.
+    scroll.style.height = `${ROW_H + Math.min(pageRows.length || 1, VIS_ROWS) * ROW_H + 2}px`;
+
+    if (!pageRows.length) { scroll.innerHTML = `<div class="rmhm-none">No ${esc(rowNoun)} match “${esc(state.q)}”.</div>`; foot.innerHTML = ''; return; }
+
+    const tmpl = `${HEAD_W}px repeat(${cols.length}, minmax(${CELL_W}px, 1fr))`;
+    const head = `<div class="rmhm-corner">${esc(rowTitle)}<svg class="ico ico-sm"><use href="#i-arrow-down"/></svg></div>` +
+      cols.map((c, ci) => `<div class="rmhm-col${colDim(ci) ? ' rmhm-dim' : ''}" data-c="${ci}"><span class="t" title="${esc(c)}">${esc(c)}</span></div>`).join('');
+    const body = pageRows.map((r, ri) => {
+      const rh = `<div class="rmhm-row" data-r="${ri}"><span class="t" title="${esc(r.name)}">${esc(r.name)}</span></div>`;
+      const cells = cols.map((c, ci) => {
+        const dim = colDim(ci) ? ' rmhm-dim' : '';
+        const v = r.probs[ci];
+        if (v == null) return `<div class="rmhm-cell rmhm-na${dim}" data-r="${ri}" data-c="${ci}"><span class="rmhm-fill">—</span></div>`;
+        const val = +v;
+        return `<div class="rmhm-cell${dim}" data-r="${ri}" data-c="${ci}"><span class="rmhm-fill" style="background:${colorFor(val)};color:${inkFor(val)}" title="${esc(r.name)}, ${esc(c)}: ${esc(fmt(val))}">${esc(fmt(val))}</span></div>`;
+      }).join('');
+      return rh + cells;
+    }).join('');
+    scroll.innerHTML = `<div class="rmhm-grid" style="grid-template-columns:${tmpl}">${head}${body}</div>`;
+
+    // footer: showing a–b of N · rows-per-page · numbered pager
+    const a = startIdx + 1, b = startIdx + pageRows.length;
+    const sizes = [10, 20, 50];
+    const sizeOpts = sizes.map(s => `<option value="${s}"${state.pageSize === s ? ' selected' : ''}>${s}</option>`).join('') + `<option value="9999"${state.pageSize >= 9999 ? ' selected' : ''}>All</option>`;
+    foot.innerHTML =
+      `<span>Showing ${a} to ${b} of ${total} ${esc(rowNoun)}</span><span class="sp"></span>` +
+      `<span class="rpp">Rows per page <select class="rmhm-rpp">${sizeOpts}</select></span>` +
+      `<button class="rmhm-pg prev"${state.page === 0 ? ' disabled' : ''}><svg class="ico ico-sm" style="transform:rotate(180deg)"><use href="#i-chevron-right"/></svg></button>` +
+      pageNums(state.page, totalPages) +
+      `<button class="rmhm-pg next"${state.page >= totalPages - 1 ? ' disabled' : ''}><svg class="ico ico-sm"><use href="#i-chevron-right"/></svg></button>`;
+    (foot.querySelector('.rmhm-rpp') as HTMLSelectElement).onchange = e => { state.pageSize = +(e.target as HTMLSelectElement).value; state.page = 0; paint(); };
+    (foot.querySelector('.prev') as HTMLButtonElement).onclick = () => { if (state.page > 0) { state.page--; paint(); } };
+    (foot.querySelector('.next') as HTMLButtonElement).onclick = () => { if (state.page < totalPages - 1) { state.page++; paint(); } };
+    foot.querySelectorAll<HTMLButtonElement>('.rmhm-pg[data-p]').forEach(btn => { btn.onclick = () => { state.page = +btn.dataset.p!; paint(); }; });
+  };
+
+  // locate-a-pair (hover): cross-highlight the hovered cell's full row + column
+  // and their header labels. Delegated on the (persistent) scroll box so it
+  // survives grid repaints; data-r / data-c tie every cell + header together.
+  let hi: Element[] = [];
+  const clearHi = () => { hi.forEach(n => n.classList.remove('cr')); hi = []; };
+  scroll.addEventListener('mouseover', e => {
+    const t = (e.target as HTMLElement).closest('[data-r],[data-c]') as HTMLElement | null;
+    clearHi();
+    if (!t) return;
+    const grid = scroll.querySelector('.rmhm-grid'); if (!grid) return;
+    const ri = t.getAttribute('data-r'), ci = t.getAttribute('data-c');
+    const add = (sel: string) => grid.querySelectorAll(sel).forEach(n => { if (!n.classList.contains('cr')) { n.classList.add('cr'); hi.push(n); } });
+    if (ri != null) add(`[data-r="${ri}"]`);
+    if (ci != null) add(`[data-c="${ci}"]`);
   });
-  return bindResize(chart);
+  scroll.addEventListener('mouseleave', clearHi);
+
+  input.oninput = () => { state.q = input.value; state.page = 0; paint(); };
+  paint();
+  return () => { el.innerHTML = ''; };
 }
 
 // ── Horizontal stacked bar (e.g. facility tiers per region) ────────────
@@ -462,7 +673,7 @@ export function divergingBar(el: HTMLElement, data: { name: string; value: numbe
   chart.setOption({
     textStyle: { fontFamily: theme.fontSans },
     grid: { left: 180, right: 60, top: 10, bottom: 34 },
-    tooltip: { trigger: 'item', formatter: (p: any) => `${p.name}<br/><b>r = ${(+p.value).toFixed(2)}</b>${data[p.dataIndex].note ? ` · ${data[p.dataIndex].note}` : ''}` },
+    tooltip: { trigger: 'item', formatter: (p: any) => `${p.name}<br/><b>r = ${(+p.value).toFixed(2)}</b>${data[p.dataIndex].note ? `, ${data[p.dataIndex].note}` : ''}` },
     xAxis: { type: 'value', min: -1, max: 1, axisLabel: { fontSize: 9, color: theme.ink[3] }, splitLine: { show: false } },
     yAxis: { type: 'category', data: data.map(d => d.name), axisLabel: { fontSize: 10.5, color: theme.ink[1] }, axisLine: { show: false }, axisTick: { show: false } },
     series: [{
@@ -532,12 +743,54 @@ function rampInterp(stops: string[]): (t: number) => string {
   };
 }
 
+/** Bounding box [minLng, minLat, maxLng, maxLat] of a GeoJSON feature, walking
+ *  Polygon / MultiPolygon coordinate nests. null when the feature has no geometry. */
+function featureBBox(f: any): [number, number, number, number] | null {
+  let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+  const walk = (co: any) => {
+    if (typeof co[0] === 'number') {
+      if (co[0] < a) a = co[0]; if (co[0] > c) c = co[0];
+      if (co[1] < b) b = co[1]; if (co[1] > d) d = co[1];
+    } else for (const x of co) walk(x);
+  };
+  const g = f?.geometry; if (!g?.coordinates) return null;
+  walk(g.coordinates);
+  return isFinite(a) ? [a, b, c, d] : null;
+}
+
 export function choropleth(
   el: HTMLElement,
-  opts: { valuesByRegion: Record<string, number>; fmt: (v: number) => string; selected?: string; onSelect: (region: string) => void; ramp?: string[]; tooltip?: (region: string) => string },
+  opts: {
+    valuesByRegion: Record<string, number>; fmt: (v: number) => string;
+    selected?: string; onSelect: (region: string) => void; ramp?: string[];
+    tooltip?: (region: string) => string;
+    /** ADDITIVE — when set (an SPA region name), the map zooms to fill that
+     *  region's bounding box and de-emphasizes the rest; the region is drawn at
+     *  full colour. Unset (the default) → the full national map, byte-for-byte
+     *  the prior behaviour, so every other consumer is unaffected. */
+    focusRegion?: string;
+    /** ADDITIVE — hide the built-in visualMap gradient legend (a consumer that
+     *  draws its own legend, e.g. the redesigned dz-region-map sidebar). Default
+     *  true keeps the legend for existing callers. */
+    showScale?: boolean;
+    /** ADDITIVE — render the merged 'eth-ctx' map (Ethiopia regions ON a faint
+     *  band of real neighbouring land, over a soft-water backdrop). The view is
+     *  framed deterministically via `boundingCoords` (Ethiopia's bbox, or the
+     *  focus region's bbox, expanded by a margin) so surrounding land fills the
+     *  wide/short host. Unset → the plain 'ethiopia' map, unchanged for rm-map. */
+    worldContext?: boolean;
+    /** ADDITIVE — fixed pixel height for the map host. Default 440 preserves the
+     *  prior (aspect-driven) behaviour for existing callers; a small value gives
+     *  a genuinely short card (used with worldContext). */
+    height?: number;
+  },
   theme: Theme, geo: any,
 ): () => void {
-  const host = document.createElement('div'); host.className = 'map-graticule'; host.style.width = '100%'; host.style.height = '440px'; host.style.position = 'relative'; el.appendChild(host);
+  const H = opts.height ?? 440;
+  // worldContext: fill the mount (the grid stretches the map cell to the sidebar's
+  // height → the map is exactly as short as the compact sidebar, no letterbox gap).
+  // Otherwise a fixed pixel height (bindAspect grows it from width, prior behaviour).
+  const host = document.createElement('div'); host.className = opts.worldContext ? 'map-earth' : 'map-graticule'; host.style.width = '100%'; host.style.height = opts.worldContext ? '100%' : `${H}px`; host.style.position = 'relative'; el.appendChild(host);
   const chart = echarts.init(host);
   const vals = opts.valuesByRegion;
   // A custom ramp (e.g. diseaseBurden, supplyStress) overrides the default amber scale.
@@ -547,14 +800,76 @@ export function choropleth(
     const key = Object.keys(vals).find(r => normRegion(r) === normRegion(spaOrGeoName));
     return key != null ? vals[key] : 0;
   };
+  // The interactive/colourable features are the Ethiopia regions only; in the
+  // worldContext merged map the `__ctx` land features are backdrop, never data.
+  const isCtx = (n: any): boolean => !!opts.worldContext && typeof n === 'string' && n.indexOf('ctx-') === 0;
+  const ethFeatures = geo.features.filter((f: any) => !f.properties.__ctx);
+
+  // National bbox over the Ethiopia features (drives both the focus-zoom clamp
+  // and the worldContext framing). Over ethFeatures only, so the surrounding
+  // world land never inflates the "national" extent.
+  let na = Infinity, nb = Infinity, nc = -Infinity, nd = -Infinity;
+  for (const f of ethFeatures) { const bb = featureBBox(f); if (bb) { na = Math.min(na, bb[0]); nb = Math.min(nb, bb[1]); nc = Math.max(nc, bb[2]); nd = Math.max(nd, bb[3]); } }
+
+  // Region focus (Task 1): frame the selected region's bbox + de-emphasize the rest.
+  const focusName = opts.focusRegion ? geoNameFor(geo, opts.focusRegion) : null;
+  const focusFeat = focusName ? ethFeatures.find((f: any) => normRegion(f.properties.name) === normRegion(focusName)) : null;
+  const rb = focusFeat ? featureBBox(focusFeat) : null;
+
+  // Non-worldContext path: center + zoom (byte-for-byte the prior behaviour).
+  let focusCenter: [number, number] | undefined;
+  let focusZoom: number | undefined;
+  if (focusName && rb && isFinite(na)) {
+    focusCenter = [(rb[0] + rb[2]) / 2, (rb[1] + rb[3]) / 2];
+    const rw = Math.max(1e-6, rb[2] - rb[0]), rh = Math.max(1e-6, rb[3] - rb[1]);
+    // 0.82 leaves a little breathing room; clamp so a tiny region (Dire Dawa/
+    // Harari) doesn't over-zoom past the map's detail.
+    focusZoom = Math.max(1.4, Math.min(11, 0.82 * Math.min((nc - na) / rw, (nd - nb) / rh)));
+  }
+  const zMax = focusZoom ? 12 : 6;
+
+  // worldContext path: deterministic framing via boundingCoords ([[left,top],
+  // [right,bottom]] = [[minLng,maxLat],[maxLng,minLat]]). The surrounding land
+  // beyond this box is still drawn — it fills whatever letterbox the wide/short
+  // host leaves — so the box only needs a comfortable margin around Ethiopia.
+  let boundingCoords: number[][] | undefined;
+  if (opts.worldContext) {
+    if (rb) {
+      // Focus a region — a tight margin keeps the region-adaptive zoom, still on land.
+      const mx = Math.max(0.5, (rb[2] - rb[0]) * 0.32), my = Math.max(0.5, (rb[3] - rb[1]) * 0.32);
+      boundingCoords = [[rb[0] - mx, rb[3] + my], [rb[2] + mx, rb[1] - my]];
+    } else if (isFinite(na)) {
+      // National — a TIGHT box around Ethiopia so the country reads large (the
+      // box is always fully fit, so a smaller margin never clips Ethiopia — it
+      // just zooms in). The LON letterbox the wide host leaves is filled
+      // automatically by neighbouring land; a slim LAT margin keeps a thin band
+      // of sea/land above and below.
+      const mx = (nc - na) * 0.02 + 0.12, my = (nd - nb) * 0.02 + 0.15;
+      boundingCoords = [[na - mx, nd + my], [nc + mx, nb - my]];
+    }
+  }
   // Soften fills ~30% (alpha over the off-white host) so the map reads gentler; full colour on hover.
   const soft = (c: string) => c.replace('rgb(', 'rgba(').replace(')', ',0.72)');
+  const faded = (c: string) => c.replace('rgb(', 'rgba(').replace(')', ',0.16)');
+  // Faint surrounding land (parchment on water) — backdrop only: no data, no
+  // label, no hover/select, and silent so it never intercepts a region's events.
+  const CTX_FILL = 'rgba(223, 213, 190, 0.55)';
+  const CTX_LINE = 'rgba(180, 167, 138, 0.5)';
   const seriesData = geo.features.map((f: any) => {
-    const name = f.properties.name; const value = valFor(name);
+    const name = f.properties.name;
+    if (f.properties.__ctx) {
+      return {
+        name, value: 0, silent: true,
+        itemStyle: { areaColor: CTX_FILL, borderColor: CTX_LINE, borderWidth: 0.5 },
+        emphasis: { disabled: true }, select: { disabled: true }, label: { show: false },
+      };
+    }
+    const value = valFor(name);
     const col = interp(max > 0 ? value / max : 0);
+    const isFocus = !focusName || normRegion(name) === normRegion(focusName);
     return {
       name, value,
-      itemStyle: { areaColor: soft(col), borderColor: '#fff', borderWidth: 0.8 },
+      itemStyle: { areaColor: isFocus ? soft(col) : faded(col), borderColor: '#fff', borderWidth: 0.8, opacity: isFocus ? 1 : 0.85 },
       emphasis: { itemStyle: { areaColor: col, borderColor: '#334155', borderWidth: 1.6 }, label: { show: true } },
       select: { itemStyle: { areaColor: col, borderColor: '#111827', borderWidth: 2.5 }, label: { show: true } },
     };
@@ -562,21 +877,30 @@ export function choropleth(
   chart.setOption({
     textStyle: { fontFamily: theme.fontSans },
     tooltip: opts.tooltip
-      ? { trigger: 'item', backgroundColor: '#fff', borderColor: theme.line, textStyle: { color: theme.ink[1], fontSize: 11 }, formatter: (p: any) => opts.tooltip!(p.name) }
+      ? { trigger: 'item', backgroundColor: '#fff', borderColor: theme.line, textStyle: { color: theme.ink[1], fontSize: 11 }, formatter: (p: any) => (isCtx(p.name) ? '' : opts.tooltip!(p.name)) }
       : { show: false },
-    visualMap: { type: 'continuous', min: 0, max: Math.max(1, max), calculable: false, orient: 'vertical', right: 8, bottom: 18, itemWidth: 9, itemHeight: 110, textStyle: { fontSize: 10, color: theme.ink[2] }, inRange: { color: [interp(0), interp(0.5), interp(1)] }, seriesIndex: -1, text: [opts.fmt(Math.max(1, max)), opts.fmt(0)] },
+    visualMap: { show: opts.showScale !== false, type: 'continuous', min: 0, max: Math.max(1, max), calculable: false, orient: 'vertical', right: 8, bottom: 18, itemWidth: 9, itemHeight: 110, textStyle: { fontSize: 10, color: theme.ink[2] }, inRange: { color: [interp(0), interp(0.5), interp(1)] }, seriesIndex: -1, text: [opts.fmt(Math.max(1, max)), opts.fmt(0)] },
     series: [{
       // roam:'move' = drag-to-pan only. Scroll-wheel zoom is intentionally OFF so scrolling the
       // PAGE over the map never hijacks into a zoom; deliberate zoom is via the +/− buttons below.
-      type: 'map', map: 'ethiopia', roam: 'move', zoom: 1, aspectScale: 0.85,
-      layoutCenter: ['50%', '50%'], layoutSize: '100%', scaleLimit: { min: 1, max: 6 },
+      type: 'map', map: opts.worldContext ? 'eth-ctx' : 'ethiopia', roam: 'move', aspectScale: 0.85,
+      // worldContext frames deterministically via boundingCoords; otherwise center+zoom.
+      ...(opts.worldContext
+        ? { zoom: 1, ...(boundingCoords ? { boundingCoords } : {}), scaleLimit: { min: 1, max: 8 } }
+        : { zoom: focusZoom ?? 1, ...(focusCenter ? { center: focusCenter } : {}), scaleLimit: { min: 1, max: zMax } }),
+      layoutCenter: ['50%', '50%'], layoutSize: '100%',
       label: { show: true, fontSize: 9, color: theme.ink[1], textBorderColor: '#fff', textBorderWidth: 2.5 },
+      // worldContext packs Ethiopia into a compact host — drop colliding labels so
+      // the map reads cleanly (labels still appear on hover/select). rm-map keeps
+      // its always-on labels (no labelLayout) so its look is unchanged.
+      ...(opts.worldContext ? { labelLayout: { hideOverlap: true } } : {}),
       selectedMode: 'single', data: seriesData,
     }],
   });
 
-  // Deliberate zoom controls (no scroll-hijack).
-  let zoom = 1;
+  // Deliberate zoom controls (no scroll-hijack). Seed from the focus zoom so the
+  // +/− buttons step from where the region-focus put the view.
+  let zoom = focusZoom ?? 1;
   const zc = document.createElement('div');
   zc.style.cssText = 'position:absolute;top:8px;left:8px;display:flex;flex-direction:column;gap:4px;z-index:5';
   const mkBtn = (label: string) => {
@@ -586,11 +910,11 @@ export function choropleth(
     return b;
   };
   const zin = mkBtn('+'), zout = mkBtn('−');
-  const applyZoom = (z: number) => { zoom = Math.max(1, Math.min(6, z)); chart.setOption({ series: [{ zoom }] }); };
+  const applyZoom = (z: number) => { zoom = Math.max(1, Math.min(zMax, z)); chart.setOption({ series: [{ zoom }] }); };
   zin.onclick = () => applyZoom(zoom * 1.4);
   zout.onclick = () => applyZoom(zoom / 1.4);
   zc.appendChild(zin); zc.appendChild(zout); host.appendChild(zc);
-  const allNames = geo.features.map((f: any) => f.properties.name);
+  const allNames = ethFeatures.map((f: any) => f.properties.name);
   const selectByName = (region: string) => {
     chart.dispatchAction({ type: 'unselect', seriesIndex: 0, name: allNames });
     chart.dispatchAction({ type: 'select', seriesIndex: 0, name: geoNameFor(geo, region) });
@@ -600,15 +924,26 @@ export function choropleth(
   const initSel = opts.selected || top;
   if (initSel) { selectByName(initSel); opts.onSelect(initSel); }
   chart.on('click', (p: any) => {
-    if (!p || !p.name) return;
+    if (!p || !p.name || isCtx(p.name)) return;              // context land is not selectable
     const reg = Object.keys(vals).find(r => normRegion(r) === normRegion(p.name)) || p.name;
     selectByName(reg); opts.onSelect(reg);
   });
-  // Grow the map to fill its (tall) card: height driven from measured width.
-  // Max clamp is generous (was 560) so a reflow='ratio' card that absorbed a
-  // scope-hidden neighbour's tracks gets a map that follows the card's growth
-  // instead of stranding blank space (choropleth's only consumers are the two
-  // reflow='ratio' map widgets: dz-region-map, rm-map).
+  // worldContext: the host fills the map cell (100%), which the grid stretches to
+  // the compact sidebar's height — just keep the chart sized to its host on resize.
+  if (opts.worldContext) {
+    const onResize = () => chart.resize();
+    // The grid stretches the map cell to the sidebar height a frame after mount —
+    // resize once that geometry has settled so the map fills without a gap.
+    requestAnimationFrame(() => { chart.resize(); requestAnimationFrame(onResize); });
+    window.addEventListener('resize', onResize);
+    let ro: ResizeObserver | undefined;
+    try { ro = new ResizeObserver(() => chart.resize()); ro.observe(el); } catch { /* window resize covers it */ }
+    return () => { window.removeEventListener('resize', onResize); ro?.disconnect(); chart.dispose(); };
+  }
+  // Otherwise grow the map to fill its (tall) card: height driven from measured
+  // width. Max clamp is generous (was 560) so a reflow='ratio' card that absorbed
+  // a scope-hidden neighbour's tracks gets a map that follows the card's growth
+  // instead of stranding blank space (rm-map is the remaining reflow='ratio' map).
   return bindAspect(el, host, chart, 0.72, 380, 920);
 }
 

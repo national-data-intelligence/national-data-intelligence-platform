@@ -44,7 +44,12 @@ JUPYTER_PUBLIC_BASE = os.environ.get(
     "JUPYTER_PUBLIC_BASE", "https://jupyter.127.0.0.1.nip.io").rstrip("/")
 
 
-def _lab_url(username: str) -> str:
+def _lab_url(username: str, server_name: str = "") -> str:
+    # Named servers (one lab per project — server name IS the project id) live
+    # at /user/<username>/<server_name>/lab; the legacy default server (never
+    # spawned by the NHDW flow) is /user/<username>/lab.
+    if server_name:
+        return f"{JUPYTER_PUBLIC_BASE}/user/{username}/{server_name}/lab"
     return f"{JUPYTER_PUBLIC_BASE}/user/{username}/lab"
 
 PROFILES_PATH = Path(os.environ.get(
@@ -161,24 +166,35 @@ async def spawn(user: UserCtx = Depends(get_user),
         """, project_id)
         if prj is None:
             raise HTTPException(404, "project not found")
-        visible = (
-            prj["visibility"] == "public"
-            or str(prj["owner_kc_sub"]) == (user.kc_sub or "")
-            or (prj["visibility"] == "group" and bool(await conn.fetchval("""
-                    SELECT 1 FROM ops_artifact.workshop_group_member
-                    WHERE group_id = $1::uuid AND kc_sub = $2::uuid;
-                """, prj["group_id"], user.kc_sub))))
+        # WHO MAY OPEN A LAB: a lab syncs to the project's ONE MinIO files/ prefix,
+        # so opening it is a WRITE to shared state. Only the owner and (for a group
+        # project) its group members may — group projects intentionally share files.
+        # A PUBLIC project owned by someone else is NOT openable by a non-owner:
+        # their edits would leak into/clobber the owner's files. Those users CLONE
+        # it (POST /api/projects/{id}/clone) into a private copy and open that.
+        is_owner  = str(prj["owner_kc_sub"]) == (user.kc_sub or "")
+        is_member = prj["visibility"] == "group" and bool(await conn.fetchval("""
+                SELECT 1 FROM ops_artifact.workshop_group_member
+                WHERE group_id = $1::uuid AND kc_sub = $2::uuid;
+            """, prj["group_id"], user.kc_sub))
+        can_open = is_owner or is_member
         # A reviewer may open a lab on a SUBMITTED project (in_review /
-        # changes_requested) even if private — to run its notebooks (#42). This
-        # is the ONLY spawn widening; approved (already public) is covered above,
-        # an un-submitted draft is NOT (a reviewer can't open a private draft).
-        if not visible and _is_reviewer(user) and prj["review_status"] in (
+        # changes_requested) even if private — to run its notebooks (#42).
+        if not can_open and _is_reviewer(user) and prj["review_status"] in (
                 "in_review", "changes_requested"):
-            visible = True
-        if not visible:
+            can_open = True
+        if not can_open:
+            if prj["visibility"] == "public":
+                raise HTTPException(
+                    403, "this is a public project you don't own — clone it to "
+                         "your workspace to open a lab (a lab writes to the "
+                         "project's shared files).")
             raise HTTPException(404, "project not found")
     project_opts = {"project_id": str(prj["id"]),
                     "project_slug": prj["slug"]}
+    # The named server's name IS the project id — one lab per project. Spawning
+    # project X's server never disturbs a lab already open on project Y.
+    server_name = str(prj["id"])
 
     if not JUPYTERHUB_TOKEN:
         raise HTTPException(503,
@@ -186,10 +202,11 @@ async def spawn(user: UserCtx = Depends(get_user),
             "k3d + JupyterHub installation is part of the deployment bundle.")
     t0 = time.perf_counter()
     username = user.username
+    srv = f"{JUPYTERHUB_URL}/hub/api/users/{username}/servers/{server_name}"
     async with httpx.AsyncClient(timeout=30) as c:
         hdrs = {"Authorization": f"token {JUPYTERHUB_TOKEN}"}
-        r = await c.post(f"{JUPYTERHUB_URL}/hub/api/users/{username}/server",
-                         headers=hdrs, json={"profile": p["slug"], **project_opts})
+        r = await c.post(srv, headers=hdrs,
+                         json={"profile": p["slug"], **project_opts})
         if r.status_code == 404:
             # First spawn before any OIDC login: create the hub user, retry.
             cr = await c.post(f"{JUPYTERHUB_URL}/hub/api/users/{username}",
@@ -197,10 +214,10 @@ async def spawn(user: UserCtx = Depends(get_user),
             if cr.status_code not in (200, 201):
                 raise HTTPException(502,
                     f"jupyterhub user create failed: {cr.status_code} {cr.text[:200]}")
-            r = await c.post(f"{JUPYTERHUB_URL}/hub/api/users/{username}/server",
-                             headers=hdrs, json={"profile": p["slug"], **project_opts})
+            r = await c.post(srv, headers=hdrs,
+                             json={"profile": p["slug"], **project_opts})
         if r.status_code == 400 and "already running" in r.text.lower():
-            pass                       # treat as success — the lab is up
+            pass                       # treat as success — THIS project's lab is up
         elif r.status_code not in (200, 201, 202):
             raise HTTPException(502, f"jupyterhub spawn failed: {r.status_code} {r.text[:200]}")
     await ops_db.log_gateway_query(
@@ -213,11 +230,16 @@ async def spawn(user: UserCtx = Depends(get_user),
         user=user, kind="workspace.spawn",
         payload={"profile": p["slug"], "resources": p["resources"], **project_opts})
     return {"profile": p["slug"], "resources": p["resources"],
-            "status": "spawning", "url": _lab_url(username), **project_opts}
+            "status": "spawning", "url": _lab_url(username, server_name),
+            **project_opts}
 
 
 @router.get("/status")
-async def status(user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+async def status(user: UserCtx = Depends(get_user),
+                 project_id: str | None = Query(default=None)) -> dict[str, Any]:
+    """Is the caller's lab for `project_id` running? Labs are per-project named
+    servers, so status is asked PER PROJECT (ws-project-detail passes the id).
+    With no project_id it reports whether ANY lab is up (legacy shape)."""
     if not JUPYTERHUB_TOKEN:
         return {"running": False, "reason": "jupyterhub not configured in dev"}
     async with httpx.AsyncClient(timeout=10) as c:
@@ -226,30 +248,92 @@ async def status(user: UserCtx = Depends(get_user)) -> dict[str, Any]:
             headers={"Authorization": f"token {JUPYTERHUB_TOKEN}"})
     if r.status_code != 200:
         return {"running": False, "reason": f"jupyterhub {r.status_code}"}
-    body = r.json()
-    running = bool(body.get("server"))
+    servers = (r.json().get("servers") or {})
+    if project_id:
+        srv = servers.get(project_id) or {}
+        running = bool(srv.get("ready"))
+        return {
+            "running": running,
+            "server": srv.get("url"),
+            "name":   srv.get("name"),
+            "pending": srv.get("pending"),
+            "last_activity": srv.get("last_activity"),
+            "url": _lab_url(user.username, project_id) if running else None,
+        }
+    # No project scope — report the first ready lab, if any.
+    ready = next((s for s in servers.values() if s.get("ready")), None)
     return {
-        "running": running,
-        "server": body.get("server"),
-        "name":   body.get("name"),
-        "last_activity": body.get("last_activity"),
-        "url": _lab_url(user.username) if running else None,
+        "running": bool(ready),
+        "name": ready.get("name") if ready else None,
+        "last_activity": ready.get("last_activity") if ready else None,
+        "url": _lab_url(user.username, ready.get("name")) if ready else None,
     }
 
 
+@router.get("/servers")
+async def servers(user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+    """The caller's running/pending labs, one per project (named servers). Powers
+    the workshop 'Running labs' widget. Each named server's name is a project id;
+    we fold in the project's name/slug (skipping any the caller can no longer see,
+    or whose project row is gone) so the widget can label the row and link to it."""
+    if not JUPYTERHUB_TOKEN:
+        return {"labs": [], "reason": "jupyterhub not configured in dev"}
+    async with httpx.AsyncClient(timeout=10) as c:
+        r = await c.get(
+            f"{JUPYTERHUB_URL}/hub/api/users/{user.username}",
+            headers={"Authorization": f"token {JUPYTERHUB_TOKEN}"})
+    if r.status_code != 200:
+        return {"labs": [], "reason": f"jupyterhub {r.status_code}"}
+    srv_map = (r.json().get("servers") or {})
+    if not srv_map:
+        return {"labs": []}
+    # Resolve project names for the server ids in one query.
+    ids = [sid for sid in srv_map if sid]
+    names: dict[str, dict[str, Any]] = {}
+    if ids:
+        pool = await ops_db.ensure_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT id::text AS id, name, slug
+                FROM ops_workspace.project WHERE id = ANY($1::uuid[]);
+            """, ids)
+            names = {row["id"]: dict(row) for row in rows}
+    labs = []
+    for sid, s in srv_map.items():
+        if not sid:
+            continue                    # skip the legacy default (unscoped) server
+        proj = names.get(sid)
+        labs.append({
+            "project_id":   sid,
+            "project_name": (proj or {}).get("name") or sid,
+            "project_slug": (proj or {}).get("slug"),
+            "ready":        bool(s.get("ready")),
+            "pending":      s.get("pending"),   # 'spawn' | 'stop' | None
+            "last_activity": s.get("last_activity"),
+            "url": _lab_url(user.username, sid) if s.get("ready") else None,
+        })
+    # Newest activity first; steady (ready) labs before pending ones.
+    labs.sort(key=lambda x: (not x["ready"], x["last_activity"] or ""), reverse=False)
+    return {"labs": labs}
+
+
 @router.post("/stop")
-async def stop(user: UserCtx = Depends(get_user)) -> dict[str, Any]:
+async def stop(user: UserCtx = Depends(get_user),
+               project_id: str | None = Body(default=None, embed=True)) -> dict[str, Any]:
+    """Stop the caller's lab for `project_id` (its named server). Without a
+    project_id, stops the legacy default server (belt-and-suspenders)."""
     if not JUPYTERHUB_TOKEN:
         raise HTTPException(503, "jupyterhub not configured")
+    path = (f"{JUPYTERHUB_URL}/hub/api/users/{user.username}/servers/{project_id}"
+            if project_id
+            else f"{JUPYTERHUB_URL}/hub/api/users/{user.username}/server")
     async with httpx.AsyncClient(timeout=30) as c:
-        r = await c.delete(
-            f"{JUPYTERHUB_URL}/hub/api/users/{user.username}/server",
-            headers={"Authorization": f"token {JUPYTERHUB_TOKEN}"})
+        r = await c.delete(path, headers={"Authorization": f"token {JUPYTERHUB_TOKEN}"})
     if r.status_code not in (200, 202, 204):
         raise HTTPException(502, f"jupyterhub stop failed: {r.status_code}")
     await ops_db.log_data_event(
-        user=user, kind="workspace.stop", payload={})
-    return {"status": "stopped"}
+        user=user, kind="workspace.stop", payload={"project_id": project_id})
+    return {"status": "stopped", "project_id": project_id}
 
 
 # ── Resource-request flow ─────────────────────────────────────────────

@@ -27,7 +27,7 @@ export const ARTICLES: Article[] = [
         +'<p>EPHI continues to coordinate with partners including UNICEF, WHO, and MSF for surge support. The next situation report will publish on 21 June (Week 25).</p>' },
   { id:'a-002', date:'2026-06-11', category:'Press', author:'FMoH Communications', tags:['HSTP-III'],
     title:'FMoH launches HSTP-III consultations',
-    summary:'National consultations open for HSTP-III (2025/26–2029/30); regional rounds run through August.',
+    summary:'National consultations open for HSTP-III (2025/26 to 2029/30); regional rounds run through August.',
     body:'<p>His Excellency the Minister of Health officially launched the consultation process for the next five-year transformation plan today at the Skylight Hotel in Addis Ababa.</p>'
         +'<p>Opening the meeting, the Minister set the new plan against the record of HSTP-II. Ethiopia widened primary care and held essential services steady through drought, conflict and the pressures of recent years, but gains in maternal survival, immunisation and equity have been uneven between regions. HSTP-III is meant to close those gaps rather than restate old ambitions.</p>'
         +'<p>HSTP-III builds on the lessons of HSTP-II and orients the sector around three pillars: <strong>quality of care</strong>, <strong>equity in coverage</strong>, and <strong>digital transformation</strong>. Regional consultations will run through August 2026.</p>'
@@ -36,9 +36,9 @@ export const ARTICLES: Article[] = [
         +'<p>Financing runs through the whole discussion. Officials pointed to community-based health insurance, growing domestic resource mobilisation and continued partner support from the World Bank, WHO and bilateral donors as the base on which the plan must be affordable, not aspirational.</p>'
         +'<p>Civil society, professional associations, partners, and citizens are invited to submit input through the FMoH portal. The full draft will be published for public review in November.</p>' },
   { id:'a-003', date:'2026-06-08', category:'Advisory', author:'EPI Directorate', tags:['immunisation','Penta3','pastoralist'],
-    title:'Routine immunisation campaign: June 16–22',
-    summary:'One-week catch-up campaign for under-5s across Afar, Somali, Benishangul-Gumuz and Gambella, 16–22 June.',
-    body:'<p>The Expanded Programme on Immunization (EPI) is conducting a one-week catch-up campaign across Afar, Somali, Benishangul-Gumuz, and Gambella regions from <strong>16–22 June 2026</strong>.</p>'
+    title:'Routine immunisation campaign: June 16 to 22',
+    summary:'One-week catch-up campaign for under-5s across Afar, Somali, Benishangul-Gumuz and Gambella, 16 to 22 June.',
+    body:'<p>The Expanded Programme on Immunization (EPI) is conducting a one-week catch-up campaign across Afar, Somali, Benishangul-Gumuz, and Gambella regions from <strong>16 to 22 June 2026</strong>.</p>'
         +"<p>These four regions were chosen because routine immunisation coverage there sits below the national average, and because they hold a large share of the country's zero-dose children, infants who have never received a single vaccine. Long distances, sparse health posts and seasonal movement all make it harder for families to complete the schedule on time.</p>"
         +'<p>Antigens included: BCG, Penta1-3, MCV1, MCV2, IPV, PCV, rotavirus. The campaign uses outreach teams covering 412 sites including health posts, mobile clinics, and school grounds.</p>'
         +'<p>Vaccines are being moved under an unbroken cold chain, with solar refrigerators at health centres and cold boxes carried to the furthest kebeles. Mobile teams will travel to grazing areas and river crossings to reach households that rarely see a static facility, and children will also be offered vitamin A supplementation and deworming during the same visit.</p>'
@@ -77,7 +77,7 @@ export const ARTICLES: Article[] = [
         +'<p>EFDA and EPI are also examining why the cold chain failed at these sites, whether through power interruption, refrigerator fault or handling error, so that the fix goes beyond replacing the stock. Findings will feed into refresher training on cold-chain management for the facilities involved.</p>' },
   { id:'a-007', date:'2026-05-14', category:'Research', author:'Public Health Institute', tags:['EWARS+','climate','forecasting'],
     title:'EWARS+ climate-driven forecasting model goes live',
-    summary:'EWARS+ goes live: weekly woreda-level alarm probabilities for cholera, malaria and dengue, 2–3 weeks ahead.',
+    summary:'EWARS+ goes live: weekly woreda-level alarm probabilities for cholera, malaria and dengue, 2 to 3 weeks ahead.',
     body:'<p>The Public Health Institute, in partnership with EPHI, has formally deployed <strong>EWARS+</strong>, an extension of the WHO EWARS framework that integrates rainfall, temperature, and humidity data with surveillance reporting.</p>'
         +"<p>The tool was built around a simple problem. Several of Ethiopia's heaviest disease burdens, cholera, malaria and dengue among them, rise and fall with the weather, yet surveillance data on its own tells responders where an outbreak already is rather than where it is about to be. EWARS+ is an attempt to buy those responders a little more time.</p>"
         +"<p>The model produces weekly alarm probabilities at woreda level for cholera, malaria, dengue, and meningitis. Probabilities are published every Monday and feed directly into PHEM's weekly bulletin.</p>"
@@ -97,7 +97,7 @@ export const ARTICLES: Article[] = [
         +'<p>The work is being carried out with Regional Health Bureaus and supported by partners including WHO and UNICEF, drawing on DHIS2 for its measurement. The first learning session is planned for the coming quarter, and the intention is to spread the methods that prove themselves to further health centres once the approach is tested.</p>' },
   { id:'a-009', date:'2026-04-29', category:'Press', author:'FMoH State Minister', tags:['donors','PEPFAR','HIV'],
     title:'Ethiopia signs renewed HIV programme cooperation with PEPFAR',
-    summary:'Ethiopia renews a five-year PEPFAR agreement (2026–2030) targeting 95-95-95 and ending mother-to-child transmission.',
+    summary:'Ethiopia renews a five-year PEPFAR agreement (2026 to 2030) targeting 95-95-95 and ending mother-to-child transmission.',
     body:"<p>Ethiopia's renewed cooperation with PEPFAR (President's Emergency Plan for AIDS Relief) covers the period 2026-2030, with a programmatic focus on reaching the 95-95-95 targets, eliminating mother-to-child transmission, and integrating HIV services into primary care.</p>"
         +'<p>The renewal comes on the back of steady progress. Ethiopia has driven new infections and AIDS-related deaths down over the past decade, and its epidemic is now concentrated among specific populations and locations rather than spread evenly across the country. That shape guides where the next five years of effort must go.</p>'
         +'<p>The agreement carries technical and financial support for ART scale-up, supply-chain strengthening, and the second-line ART transition.</p>'
@@ -107,7 +107,7 @@ export const ARTICLES: Article[] = [
         +'<p>Both sides framed the agreement around sustainability. Alongside donor support, the FMoH is working towards greater domestic financing and the integration of HIV care into the wider primary health system, so that services endure as external funding evolves and national ownership grows.</p>' },
   { id:'a-010', date:'2026-04-21', category:'Advisory', author:'PHEM', tags:['rainy season','flooding'],
     title:'Pre-rainy-season preparedness advisory',
-    summary:"PHEM's annual pre-rainy-season advisory: cholera, malaria, dengue and post-flood risks ahead of Kiremt (June–September).",
+    summary:"PHEM's annual pre-rainy-season advisory: cholera, malaria, dengue and post-flood risks ahead of Kiremt (June to September).",
     body:'<p>The Public Health Emergency Management directorate has issued its annual pre-rainy-season preparedness advisory ahead of the <strong>Kiremt season (June-September)</strong>.</p>'
         +'<p>The rains reshape the disease landscape each year. Flooding contaminates wells and springs, standing water gives mosquitoes new breeding ground, and displacement crowds families into conditions where illness spreads easily. Preparedness ahead of the peak is far cheaper, in lives and in resources, than response once an outbreak has started.</p>'
         +'<p>Anticipated risks: water-borne outbreaks (cholera, AWD), vector-borne diseases (malaria, dengue), and post-flood public-health hazards in lowland regions.</p>'

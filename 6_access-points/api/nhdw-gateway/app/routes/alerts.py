@@ -17,6 +17,7 @@ import time
 from typing import Any
 
 import httpx
+from asyncpg.exceptions import UndefinedTableError
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
@@ -126,15 +127,22 @@ async def routing_rules(user: UserCtx = Depends(get_user)
     """All alert-routing rules from ops_governance.alert_routing, ordered by
     severity (critical→warning→info) then id. Admin dashboard renders + edits."""
     await _require_capability(user, "view_ops_console")
-    pool = await ops_db.ensure_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch("""
-            SELECT id, severity, match_label, channel, recipient, note,
-                   enabled, managed_by, updated_at
-            FROM ops_governance.alert_routing
-            ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1
-                                   ELSE 2 END, id;
-        """)
+    try:
+        pool = await ops_db.ensure_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT id, severity, match_label, channel, recipient, note,
+                       enabled, managed_by, updated_at
+                FROM ops_governance.alert_routing
+                ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1
+                                       ELSE 2 END, id;
+            """)
+    except UndefinedTableError:
+        # Cold-boot init gap: 29_alert_routing.sql not applied yet. Degrade to an
+        # empty rule set (the widget shows "no rules" instead of a 500 banner)
+        # rather than surfacing a raw stack trace to the operator.
+        log.warning("ops_governance.alert_routing missing — returning empty routing set")
+        return []
     return [_shape_routing(dict(r)) for r in rows]
 
 

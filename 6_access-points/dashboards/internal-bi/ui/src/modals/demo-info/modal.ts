@@ -18,7 +18,7 @@ function draw(ctx: ModalCtx): void {
     <p style="margin:0 0 1rem;font-size:.92rem;line-height:1.55;color:${theme.ink[1]}">
       This modal is served by the runtime modal host: a widget or detail view
       called <code>host.openModal('demo-info', …)</code> and the shell rendered
-      this registered <code>ModalDef</code> in its single modal slot — no shell
+      this registered <code>ModalDef</code> in its single modal slot; no shell
       code hardcodes it.
     </p>
     <div style="display:flex;gap:.5rem;justify-content:flex-end">

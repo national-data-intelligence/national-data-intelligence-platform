@@ -64,6 +64,33 @@ def pull() -> int:
     return 0
 
 
+def pull_datasets() -> int:
+    """Pull ONLY the link-managed datasets/ subtree (files/datasets/<id>.csv) —
+    the gateway materializes a linked dataset there AFTER a lab may already be
+    running, and the loop's push never brings it down. Datasets are read-only in
+    the lab (regenerated on (re)link), so mirroring them each cycle is safe and
+    idempotent: download only what's missing or size-changed. Never deletes."""
+    s3 = _client()
+    sub = PREFIX + "datasets/"
+    dst_root = WORKDIR / "datasets"
+    n = 0
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=BUCKET, Prefix=sub):
+        for obj in page.get("Contents") or []:
+            rel = obj["Key"][len(sub):]
+            if not rel or rel.endswith(MARKER):
+                continue
+            dst = dst_root / rel
+            if dst.exists() and dst.stat().st_size == obj.get("Size", -1):
+                continue                 # already have this exact object
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            s3.download_file(BUCKET, obj["Key"], str(dst))
+            n += 1
+    if n:
+        print(f"[nhdw-sync] pull datasets: {n} file(s) → {dst_root}", flush=True)
+    return 0
+
+
 def push() -> int:
     s3 = _client()
     if not WORKDIR.exists():
@@ -93,16 +120,19 @@ def main() -> int:
         return pull()
     if cmd == "push":
         return push()
+    if cmd == "pull-datasets":
+        return pull_datasets()
     if cmd == "loop":
         interval = int(os.environ.get("NHDW_SYNC_INTERVAL", "60"))
         while True:
             time.sleep(interval)
             try:
                 push()
+                pull_datasets()   # bring down datasets linked mid-session
             except Exception as exc:            # noqa: BLE001 — keep looping
-                print(f"[nhdw-sync] push failed: {exc}", file=sys.stderr,
+                print(f"[nhdw-sync] sync cycle failed: {exc}", file=sys.stderr,
                       flush=True)
-    print(f"usage: {sys.argv[0]} pull|push|loop", file=sys.stderr)
+    print(f"usage: {sys.argv[0]} pull|push|pull-datasets|loop", file=sys.stderr)
     return 2
 
 
