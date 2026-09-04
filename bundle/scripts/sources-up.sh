@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # sources-up.sh — bring up + seed the EXTERNAL replicas the warehouse depends on:
 # the ingestion sources (DHIS2, an OpenMRS EMR, the EPSS SQL Server hosting HCMISWDM
-# + mBrana, a HAPI FHIR facility registry, a climate CSV API), the Fayda OIDC IdP,
+# + mBrana, a HAPI FHIR facility registry, a climate CSV API, an eLMIS/OpenLMIS
+# logistics extract), the Fayda OIDC IdP,
 # AND the LLM (Ollama) the dashboard assistant calls. These are the "outside world"
 # systems: they live in docker-compose (NOT k8s) — in production they are not ours to
 # run — and publish on 0.0.0.0 so k3d pods reach them via host.k3d.internal (the LLM
@@ -13,7 +14,7 @@
 # Usage:
 #   sources-up.sh up        # compose up + restore/seed every source + LLM + fayda
 #   sources-up.sh down      # docker compose down every external stack (teardown)
-#   sources-up.sh up llm    # (optional) just one target: llm|dhis2|ethioemr|hcmis|mfr|climate
+#   sources-up.sh up llm    # (optional) just one target: llm|dhis2|ethioemr|hcmis|mfr|climate|elmis
 #
 # Host prereqs (documented in each source README): docker compose, python3 with the
 # per-source deps (requests for DHIS2/MFR seeders; pyodbc/pymssql for the SQL-Server
@@ -195,6 +196,32 @@ up_hcmis_mbrana() {
   fi
 }
 
+up_elmis() {
+  step "eLMIS — OpenLMIS historical extract (Postgres)"
+  ensure_env "$SRC/OpenLMIS"
+  compose "$SRC/OpenLMIS" up -d >/dev/null 2>&1 || { warn "elmis compose up failed"; return 1; }
+  wait_healthy elmis-postgres 240 || { warn "elmis-postgres not healthy"; return 1; }
+  log "elmis-postgres healthy"
+  # SEED-ONLY-IF-EMPTY. eLMIS has NO synthesizer (unlike EthioEMR/HCMISWDM/mBrana):
+  # the dump is a historical extract with no source app that could regenerate it,
+  # so there is no synth-version contract to drift against — a populated DB is
+  # always trusted, and a missing dump is a hard stop rather than a fallback.
+  local dump="$SRC/OpenLMIS/sample-data/elmis_historical_data_simulated.sql.gz"
+  if [ ! -f "$dump" ]; then
+    warn "eLMIS dump absent ($dump) — source stays EMPTY (see sample-data/SEED-DATA-NOTICE.md)"
+    return 1
+  fi
+  PGQ() { docker exec elmis-postgres psql -U "${ELMIS_DB_USER:-elmis}" -d "${ELMIS_DB_NAME:-elmis}" -At -c "$1" 2>/dev/null | tr -dc 0-9; }
+  local lines; lines=$(PGQ "SELECT count(*) FROM history.requisition_line;")
+  if [ "${lines:-0}" -gt 0 ]; then
+    log "eLMIS already carries history (requisition_line=${lines}) — skipping restore"
+  else
+    log "restoring eLMIS extract ($(du -h "$dump" | cut -f1) gz / ~1.5 GB — 5-15 min)"
+    ( cd "$SRC/OpenLMIS" && bash scripts/restore.sh ) >/dev/null 2>&1 \
+      && log "eLMIS restored" || warn "eLMIS restore.sh failed"
+  fi
+}
+
 up_dhis2() {
   step "DHIS2 — the slow one (Liquibase schema init, ~5-10 min) + Ethiopia + IDSR seed"
   ensure_env "$SRC/DHIS2"
@@ -230,7 +257,7 @@ down_all() { # $1 = "--wipe" to ALSO delete the volumes (true factory reset)
   local vol_flag=""
   [ "${1:-}" = "--wipe" ] && vol_flag="-v"
   step "Stopping all external source stacks${vol_flag:+ + WIPING volumes (factory reset)}"
-  for d in DHIS2 EthioEMR HCMISWDM MFR Climate; do
+  for d in DHIS2 EthioEMR HCMISWDM MFR Climate OpenLMIS; do
     [ -f "$SRC/$d/docker-compose.yml" ] && { compose "$SRC/$d" down $vol_flag >/dev/null 2>&1 && log "$d down${vol_flag:+ (volumes wiped)}" || warn "$d down failed"; }
   done
   [ -f "$EXT/fayda/docker-compose.yml" ] && { compose "$EXT/fayda" down $vol_flag >/dev/null 2>&1 && log "fayda down" || warn "fayda down failed"; }
@@ -249,12 +276,13 @@ case "$ACTION" in
       case "$ONLY" in
         llm) up_llm ;; climate) up_climate ;; mfr) up_mfr ;; ethioemr) up_ethioemr ;;
         hcmis|hcmiswdm|mbrana) up_hcmis_mbrana ;; dhis2) up_dhis2 ;;
+        elmis|openlmis) up_elmis ;;
         *) echo "unknown source: $ONLY" >&2; exit 2 ;;
       esac
     else
       # LLM + fayda first (fast; the assistant + auth want them early). Then the
       # data sources; DHIS2 (slowest) last so its long wait overlaps nothing critical.
-      up_llm; up_fayda; up_climate; up_mfr; up_ethioemr; up_hcmis_mbrana; up_dhis2
+      up_llm; up_fayda; up_climate; up_mfr; up_ethioemr; up_hcmis_mbrana; up_elmis; up_dhis2
     fi
     echo; echo "== sources-up: done =="
     ;;
