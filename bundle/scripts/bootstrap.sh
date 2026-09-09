@@ -296,20 +296,6 @@ echo "  postgres-vault ready"
 kubectl -n "$NS" wait --for=condition=complete job/keycloak-seed --timeout=420s 2>/dev/null \
   && echo "  keycloak-seed complete" || echo "  ! keycloak-seed not complete (inspect: kubectl -n $NS logs job/keycloak-seed)"
 
-# MinIO console OIDC (#79) — MinIO is the frozen ROLLBACK COPY since Phase 6 (2026-09-09);
-# this guard goes away with MinIO at Phase 8. MinIO does a ONE-SHOT OpenID init at startup and
-# never retries. On a cold boot it starts before Keycloak is reachable, the init
-# fails ("connection refused") and the console SSO button is then silently
-# absent. Now that keycloak-seed has completed (the minio-console client exists),
-# restart MinIO IFF its OIDC init failed, so the console advertises NHDW SSO.
-if kubectl -n "$NS" logs deploy/minio-datalake --tail=400 2>/dev/null | grep -q 'Unable to initialize OpenID'; then
-  kubectl -n "$NS" rollout restart deploy/minio-datalake >/dev/null 2>&1 \
-    && kubectl -n "$NS" rollout status deploy/minio-datalake --timeout=120s >/dev/null 2>&1 \
-    && echo "  ✓ minio-datalake restarted — console OIDC re-initialised" \
-    || echo "  ! minio-datalake OIDC re-init restart failed (console SSO may be off)" >&2
-else
-  echo "  minio-datalake console OIDC already initialised ✓"
-fi
 
 # ─── 5.2 · reconcile the Superset metadata DB/role. 31_superset_db.sh provisions
 # it during postgres-vault's ONE-TIME initdb, which needs SUPERSET_DB_PASSWORD

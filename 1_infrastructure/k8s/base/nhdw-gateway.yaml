@@ -83,7 +83,7 @@ spec:
             # Presigned downloads (ml result CSVs / exports / artifacts) are
             # signed against the BROWSER-reachable MinIO host (ing-minio) —
             # the in-cluster endpoint above is unreachable from the browser.
-            - { name: MINIO_PUBLIC_ENDPOINT, value: "https://minio.127.0.0.1.nip.io" }
+            - { name: MINIO_PUBLIC_ENDPOINT, value: "https://s3.127.0.0.1.nip.io" }
             # Runner image for the ephemeral train / predict-adhoc Jobs the
             # gateway spawns (/api/ml/{model}/retrain + /predict). A kustomize
             # `images:` remap can't reach dynamically-created Jobs, so the dev

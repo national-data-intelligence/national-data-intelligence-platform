@@ -63,7 +63,6 @@ const TOOLS: Array<{ name: string; ico: string; desc: string; url: string; auth:
   // MLflow's gate excludes the security-officer role (R-OPS-SEC) — hide the tile
   // for it so it never 403s (gate ALLOWED_ROLES: R-CONS-*, R-OPS-ADM, R-SUPER).
   { name: 'MLflow',        ico: 'i-microscope', desc: 'Experiment tracking, the model registry and run artifacts for the workshop ML packages.', url: toolUrl('mlflow', `/oauth2gate/login?realm=${REALM}&rd=/`), auth: 'OIDC · Keycloak', roles: ['R-OPS-ADM', 'R-SUPER'] },
-  { name: 'MinIO Console', ico: 'i-folder',   desc: 'Browse the data lake and the nhdw-docs bucket: objects, manifests and ingest sidecars.', url: toolUrl('minio-console', '/'), auth: 'SSO · Keycloak' },
   { name: 'Cluster console (Headlamp)', ico: 'i-tools', desc: 'Raw-Kubernetes control: edit/scale/exec on nhdw workloads (namespace edit), read-only elsewhere.', url: `/oauth2gate/login?realm=${REALM}&rd=/k8s/`, auth: 'OIDC · Keycloak (tool-gate)' },
   { name: 'Prometheus',    ico: 'i-pulse',    desc: 'Metrics store and query UI for the observability plane the topology page reads from.', url: toolUrl('prometheus', `/oauth2gate/login?realm=${REALM}&rd=/`), auth: 'OIDC · Keycloak' },
   { name: 'Alertmanager',  ico: 'i-bell',     desc: 'Alert routing and silences for the Prometheus alert rules (see Alert routing page).', url: toolUrl('alertmanager', `/oauth2gate/login?realm=${REALM}&rd=/`), auth: 'OIDC · Keycloak' },

@@ -46,8 +46,8 @@ ML_RUNNER_IMAGE = os.environ.get(
 MLFLOW_URL = "http://mlflow.nhdw.svc.cluster.local:5000"
 # Storage endpoint seam (Phase 6 step 0): read from the Airflow Deployment env so the
 # backend can be switched later WITHOUT rebuilding this image. The default is the
-# current MinIO URL — behaviour is unchanged until NHDW_S3_ENDPOINT is set otherwise.
-MINIO_URL = os.environ.get("NHDW_S3_ENDPOINT", "http://minio-datalake.nhdw.svc.cluster.local:9000")
+# SeaweedFS S3 gateway (MinIO was decommissioned 2026-09-09); NHDW_S3_ENDPOINT overrides.
+MINIO_URL = os.environ.get("NHDW_S3_ENDPOINT", "http://seaweedfs-s3.nhdw.svc.cluster.local:8333")
 PG_HOST = "postgres-vault.nhdw.svc.cluster.local"
 
 

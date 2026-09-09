@@ -30,7 +30,7 @@ def _build() -> Any:
 
 def _build_public() -> Any:
     """Same as _build but with the *public* endpoint baked in so presigned
-    URLs are reachable from the browser (which can't resolve `minio-datalake`)."""
+    URLs are reachable from the browser (which can't resolve `seaweedfs-s3`)."""
     import boto3
     from botocore.client import Config
     return boto3.client(

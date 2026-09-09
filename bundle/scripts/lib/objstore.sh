@@ -13,9 +13,8 @@
 # --network=host) lives in the Desktop VM and cannot reach a port-forward bound
 # on the host — only the host can. Same pattern pack.sh always used.
 #
-# Rollback to MinIO for any one script: OBJSTORE_SVC=minio-datalake OBJSTORE_PORT=9000
-# OBJSTORE_SECRET=minio-secrets OBJSTORE_USER_KEY=ROOT_USER OBJSTORE_PASS_KEY=ROOT_PASSWORD
-# (the credential VALUES are identical on both stores until the Phase 8 rotation).
+# Any other S3 store can be targeted with the OBJSTORE_* overrides below (Service name,
+# port, Secret and key names) — used during the 2026-09 MinIO → SeaweedFS migration.
 
 OBJSTORE_NS="${OBJSTORE_NS:-${NS:-nhdw}}"
 OBJSTORE_SVC="${OBJSTORE_SVC:-seaweedfs-s3}"

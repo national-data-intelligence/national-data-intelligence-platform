@@ -4,7 +4,7 @@
 #     -f 1_infrastructure/helm/nhdw/values-single.yaml -s templates/seaweedfs.yaml
 # Design notes, Phase 1 evidence and the cutover mechanism: 3_storage/seaweedfs/README.md
 ---
-# SeaweedFS — S3 object storage for the lake (replaces minio-datalake; migration
+# SeaweedFS — S3 object storage for the lake (replaced MinIO on 2026-09-09; migration
 # assessment + Phase 1 evidence in 3_storage/seaweedfs/). Four components, split the
 # way SeaweedFS itself splits them, so each can be probed and fail independently:
 #
@@ -17,8 +17,7 @@
 #   s3      — the S3 API on :8333. Identities (the whole IAM surface) come from a
 #             mounted Secret, not from runtime `mc admin` calls.
 #
-# COEXISTENCE: nothing here touches minio-datalake. Consumers keep pointing at
-# minio-datalake:9000 until Phase 6/7 (see 3_storage/seaweedfs/README.md — cutover is
+# The MinIO Deployment this replaced was decommissioned on 2026-09-09 (3_storage/seaweedfs/phase7-8/).
 # a Service alias swap, rollback is the same swap back).
 #
 # Phase 1 findings baked in (do not "simplify" these away):

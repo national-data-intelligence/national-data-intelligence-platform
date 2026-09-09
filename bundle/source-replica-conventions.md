@@ -114,7 +114,7 @@ Each source replica is a **standalone application**:
 - It must clean up cleanly with `docker compose down -v`.
 - Its data lives at `{SOURCE}_DATA_DIR` and is wipeable independently.
 - It exposes its real-world protocol — not a uniform "warehouse API". The point is interface fidelity.
-- It does NOT know about the data warehouse, dbt, MinIO, the ingestor, or any downstream consumer.
+- It does NOT know about the data warehouse, dbt, SeaweedFS, the ingestor, or any downstream consumer.
 
 ## Top-level compose aggregator (Docker Compose `include:`)
 

@@ -6,12 +6,14 @@
 ### Authority per bucket (who is the source of truth right now)
 | Bucket | Authoritative store | Other store is… | Since |
 |---|---|---|---|
-| `nhdw-static` | **SeaweedFS** | MinIO = rollback copy (2 of 9 objects older — P6-1.A) | 2026-09-08 22:18 UTC |
-| `nhdw-raw` | **SeaweedFS** | MinIO = rollback copy: lacks the 25 keys of the 2026-09-09 dhis2 metadata partition and still holds the 24 keys of the 2026-08-06 partition that dlt replaced (P6-2.A) | 2026-09-09 10:47 UTC |
-| `nhdw-processed` | **SeaweedFS** | MinIO = rollback copy, currently byte-identical (P6-2.A) | 2026-09-09 10:45 UTC |
-| `nhdw-artifacts` | **SeaweedFS** | MinIO = rollback copy frozen at 2026-09-09 11:51Z: lacks the 6 newer dbt manifests (P6-3.M), the G2 validation residue (21 keys `mlflow/18…24/`, 2 keys `ml-adhoc/ml-adhoc-ears-7704b4d1/`) and everything written since (P6-3.R) | 2026-09-09 11:51 UTC |
-| `nhdw-exports`, `nhdw-docs` | **SeaweedFS** | MinIO = rollback copy (exports: MinIO 0 / SeaweedFS 4 validation exports; docs: identical 6/6) | 2026-09-09 11:51 UTC |
-| `nhdw-archive` | **MinIO** | SeaweedFS = verified copy; no consumer writes it; moves with the Phase 6 step 4 ops scripts | — |
+| `nhdw-static` | **SeaweedFS** | — (MinIO removed 2026-09-09 17:34Z; last copy in the final MinIO backup) | 2026-09-08 22:18 UTC |
+| `nhdw-raw` | **SeaweedFS** | — (MinIO removed 2026-09-09 17:34Z; last copy in the final MinIO backup) | 2026-09-09 10:47 UTC |
+| `nhdw-processed` | **SeaweedFS** | — (MinIO removed 2026-09-09 17:34Z; last copy in the final MinIO backup) | 2026-09-09 10:45 UTC |
+| `nhdw-artifacts` | **SeaweedFS** | — (MinIO removed 2026-09-09 17:34Z; last MinIO copy in `~/nhdw-backups/minio-s3-backup-20260909T172858Z`) | 2026-09-09 11:51 UTC |
+| `nhdw-exports`, `nhdw-docs` | **SeaweedFS** | — (MinIO removed 2026-09-09 17:34Z; last copy in the final MinIO backup) | 2026-09-09 11:51 UTC |
+| `nhdw-archive` | **MinIO** | — (MinIO removed 2026-09-09 17:34Z; last copy in the final MinIO backup) | — |
+**Phases 7–8 executed 2026-09-09 17:00–17:40 UTC (demo decision: no soak). MinIO decommissioned; see `../phase7-8/DECOMMISSION-RECORD.md` and ledger rows P8.*.**
+
 Step 4 result (2026-09-09 13:00–13:40 UTC, ledger P6-4.0–4.9): the host-side scripts now reach the
 store through one helper, `bundle/scripts/lib/objstore.sh` (SeaweedFS S3 via port-forward + the
 bundled mc, offline fallback from the cached mc image). Repointed and exercised for real: docs seed

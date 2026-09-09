@@ -66,7 +66,7 @@ CH_PORT = int(os.environ.get("CH_PORT", "8123"))
 CH_USER = os.environ.get("CH_USER", "nhdw")
 CH_PASSWORD = os.environ["CH_PASSWORD"]
 # Same endpoint the raw views use (see raw_views.sql) — in-cluster service DNS.
-LAKE_BASE = os.environ.get("LAKE_BASE", "http://minio-datalake:9000")
+LAKE_BASE = os.environ.get("LAKE_BASE", "http://seaweedfs-s3.nhdw.svc.cluster.local:8333")
 
 _PATH = re.compile(r"nhdw-raw/([a-z0-9_]+)/([a-z0-9_]+)/")
 

@@ -255,8 +255,8 @@ const BRAND_ICONS: Record<string, string> = {
       `<rect x='13' y='6' width='2.5' height='12' rx='.4'/>` +
       `<rect x='16.8' y='10.9' width='2.5' height='2.4' rx='.4'/>` +
     `</g>`,
-  'minio-datalake':                                                   // MinIO red — stylised seagull
-    `<path d='M3.4 15.4c3-1 5.3-3.1 7.1-6.1.5-.9 1.5-.9 2 0 1.8 3 4.1 5.1 7.1 6.1-3.2.5-6.1-.4-8.1-2.6-2 2.2-4.9 3.1-8.1 2.6z' fill='#C72E49'/>`,
+  'seaweedfs-filer':                                                  // SeaweedFS — stacked volumes, teal
+    `<ellipse cx='12' cy='7' rx='7' ry='2.6' fill='#1FA2A6'/><path d='M5 7v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V7' fill='none' stroke='#1FA2A6' stroke-width='1.6'/><path d='M5 11v4c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-4' fill='none' stroke='#1FA2A6' stroke-width='1.6'/>`,
   'nhdw-trino':                                                       // Trino magenta — rabbit
     `<path d='M8.4 10c-.5-2-.8-3.9-.6-5.9.1-.8 1.1-1 1.5-.3.9 1.4 1.5 3 1.8 4.7h1.8c.3-1.7.9-3.3 1.8-4.7.4-.7 1.4-.5 1.5.3.2 2-.1 3.9-.6 5.9 1.3.9 2.1 2.4 2.1 4 0 2.9-2.5 4.7-5.7 4.7s-5.7-1.8-5.7-4.7c0-1.6.8-3.1 2.1-4z' fill='#DD00A1'/>` +
     `<circle cx='10.2' cy='14.2' r='.9' fill='#fff'/><circle cx='13.8' cy='14.2' r='.9' fill='#fff'/>`,
@@ -328,7 +328,7 @@ const ICON_BY_ID: Record<string, string> = {
   'nhdw-gateway': 'link',
   'admin': 'shield', 'internal-bi': 'chart-bar', 'public-dashboard': 'globe',
   'workshop': 'notebook', 'dbt-docs': 'book',
-  'postgres-vault': 'database', 'minio-datalake': 'package', 'clickhouse': 'database',
+  'postgres-vault': 'database', 'seaweedfs-filer': 'package', 'clickhouse': 'database',
   'nhdw-trino': 'cpu', 'airflow': 'refresh', 'mlflow': 'microscope', 'nhdw-ollama': 'chat',
   'jupyterhub': 'notebook',
   'keycloak': 'key', 'opa': 'policy', 'fayda-replica': 'user',
@@ -474,7 +474,7 @@ const NODE_ZONE: Record<string, ZoneId> = {
 const ZONE_PREF: Record<ZoneId, string[]> = {
   access: ['admin', 'internal-bi', 'public-dashboard', 'workshop', 'dbt-docs'],
   apis: ['nhdw-gateway'],
-  storage: ['postgres-vault', 'minio-datalake', 'clickhouse'],
+  storage: ['postgres-vault', 'seaweedfs-filer', 'clickhouse'],
   compute: ['nhdw-trino', 'airflow', 'mlflow', 'nhdw-ollama', 'jupyterhub'],
   security: ['keycloak', 'opa', 'fayda-replica'],
   observability: ['kubernetes-api', 'headlamp', 'prometheus', 'loki', 'alertmanager', 'promtail'],

@@ -54,7 +54,7 @@ spec:
             - { name: MINIO_ACCESS_KEY,  valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER     } } }
             - { name: MINIO_SECRET_KEY,  valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MLFLOW_URL,        value: "http://mlflow.{{ $ns }}.svc.cluster.local:5000" }
-            - { name: MINIO_PUBLIC_ENDPOINT, value: "https://minio.{{ .Values.hostBase }}" }
+            - { name: MINIO_PUBLIC_ENDPOINT, value: "https://s3.{{ .Values.hostBase }}" }
             - { name: WORKSPACE_PROFILES_PATH, value: "/app/config/profiles.yaml" }
             - { name: JUPYTERHUB_URL, value: "http://jupyterhub.{{ $ns }}.svc.cluster.local:8081" }
             - name: JUPYTERHUB_API_TOKEN

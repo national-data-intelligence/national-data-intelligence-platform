@@ -82,24 +82,6 @@
   ansible.builtin.command: "kubectl -n {{ nhdw_namespace }} wait --for=condition=complete job/keycloak-seed --timeout=420s"
   changed_when: false
 
-# MinIO is the frozen rollback copy since Phase 6 (2026-09-09; removed at Phase 8).
-# MinIO does a ONE-SHOT OpenID init at startup; on a cold boot it can start before Keycloak is
-# reachable, the init fails, and the console SSO button is silently absent. Now that keycloak-seed
-# has completed, restart MinIO IFF its OIDC init failed.
-- name: Restart minio-datalake if its one-shot OIDC init failed (cold-boot console SSO guard)
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      if kubectl -n {{ nhdw_namespace }} logs deploy/minio-datalake --tail=400 2>/dev/null | grep -q 'Unable to initialize OpenID'; then
-        kubectl -n {{ nhdw_namespace }} rollout restart deploy/minio-datalake
-        kubectl -n {{ nhdw_namespace }} rollout status deploy/minio-datalake --timeout=120s
-        echo restarted
-      else
-        echo ok
-      fi
-    executable: /bin/bash
-  register: deploy_minio_oidc
-  changed_when: "'restarted' in deploy_minio_oidc.stdout"
   failed_when: false
 
 # 31_superset_db.sh provisions the Superset metadata role during postgres-vault's ONE-TIME initdb,

@@ -6,7 +6,7 @@ Env contract (NO new secret material — reuses what the MLflow client already
 gets in the pod):
 
   MINIO_ENDPOINT     default → MLFLOW_S3_ENDPOINT_URL
-                             → http://minio-datalake.nhdw.svc.cluster.local:9000
+                             → http://seaweedfs-s3.nhdw.svc.cluster.local:8333
   MINIO_ACCESS_KEY   default → AWS_ACCESS_KEY_ID
   MINIO_SECRET_KEY   default → AWS_SECRET_ACCESS_KEY
   AWS_DEFAULT_REGION default et-addis-1
@@ -22,7 +22,7 @@ import boto3
 
 log = logging.getLogger("runner.minio")
 
-_DEFAULT_ENDPOINT = "http://minio-datalake.nhdw.svc.cluster.local:9000"
+_DEFAULT_ENDPOINT = "http://seaweedfs-s3.nhdw.svc.cluster.local:8333"
 
 
 def client():

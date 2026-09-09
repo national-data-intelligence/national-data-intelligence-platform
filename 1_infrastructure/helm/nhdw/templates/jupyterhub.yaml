@@ -98,7 +98,7 @@ spec:
             - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.{{ .Values.namespace }}.svc.cluster.local:8333" }   # Phase 6 G2
             - { name: ARTIFACTS_BUCKET, value: "nhdw-artifacts" }
             # Least-privilege project-sync creds (scoped to nhdw-artifacts/
-            # projects/* by minio-init) — these ride INSIDE user notebook
+            # projects/* by seaweedfs-init) — these ride INSIDE user notebook
             # pods, so they must never be root credentials.
             - name: MINIO_SYNC_ACCESS_KEY
               valueFrom: { secretKeyRef: { name: minio-secrets, key: PROJECT_SYNC_ACCESS_KEY, optional: true } }

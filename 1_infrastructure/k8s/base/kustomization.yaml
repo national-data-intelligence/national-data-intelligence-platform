@@ -6,8 +6,7 @@ resources:
   - namespace.yaml
   # storage
   - postgres-vault.yaml
-  - minio.yaml
-  - seaweedfs.yaml           # parallel to minio-datalake until Phase 7 cutover (3_storage/seaweedfs/README.md)
+  - seaweedfs.yaml           # object store (S3) — replaced MinIO 2026-09-09 (3_storage/seaweedfs/README.md)
   - clickhouse.yaml
   - trino.yaml
   # security

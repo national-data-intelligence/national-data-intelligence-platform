@@ -115,7 +115,7 @@ if mlflow:
     M = client(*creds(mlflow))
     pos.append((f"{mlflow['name']} put nhdw-artifacts", can(M, "put", "nhdw-artifacts", "_4a/mlflow/m/x")))
     neg.append((f"{mlflow['name']} put nhdw-raw", can(M, "put", "nhdw-raw", "_4a/hijack")))
-    neg.append((f"{mlflow['name']} get nhdw-raw", can(M, "get", "nhdw-raw", "_4a/raw.txt")))
+    pos.append((f"{mlflow['name']} get nhdw-raw", can(M, "get", "nhdw-raw", "_4a/raw.txt")))   # Phase 6 G3: the ML runner reads the raw lake (Read:nhdw-raw granted)
 else: out("NOTE", "9", "no bucket-scoped (mlflow) identity found in identities.json")
 if psync:
     P = client(*creds(psync))

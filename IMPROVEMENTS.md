@@ -78,9 +78,9 @@ Lower-detail seeds for later rounds (full findings: `scratchpad/weakness-assessm
 - **Secrets vault** — OpenBao is advertised but not deployed; secrets are k8s Secrets. Deploy OpenBao or
   stop presenting it as part of the architecture.
 - **#91 runtime hot-reload** — the OPA policy regen is deploy-time (Option A). The production-idiomatic
-  upgrade is a signed OPA **bundle → MinIO → OPA polls + hot-reloads** (schema already scaffolds
+  upgrade is a signed OPA **bundle → object store → OPA polls + hot-reloads** (schema already scaffolds
   `policy_revision.bundle_url`). Runtime permission edits then take effect without a reboot.
-- **Public portal wiring** — the public SPA still ships some hardcoded figures; wire to the MinIO CMS /
+- **Public portal wiring** — the public SPA still ships some hardcoded figures; wire to the object-store CMS /
   real marts and fix the woreda-count mismatch.
 - **Repo hygiene** — prune the ~38GB of stale local git-worktree copies under the workspace; document
   the images/weights/seed-data reconstitution story (a bare `git clone` isn't bootable by design).

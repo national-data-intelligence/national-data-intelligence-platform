@@ -28,18 +28,6 @@ put() {
 
 echo "[migrate] reading .env files from /repo and writing to OpenBao"
 
-# ─── minio (data lake) ────────────────────────────────────────────────────
-if [ -f /repo/3_storage/minio/.env ]; then
-    put minio \
-        root_user="$(get /repo/3_storage/minio/.env MINIO_ROOT_USER)" \
-        root_password="$(get /repo/3_storage/minio/.env MINIO_ROOT_PASSWORD)" \
-        ingestor_access_key="$(get /repo/3_storage/minio/.env INGESTOR_ACCESS_KEY)" \
-        ingestor_secret_key="$(get /repo/3_storage/minio/.env INGESTOR_SECRET_KEY)" \
-        transformer_access_key="$(get /repo/3_storage/minio/.env TRANSFORMER_ACCESS_KEY)" \
-        transformer_secret_key="$(get /repo/3_storage/minio/.env TRANSFORMER_SECRET_KEY)" \
-        reader_access_key="$(get /repo/3_storage/minio/.env READER_ACCESS_KEY)" \
-        reader_secret_key="$(get /repo/3_storage/minio/.env READER_SECRET_KEY)"
-fi
 
 # ─── clickhouse ───────────────────────────────────────────────────────────
 if [ -f /repo/3_storage/clickhouse/.env ]; then

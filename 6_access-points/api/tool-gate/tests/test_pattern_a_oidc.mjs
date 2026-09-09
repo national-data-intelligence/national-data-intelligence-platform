@@ -66,23 +66,7 @@ async function fresh() {
   await ctx.close();
 }
 
-// ── MinIO console — SSO admits an operator (privileged-ops → consoleAdmin) ──
-{
-  const { ctx, page } = await fresh();
-  await page.goto('https://minio-console.127.0.0.1.nip.io/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(2000);
-  // OIDC active → the "NHDW Single Sign-On" provider button is shown up top.
-  const sso = page.getByText(/NHDW Single Sign-On/i).first();
-  if (await sso.count() > 0) { await sso.click().catch(() => {}); await page.waitForTimeout(2500); }
-  await login(page, 'solomon.m');
-  await page.waitForTimeout(3000);
-  const body = (await page.locator('body').innerText().catch(() => '')) || '';
-  const url = page.url();
-  await page.screenshot({ path: `${SHOTS}/patA_minio_solomon.png` });
-  check(/minio-console\.127/.test(url) && /Bucket|Object Browser|Monitoring|Administrator|Access Keys/i.test(body),
-        `MinIO console SSO admits R-OPS-ADM to the object browser (url=${url.slice(0, 55)})`);
-  await ctx.close();
-}
+// (MinIO console check removed 2026-09-09 — MinIO was decommissioned; SeaweedFS has no console.)
 
 await browser.close();
 console.log(allOk ? '\nPATTERN-A ENFORCEMENT CHECKS PASSED' : '\nSOME CHECKS FAILED');

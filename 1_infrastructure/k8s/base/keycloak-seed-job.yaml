@@ -74,11 +74,6 @@ spec:
               valueFrom: { secretKeyRef: { name: superset-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             - name: JUPYTERHUB_OIDC_SECRET
               valueFrom: { secretKeyRef: { name: jupyterhub-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
-            # Confidential minio-console client secret — MUST match the value in
-            # minio.yaml's minio-oidc-secrets. optional:true → absent ⇒ setup-
-            # keycloak skips the minio-console client (console SSO just off).
-            - name: MINIO_OIDC_SECRET
-              valueFrom: { secretKeyRef: { name: minio-oidc-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             # tool-gate confidential clients — one secret per gate, MUST match the
             # gate Deployment's OIDC_CLIENT_SECRET (tool-gates.yaml). optional:true
             # → absent ⇒ setup-keycloak skips that gate client (its SSO stays off).

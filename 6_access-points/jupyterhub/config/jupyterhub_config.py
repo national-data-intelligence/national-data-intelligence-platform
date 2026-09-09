@@ -235,7 +235,7 @@ c.KubeSpawner.profile_list = profile_list
 
 # ─── Pre-spawn: project reconciliation env + warehouse creds ─────────────
 MINIO_ENDPOINT   = os.environ.get(
-    "MINIO_ENDPOINT", "http://minio-datalake.nhdw.svc.cluster.local:9000")
+    "MINIO_ENDPOINT", "http://seaweedfs-s3.nhdw.svc.cluster.local:8333")
 ARTIFACTS_BUCKET = os.environ.get("ARTIFACTS_BUCKET", "nhdw-artifacts")
 
 

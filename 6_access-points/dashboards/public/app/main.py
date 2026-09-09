@@ -446,7 +446,7 @@ async def proxy_article(article_id: str) -> JSONResponse:
 # nhdw-static bucket; downloads go direct to the public MinIO URL in the
 # manifest). Same-origin proxy so the browser needs no MinIO/CORS access. ──
 MINIO_INTERNAL = os.environ.get(
-    "NHDW_MINIO_INTERNAL", "http://minio-datalake.nhdw.svc.cluster.local:9000").rstrip("/")
+    "NHDW_MINIO_INTERNAL", "http://seaweedfs-s3.nhdw.svc.cluster.local:8333").rstrip("/")
 
 
 @app.get("/api/proxy/catalogue")

@@ -97,7 +97,7 @@ spec:
             - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }   # passed into notebook pods (Phase 6 step 0)
             - { name: ARTIFACTS_BUCKET, value: "nhdw-artifacts" }
             # Least-privilege project-sync creds (scoped to nhdw-artifacts/
-            # projects/* by minio-init) — these ride INSIDE user notebook
+            # projects/* by seaweedfs-init) — these ride INSIDE user notebook
             # pods, so they must never be root credentials.
             - name: MINIO_SYNC_ACCESS_KEY
               valueFrom: { secretKeyRef: { name: minio-secrets, key: PROJECT_SYNC_ACCESS_KEY, optional: true } }

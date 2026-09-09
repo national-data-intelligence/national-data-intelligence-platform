@@ -7,7 +7,6 @@
 #   - postgres-vault                          pg_dump --format=custom
 #   - clickhouse                              clickhouse-backup-style snapshot
 #   - object store (SeaweedFS)               S3 mirror of every nhdw-* bucket + sha256 manifest
-#   - minio (rollback copy, until Phase 8)   tar of the compose-era data dir, if present
 #   - openhim mongo                           mongodump
 #   - keycloak realm exports                  kcadm export for each realm
 #   - openbao file backend                    tar of /var/lib/openbao + sealed unseal-keys
@@ -61,19 +60,6 @@ echo "▸ object store: S3 mirror of every nhdw-* bucket (3_storage/seaweedfs/op
 BACKUP_ROOT="$OUT" bash "$REPO/3_storage/seaweedfs/ops/backup-objstore.sh" 2>&1 | sed 's/^/  /' \
     || echo "  ! object-store mirror failed"
 
-# 3b. minio — ROLLBACK COPY ONLY (frozen 2026-09-09; removed at Phase 8): tar the on-disk bucket layout. Faster + simpler than mc
-# mirror; works as long as MinIO uses a host-bind mount (it does in
-# the dev compose). Production swaps for object-store cross-region
-# replication and this step becomes a no-op.
-echo "▸ minio: snapshot data dir"
-MINIO_SRC=$(docker inspect minio-datalake --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)
-if [ -n "$MINIO_SRC" ]; then
-    echo "${BACKUP_SUDO_PASS:?set BACKUP_SUDO_PASS (or configure passwordless sudo for the backup paths)}" | sudo -S tar czf "$OUT/minio-buckets.tar.gz" -C "$MINIO_SRC" . 2>/dev/null \
-        && echo "  -> $(du -h "$OUT/minio-buckets.tar.gz" | cut -f1)" \
-        || echo "  ! minio snapshot failed"
-else
-    echo "  ! minio data dir not bind-mounted; skipping"
-fi
 
 # 4. openhim mongo
 echo "▸ openhim mongo: dump"

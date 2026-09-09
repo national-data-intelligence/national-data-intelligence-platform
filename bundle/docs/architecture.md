@@ -43,7 +43,7 @@ routes the `*.127.0.0.1.nip.io` hosts to the services.
 ## The pieces
 
 - **Storage** — Postgres (the warehouse and the operational databases),
-  ClickHouse (staging), SeaweedFS (the lake and an artifact store; MinIO is retained only as a rollback copy until decommission), and Trino as a
+  ClickHouse (staging), SeaweedFS (the lake and an artifact store), and Trino as a
   federating query engine over them.
 - **Pipeline** — the per-source ingestors, the three dbt projects, and the
   ClickHouse-to-Postgres bridge.

@@ -1,8 +1,8 @@
 # MLflow tracking server.
 #
 # Backend store : postgres-vault / nhdw_mlflow (writer = mlflow_writer)
-# Artifact store: s3://nhdw-artifacts/mlflow/  (user = nhdw_mlflow on MinIO,
-#                 provisioned by the minio-init Job using mlflow-secrets)
+# Artifact store: s3://nhdw-artifacts/mlflow/  (identity `mlflow` on SeaweedFS,
+#                 declared in seaweedfs-secrets identities.json — 3_storage/seaweedfs/phase4/00-create-secrets.sh)
 #
 # Image is built from the legacy 3_storage/model-registry/Dockerfile and
 # pushed to the in-cluster registry as nhdw/mlflow.

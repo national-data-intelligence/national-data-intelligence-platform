@@ -10,8 +10,7 @@
 #   1. restarts Airflow so the pods pick up the imported image; records the kubelet image id
 #   2. runs the DAG task `processed_zone` through Airflow (tasks test), captures the spawned
 #      pod's LAKE_BASE while it runs
-#   3. runs an in-cluster verifier: every nhdw-processed key on SeaweedFS rewritten after T0,
-#      MinIO's copy untouched, key sets identical
+#   3. runs an in-cluster verifier: every nhdw-processed key on SeaweedFS rewritten after T0
 # Evidence lands in $EVIDENCE (default: the G2 evidence dir recorded in ~/nhdw-backups/.phase6-g2).
 set -euo pipefail
 NS=${NS:-nhdw}
@@ -19,7 +18,7 @@ EVIDENCE=${EVIDENCE:-$(cat ~/nhdw-backups/.phase6-g2)}
 SNAP=~/nhdw-backups/phase6-snapshots
 HERE=$(cd "$(dirname "$0")" && pwd)
 SW="http://seaweedfs-s3.$NS.svc.cluster.local:8333"
-MN="http://minio-datalake.$NS.svc.cluster.local:9000"
+MN=""   # MinIO decommissioned 2026-09-09 — the verifier reports SeaweedFS only
 
 echo "== 1. restart Airflow onto the imported image"
 kubectl -n "$NS" rollout restart deploy/airflow >/dev/null
@@ -38,7 +37,7 @@ wait
 echo "  airflow: $(grep -oE 'Marking task as [A-Z_]+' "$EVIDENCE/airflow-processed_zone-wired.log" | tail -1)"
 grep -E "populated tables|rows · kept" "$EVIDENCE/airflow-processed_zone-wired.log" | sed 's/.*\[base\] //' | head -3 | sed 's/^/  /'
 
-echo "== 3. object-level proof (SeaweedFS rewritten after $T0, MinIO untouched)"
+echo "== 3. object-level proof (SeaweedFS rewritten after $T0)"
 kubectl -n "$NS" create configmap g2-proc-verify --from-file=processed_verify.py="$HERE/processed_verify.py" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n "$NS" delete job g2-proc-verify --ignore-not-found >/dev/null 2>&1
 cat <<Y | kubectl apply -f - >/dev/null
@@ -68,4 +67,4 @@ Y
 kubectl -n "$NS" wait --for=condition=complete job/g2-proc-verify --timeout=300s >/dev/null 2>&1 || true
 kubectl -n "$NS" logs job/g2-proc-verify 2>&1 | grep -v "^KEYS" | tee "$EVIDENCE/processed-dag-run.txt" | sed 's/^/  /'
 kubectl -n "$NS" delete job g2-proc-verify configmap/g2-proc-verify --ignore-not-found >/dev/null 2>&1
-echo "== done. PASS = task SUCCESS + LAKE_BASE=seaweedfs in the pod env + 'SeaweedFS keys rewritten … 65/65' + 'MinIO keys modified today: 0'"
+echo "== done. PASS = task SUCCESS + LAKE_BASE=seaweedfs in the pod env + 'SeaweedFS keys rewritten … 65/65'"

@@ -44,8 +44,8 @@ _GW = "nhdw-gateway"
 PATH_TO_EDGE: list[tuple[str, str]] = [
     ("/api/marts/%",          edge_id(_GW, "nhdw-trino")),
     ("/api/sql%",             edge_id(_GW, "nhdw-trino")),
-    ("/api/exports/%",        edge_id(_GW, "minio-datalake")),
-    ("/api/dq/%",             edge_id(_GW, "minio-datalake")),
+    ("/api/exports/%",        edge_id(_GW, "seaweedfs-filer")),
+    ("/api/dq/%",             edge_id(_GW, "seaweedfs-filer")),
     ("/api/ml/%",             edge_id(_GW, "mlflow")),
     # /api/chat → the LLM is OFF-CLUSTER (host.k3d.internal); the topology is a
     # pure in-cluster view, so that traffic has no node to attribute to and is

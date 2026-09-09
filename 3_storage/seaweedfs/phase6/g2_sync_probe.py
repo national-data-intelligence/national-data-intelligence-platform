@@ -22,7 +22,7 @@ def cli(ep, ak, sk):
     return boto3.client("s3", endpoint_url=ep, aws_access_key_id=ak, aws_secret_access_key=sk, region_name="et-addis-1",
                         config=Config(signature_version="s3v4", s3={"addressing_style": "path"}, retries={"max_attempts": 1}))
 SYN = cli(os.environ["NHDW_SYNC_ENDPOINT"], os.environ["NHDW_SYNC_ACCESS_KEY"], os.environ["NHDW_SYNC_SECRET_KEY"])
-MNR = cli(os.environ["MN"], os.environ["MN_AK"], os.environ["MN_SK"])
+MNR = cli(os.environ["MN"], os.environ["MN_AK"], os.environ["MN_SK"]) if os.environ.get("MN") else None   # None after the MinIO decommission
 R = []
 def rec(i, ok, d): R.append(ok); print(f"  [{'PASS' if ok else 'FAIL'}] {i:<4} {d}", flush=True)
 def run(cmd, workdir):
@@ -53,10 +53,10 @@ rc, out, dt = run("pull", W2)
 same = all(sha(f"{W1}/{f}") == sha(f"{W2}/{f}") for f in ("notes.md", "data/empty.csv", "analysis.ipynb"))
 rec("S4", rc == 0 and same, f"pull into fresh dir rc={rc}: byte-identical={same}")
 on_mn = []
-for rel in k2:
+for rel in (k2 if MNR else {}):
     try: MNR.head_object(Bucket=BUCKET, Key=PREFIX + rel); on_mn.append(rel)
     except Exception: pass
-rec("S5", not on_mn, f"keys on MinIO: {on_mn}")
+rec("S5", not on_mn, f"keys on MinIO: {on_mn}" if MNR else "no second store (MinIO decommissioned)")
 for rel in k2: SYN.delete_object(Bucket=BUCKET, Key=PREFIX + rel)
 rec("S6", keys() == {}, f"sync identity deleted its {len(k2)} probe keys (Write includes delete on SeaweedFS)")
 sys.exit(0 if all(R) else 1)

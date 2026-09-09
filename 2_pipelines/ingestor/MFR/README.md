@@ -135,7 +135,7 @@ All env-driven, see `.env.example` for the canonical list.
 | `MFR_FHIR_MAX_PAGES` | `0` | `0` = unbounded (drain everything). |
 | `MFR_FHIR_SINCE` | (blank) | ISO floor on `_lastUpdated`; blank = full pull. |
 | `MFR_DEV_MAX_ROWS` | `0` | Dev row cap per resource; `0` = unbounded. |
-| `MINIO_ENDPOINT` | `http://minio-datalake:9000` | In-network MinIO. |
+| `MINIO_ENDPOINT` | `http://seaweedfs-s3.nhdw.svc.cluster.local:8333` | In-cluster SeaweedFS S3 gateway. |
 | `MINIO_ACCESS_KEY` | `nhdw_ingestor` | Must match data-lake `INGESTOR_ACCESS_KEY`. |
 | `MINIO_SECRET_KEY` | (changeme) | Must match data-lake `INGESTOR_SECRET_KEY`. |
 | `MINIO_RAW_BUCKET` | `nhdw-raw` | |

@@ -28,7 +28,7 @@ alertmanager:
 
 storageClass: local-path
 
-# ── SeaweedFS (object storage; replaces minio-datalake — see 3_storage/seaweedfs/) ──
+# ── SeaweedFS (object storage — see 3_storage/seaweedfs/) ──
 # Tag pinned to the exact image Phase 1 validated (digest fc9f76fa…). Bump only
 # after re-running 3_storage/seaweedfs/poc/compat_test.py against the new tag.
 seaweedfs:

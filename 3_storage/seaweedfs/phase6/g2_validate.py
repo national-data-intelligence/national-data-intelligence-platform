@@ -28,7 +28,7 @@ import boto3, requests
 from botocore.client import Config
 from botocore.exceptions import ClientError
 
-SW  = os.environ["SW"];  MN = os.environ["MN"]
+SW  = os.environ["SW"];  MN = os.environ.get("MN", "")          # MN empty ⇒ MinIO decommissioned: asymmetry checks become "no second store"
 GW  = os.environ["GW"];  PUB = os.environ["PUB_HOST"]      # https://minio.<ip>.nip.io
 MLF = os.environ["MLFLOW_TRACKING_URI"]
 REG = "et-addis-1"
@@ -43,7 +43,7 @@ def s3(endpoint, ak, sk):
                         region_name=REG, config=Config(signature_version="s3v4", s3={"addressing_style": "path"},
                                                        connect_timeout=10, read_timeout=30, retries={"max_attempts": 1}))
 SWR = s3(SW, os.environ["SW_AK"], os.environ["SW_SK"])          # SeaweedFS admin (nhdw_root)
-MNR = s3(MN, os.environ["MN_AK"], os.environ["MN_SK"])          # MinIO root (read-only use here)
+MNR = s3(MN, os.environ["MN_AK"], os.environ["MN_SK"]) if MN else None          # MinIO root (read-only use here); None after decommission
 RUN = s3(SW, os.environ["ML_AK"], os.environ["ML_SK"])          # mlflow identity on SeaweedFS
 SYN = s3(SW, os.environ["SY_AK"], os.environ["SY_SK"])          # jupyter-sync identity on SeaweedFS
 # routes resolve the subject as a UUID; docs/exports need the R-SUPER capability set
@@ -67,7 +67,7 @@ def fetch_public(url):
 print(f"G2 validation {STAMP}  gateway={GW}  mlflow={MLF}  public={PUB}", flush=True)
 requests.packages.urllib3.disable_warnings()
 probe_keys = []   # (client, bucket, key) written on SeaweedFS by this run — cleaned at the end
-mn_before = {b: count(MNR, b) for b in ("nhdw-artifacts", "nhdw-exports", "nhdw-docs")}
+mn_before = {b: count(MNR, b) for b in ("nhdw-artifacts", "nhdw-exports", "nhdw-docs")} if MNR else {}
 print(f"  MinIO object counts before: {mn_before}", flush=True)
 
 # ── T1 docs read through the gateway ─────────────────────────────────────────
@@ -87,7 +87,7 @@ try:
         assert url.startswith(PUB), f"presigned URL not on public host: {url[:60]}"
         p = fetch_public(url); body = p.content
         direct = SWR.get_object(Bucket="nhdw-docs", Key=name)["Body"].read()
-        mn = MNR.get_object(Bucket="nhdw-docs", Key=name)["Body"].read()
+        mn = MNR.get_object(Bucket="nhdw-docs", Key=name)["Body"].read() if MNR else body
         rec("T2", p.status_code == 200 and sha(body) == sha(direct) == sha(mn),
             f"doc {name}: presigned via {PUB} → HTTP {p.status_code}, {len(body)} B, sha match SW={sha(body)==sha(direct)} MinIO-copy={sha(body)==sha(mn)}")
     else:
@@ -115,7 +115,7 @@ try:
     head = SWR.head_object(Bucket="nhdw-exports", Key=export_key)
     meta = head.get("Metadata", {}); size = head["ContentLength"]
     p = fetch_public(url); ok_dl = p.status_code == 200 and sha(p.content) == meta.get("sha256") and len(p.content) == j.get("byte_count")   # response carries byte_count, not sha
-    on_minio = exists(MNR, "nhdw-exports", export_key)
+    on_minio = exists(MNR, "nhdw-exports", export_key) if MNR else False
     listed = row is not None and bool(row.get("download_url"))
     rec("T3", size > 0 and ok_dl and not on_minio and listed and meta.get("source") == "nhdw-gateway",
         f"export {schema}.{table} → {export_key} ({size} B in {dt:.1f}s) meta.source={meta.get('source')} presigned-download HTTP {p.status_code} sha-match={ok_dl} listed-in-/me={listed} on-MinIO={on_minio}")
@@ -154,7 +154,7 @@ try:
         out = mlflow.artifacts.download_artifacts(run_id=run_id, dst_path=f"{d}/dl")
         got_big = pathlib.Path(out, "blob.bin").read_bytes(); got_empty = pathlib.Path(out, "empty.txt").read_bytes()
     prefix = f"mlflow/{exp_id}/{run_id}/artifacts/"
-    n_sw = count(SWR, "nhdw-artifacts", prefix); n_mn = count(MNR, "nhdw-artifacts", prefix)
+    n_sw = count(SWR, "nhdw-artifacts", prefix); n_mn = count(MNR, "nhdw-artifacts", prefix) if MNR else 0
     rec("T5", got_big == big and got_empty == b"" and arts.get("empty.txt") in (0, None) and n_sw >= 3 and n_mn == 0 and t_empty < 3,   # proxied list: proto3 JSON omits file_size=0 → None
         f"run {run_id[:8]}: 256KiB {t_big:.2f}s, EMPTY {t_empty:.2f}s (stall threshold 3s), list={arts}, download identical={got_big==big and got_empty==b''}, keys SW={n_sw} MinIO={n_mn}")
 except Exception as e:
@@ -179,12 +179,12 @@ try:
     elif src.startswith("s3://nhdw-artifacts/"): key_prefix = src[len("s3://nhdw-artifacts/"):]
     else: key_prefix = None
     mn_files = {}
-    if key_prefix:
+    if key_prefix and MNR:
         for p in MNR.get_paginator("list_objects_v2").paginate(Bucket="nhdw-artifacts", Prefix=key_prefix.rstrip("/") + "/"):
             for o in p.get("Contents", []):
                 rel = o["Key"][len(key_prefix.rstrip("/")) + 1:]
                 mn_files[rel] = sha(MNR.get_object(Bucket="nhdw-artifacts", Key=o["Key"])["Body"].read())
-    same = files == mn_files and len(files) > 0
+    same = (files == mn_files and len(files) > 0) if MNR else len(files) > 0
     loaded = None
     try:
         mlflow.pyfunc.load_model(f"models:/{name}/{ver}"); loaded = True
@@ -230,9 +230,12 @@ except Exception as e:
 
 # ── T9 MinIO untouched ───────────────────────────────────────────────────────
 try:
-    mn_after = {b: count(MNR, b) for b in ("nhdw-artifacts", "nhdw-exports", "nhdw-docs")}
-    stray = [k for (_, b, k) in probe_keys if exists(MNR, b, k)] + ([export_key] if export_key and exists(MNR, "nhdw-exports", export_key) else [])
-    rec("T9", mn_after == mn_before and not stray, f"MinIO counts before={mn_before} after={mn_after}; probe keys on MinIO={stray}")
+    if MNR:
+        mn_after = {b: count(MNR, b) for b in ("nhdw-artifacts", "nhdw-exports", "nhdw-docs")}
+        stray = [k for (_, b, k) in probe_keys if exists(MNR, b, k)] + ([export_key] if export_key and exists(MNR, "nhdw-exports", export_key) else [])
+        rec("T9", mn_after == mn_before and not stray, f"MinIO counts before={mn_before} after={mn_after}; probe keys on MinIO={stray}")
+    else:
+        rec("T9", True, "no second store (MinIO decommissioned) — every write above landed on SeaweedFS by construction")
 except Exception as e:
     rec("T9", False, f"MinIO asymmetry check errored: {e}")
 

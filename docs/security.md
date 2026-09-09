@@ -39,7 +39,7 @@ it is refused.
 ## Tool access
 
 Analyst and operator tools — dbt docs, Airflow, Superset, MLflow, Jupyter, the
-MinIO console, Prometheus, the Kubernetes console — are all reached from the
+Prometheus, the Kubernetes console — are all reached from the
 dashboards over the shared Keycloak session, and each is restricted to the roles
 that should use it. Tools that speak OIDC enforce the role themselves; the rest
 sit behind a small role-aware reverse proxy that checks the role before proxying,
