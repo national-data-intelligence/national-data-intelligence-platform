@@ -1,0 +1,35 @@
+# Phase 4A in-cluster verification Job. Created/replaced by 04a-verify.sh, which also
+# builds the seaweedfs-verify-script ConfigMap from verify_cluster.py. Uses the gateway
+# image (python 3.12 + boto3, already in k3s) and mounts identities.json from
+# seaweedfs-secrets — the real identities are exercised without any credential
+# leaving the cluster. Deleted by the script when the run is over.
+apiVersion: batch/v1
+kind: Job
+metadata: { name: seaweedfs-verify, namespace: nhdw, labels: { app: seaweedfs-verify, part-of: seaweedfs } }
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata: { labels: { app: seaweedfs-verify, part-of: seaweedfs } }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: verify
+          image: nhdw/gateway:1.0.0
+          imagePullPolicy: IfNotPresent
+          command: [ "python3", "/verify/verify_cluster.py" ]
+          env:
+            - { name: MODE,            value: "__MODE__" }
+            - { name: S3_ENDPOINT,     value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }
+            - { name: MASTER_URL,      value: "http://seaweedfs-master.nhdw.svc.cluster.local:9333" }
+            - { name: VOLUME_URL,      value: "http://seaweedfs-volume-0.seaweedfs-volume.nhdw.svc.cluster.local:8080" }
+            - { name: FILER_URL,       value: "http://seaweedfs-filer.nhdw.svc.cluster.local:8888" }
+            - { name: IDENTITIES_FILE, value: "/etc/seaweedfs/identities.json" }
+          volumeMounts:
+            - { name: script,     mountPath: /verify,        readOnly: true }
+            - { name: identities, mountPath: /etc/seaweedfs, readOnly: true }
+      volumes:
+        - name: script
+          configMap: { name: seaweedfs-verify-script }
+        - name: identities
+          secret: { secretName: seaweedfs-secrets, items: [ { key: identities.json, path: identities.json } ] }

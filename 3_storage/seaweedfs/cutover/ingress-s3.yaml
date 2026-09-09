@@ -1,0 +1,18 @@
+# PHASE 7 ONLY — pairs with service-alias.yaml.
+#
+# The public S3 host exists for ONE reason: the gateway signs presigned URLs
+# against MINIO_PUBLIC_ENDPOINT so a browser can fetch exports / ML results /
+# artifacts directly. Phase 1 (Q2) proved SeaweedFS honours those signatures.
+# The hostname is kept (minio.<hostBase>) so the gateway's signing config does
+# not change at cutover; renaming the host is Phase 8 housekeeping.
+#
+# The minio-console Ingress is NOT recreated — there is no console.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: ing-minio, namespace: nhdw }
+spec:
+  ingressClassName: traefik
+  tls: [ { hosts: [ minio.127.0.0.1.nip.io ], secretName: nhdw-wildcard-tls } ]
+  rules:
+    - host: minio.127.0.0.1.nip.io
+      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: seaweedfs-s3, port: { number: 8333 } } } } ] }

@@ -82,6 +82,7 @@
   ansible.builtin.command: "kubectl -n {{ nhdw_namespace }} wait --for=condition=complete job/keycloak-seed --timeout=420s"
   changed_when: false
 
+# MinIO is the frozen rollback copy since Phase 6 (2026-09-09; removed at Phase 8).
 # MinIO does a ONE-SHOT OpenID init at startup; on a cold boot it can start before Keycloak is
 # reachable, the init fails, and the console SSO button is silently absent. Now that keycloak-seed
 # has completed, restart MinIO IFF its OIDC init failed.

@@ -122,7 +122,7 @@ spec:
           args:
             - |
               set -eu
-              mc alias set local "http://minio-datalake.nhdw.svc.cluster.local:9000" \
+              mc alias set local "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" \
                   "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
               mc rm -r --force local/nhdw-processed >/dev/null 2>&1 || true
               mc mb --ignore-existing local/nhdw-processed >/dev/null
@@ -136,6 +136,7 @@ spec:
           imagePullPolicy: Always
           command: ["python", "/dbt/scripts/build_processed_zone.py"]
           env:
+            - { name: LAKE_BASE, value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3: build_processed_zone.py defaulted to minio-datalake in code
             - { name: CH_HOST, value: "clickhouse.nhdw.svc.cluster.local" }
             - { name: CH_PORT, value: "8123" }
             - { name: CH_USER, value: "nhdw" }
@@ -202,7 +203,8 @@ spec:
             - { name: CH_PASSWORD, valueFrom: { secretKeyRef: { name: clickhouse-secrets, key: PASSWORD } } }
             - { name: CH_SCHEMA,   value: "nhdw_staging" }
             - { name: DBT_PROJECT,            value: "staging" }
-            - { name: MINIO_ENDPOINT,         value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,         value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY,       valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER     } } }
             - { name: MINIO_SECRET_KEY,       valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_ARTIFACTS_BUCKET, value: "nhdw-artifacts" }
@@ -256,7 +258,8 @@ spec:
             # entrypoint.py: upload target/ artifacts to nhdw-artifacts/dbt/vault/
             # + `dbt docs generate` → shared dbt-docs-content PVC (same as marts).
             - { name: DBT_PROJECT,            value: "vault" }
-            - { name: MINIO_ENDPOINT,         value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,         value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY,       valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER     } } }
             - { name: MINIO_SECRET_KEY,       valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_ARTIFACTS_BUCKET, value: "nhdw-artifacts" }
@@ -309,7 +312,8 @@ spec:
             - { name: PG_PASSWORD, valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: VAULT_WRITER_PASSWORD } } }
             - { name: PG_DATABASE, value: "nhdw_vault" }
             - { name: DBT_PROJECT,            value: "marts" }
-            - { name: MINIO_ENDPOINT,         value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,         value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY,       valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER     } } }
             - { name: MINIO_SECRET_KEY,       valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_ARTIFACTS_BUCKET, value: "nhdw-artifacts" }
@@ -347,7 +351,8 @@ spec:
             - { name: PG_USER,     value: "vault_writer" }
             - { name: PG_PASSWORD, valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: VAULT_WRITER_PASSWORD } } }
             - { name: PG_DATABASE, value: "nhdw_vault" }
-            - { name: MINIO_ENDPOINT,        value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,        value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G1: nhdw-static is written to SeaweedFS
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }                   # botocore#3755
             - { name: MINIO_ACCESS_KEY,      valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER     } } }
             - { name: MINIO_SECRET_KEY,      valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_PUBLIC_ENDPOINT, value: "https://minio.127.0.0.1.nip.io" }

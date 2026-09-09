@@ -124,11 +124,11 @@ spec:
   tls: [ { hosts: [ minio.127.0.0.1.nip.io ], secretName: nhdw-wildcard-tls } ]
   rules:
     - host: minio.127.0.0.1.nip.io
-      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: minio-datalake, port: { number: 9000 } } } } ] }
+      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: seaweedfs-s3, port: { number: 8333 } } } } ] }
 ---
 # MinIO web CONSOLE (:9001) — the browsable object-browser the operator opens
 # from Admin → Quality & lineage to inspect the raw data lake. The minio.*
-# host above is the S3 API (:9000) and is NOT browsable — pointing a "browse"
+# host above is the S3 API (:8333) and is NOT browsable — pointing a "browse"
 # link there fails ("site can't be reached"). This routes a distinct host to
 # the console port the Deployment already serves (--console-address :9001).
 apiVersion: networking.k8s.io/v1

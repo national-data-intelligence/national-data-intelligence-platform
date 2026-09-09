@@ -34,6 +34,13 @@ rules:
   - apiGroups: [ "" ]
     resources: [ pods/log ]
     verbs:     [ get ]
+  # pods/exec: KubernetesPodOperator reads a task's XCom result by exec-ing into the
+  # xcom sidecar (connect_get_namespaced_pod_exec). Without it every do_xcom_push task is
+  # marked FAILED after its pod exited 0 (403 on the exec handshake). Found 2026-09-08 by
+  # the Phase 6 G3 prerequisite check; pre-existing, unrelated to storage.
+  - apiGroups: [ "" ]
+    resources: [ pods/exec ]
+    verbs: [ get, create ]
   - apiGroups: [ "" ]
     resources: [ events ]
     verbs:     [ get, list, watch ]

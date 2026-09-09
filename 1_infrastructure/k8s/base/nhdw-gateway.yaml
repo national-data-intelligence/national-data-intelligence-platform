@@ -73,7 +73,8 @@ spec:
             - { name: OPS_PG_PASSWORD, valueFrom: { secretKeyRef: { name: nhdw-gateway-secrets, key: OPS_GATEWAY_PASSWORD } } }
             # MinIO — gateway reads dbt artifacts (manifest.json, run_results.json)
             # from nhdw-artifacts bucket to serve /api/dq/* without bind-mounting.
-            - { name: MINIO_ENDPOINT,    value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,    value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G2: artifacts/exports/docs served by SeaweedFS
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }   # botocore#3755 (zero-byte PUT)
             - { name: MINIO_ACCESS_KEY,  valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER     } } }
             - { name: MINIO_SECRET_KEY,  valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             # MLflow — gateway /api/ml/* routes proxy registry calls + read

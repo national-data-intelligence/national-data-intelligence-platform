@@ -296,7 +296,8 @@ echo "  postgres-vault ready"
 kubectl -n "$NS" wait --for=condition=complete job/keycloak-seed --timeout=420s 2>/dev/null \
   && echo "  keycloak-seed complete" || echo "  ! keycloak-seed not complete (inspect: kubectl -n $NS logs job/keycloak-seed)"
 
-# MinIO console OIDC (#79) — MinIO does a ONE-SHOT OpenID init at startup and
+# MinIO console OIDC (#79) — MinIO is the frozen ROLLBACK COPY since Phase 6 (2026-09-09);
+# this guard goes away with MinIO at Phase 8. MinIO does a ONE-SHOT OpenID init at startup and
 # never retries. On a cold boot it starts before Keycloak is reachable, the init
 # fails ("connection refused") and the console SSO button is then silently
 # absent. Now that keycloak-seed has completed (the minio-console client exists),
@@ -400,11 +401,11 @@ kubectl -n "$NS" rollout restart deploy/nhdw-gateway >/dev/null 2>&1 || true
 kubectl -n "$NS" rollout status deploy/nhdw-gateway --timeout=180s \
   || { echo; echo "✗ gateway not Ready after the security seed (OPA self-test likely still failing — see 'kubectl -n $NS logs deploy/nhdw-gateway')."; exit 1; }
 
-# ─── 7.05 · docs seed (docs/*.md → MinIO nhdw-docs, served via /gw/docs) ─────
-# Publishes the curated operator docs into MinIO so the admin Documentation page
+# ─── 7.05 · docs seed (docs/*.md → object store nhdw-docs, served via /gw/docs) ──
+# Publishes the curated operator docs into the object store (SeaweedFS) so the admin Documentation page
 # can open/download them; idempotent + reboot-persistent. Non-fatal to the demo
 # itself, but gate on it so a missing doc surfaces loudly.
-step "7.05 · docs seed (docs/*.md → MinIO nhdw-docs)"
+step "7.05 · docs seed (docs/*.md → object store nhdw-docs)"
 bash "$SCRIPTS/seed-docs.sh" || { echo; echo "✗ docs seed FAILED — the Documentation page will be empty. See the errors above."; exit 1; }
 
 # ─── 7.5 · ML seed (packages → registry → first predictions) ────────────────

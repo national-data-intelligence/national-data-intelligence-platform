@@ -68,7 +68,10 @@ NAMESPACE = "nhdw"
 RAW_BUCKET = "nhdw-raw"
 FINGERPRINT_VAR = "pipeline_refresh_fingerprint"
 
-MINIO_URL = "http://minio-datalake.nhdw.svc.cluster.local:9000"
+# Storage endpoint seam (Phase 6 step 0): read from the Airflow Deployment env so the
+# backend can be switched later WITHOUT rebuilding this image. The default is the
+# current MinIO URL — behaviour is unchanged until NHDW_S3_ENDPOINT is set otherwise.
+MINIO_URL = os.environ.get("NHDW_S3_ENDPOINT", "http://minio-datalake.nhdw.svc.cluster.local:9000")
 CH_HOST = "clickhouse.nhdw.svc.cluster.local"
 PG_HOST = "postgres-vault.nhdw.svc.cluster.local"
 HOST = "host.k3d.internal"          # k3d route to the host-published source replicas
@@ -93,6 +96,7 @@ def _plain(name: str, value: str) -> k8s.V1EnvVar:
 # MinIO lake creds, mapped the way every ingestor reads them.
 MINIO_ENV = [
     _plain("MINIO_ENDPOINT", MINIO_URL),
+    _plain("BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE", "true"),   # botocore#3755: empty PUT poisons the connection
     _sec("MINIO_ACCESS_KEY", "minio-secrets", "ROOT_USER"),
     _sec("MINIO_SECRET_KEY", "minio-secrets", "ROOT_PASSWORD"),
     _plain("MINIO_RAW_BUCKET", RAW_BUCKET),
@@ -102,11 +106,16 @@ MINIO_ENV = [
 CH_ENV = [
     _plain("CH_HOST", CH_HOST), _plain("CH_PORT", "8123"), _plain("CH_USER", "nhdw"),
     _sec("CH_PASSWORD", "clickhouse-secrets", "PASSWORD"),
+    # Phase 6 G3: build_processed_zone.py reads LAKE_BASE (code default = minio-datalake:9000);
+    # the DAG never passed it, so the processed zone would silently target MinIO after the seam.
+    _plain("LAKE_BASE", MINIO_URL),
+    _plain("BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE", "true"),
 ]
 
 # Runner env for the probe pod (owns MinIO I/O).
 RUNNER_ENV = [
     _plain("MLFLOW_S3_ENDPOINT_URL", MINIO_URL),
+    _plain("BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE", "true"),
     _sec("AWS_ACCESS_KEY_ID", "mlflow-secrets", "S3_ACCESS_KEY"),
     _sec("AWS_SECRET_ACCESS_KEY", "mlflow-secrets", "S3_SECRET_KEY"),
     _plain("AWS_DEFAULT_REGION", "et-addis-1"),
@@ -157,11 +166,17 @@ INGESTORS = [
 # rows are the ordered blueprint, to be driven from those Jobs once wired.
 DBT_CHAIN = [
     ("ch_raw_views", "STAGING_DBT_IMAGE", "staging-dbt", [], CH_ENV),
+    # Phase 6 G3 residual: this row was a placeholder (no command → the image's dbt
+    # entrypoint printed --help and exited 0, so Airflow reported SUCCESS without
+    # building anything). It now runs the same builder the canonical processed-zone
+    # Job runs (see _CMDS); build_processed_zone.py uses s3_truncate_on_insert, so
+    # the Job's mc wipe is not required for idempotent re-runs.
     ("processed_zone", "STAGING_DBT_IMAGE", "staging-dbt", [], CH_ENV),
     ("dbt_staging", "STAGING_DBT_IMAGE", "staging-dbt", ["build", "--target", "dev"], CH_ENV),
     ("bridge_sync", "VAULT_BRIDGE_IMAGE", "vault-bridge", [], CH_ENV + [
         _plain("PG_HOST", PG_HOST), _plain("PG_PORT", "5432"),
         _plain("PG_DATABASE", "nhdw_vault"), _plain("PG_SCHEMA", "nhdw_landing"),
+        _plain("PG_USER", "landing_writer"),   # Phase 6 G3: bridge/sync.py requires PG_USER (KeyError); the Job manifest always set it
         _sec("PG_PASSWORD", "postgres-vault-secrets", "LANDING_WRITER_PASSWORD")]),
     ("dbt_vault", "VAULT_DBT_IMAGE", "vault-dbt", [], CH_ENV),
     ("dbt_marts", "MARTS_DBT_IMAGE", "marts-dbt", [], CH_ENV),
@@ -169,11 +184,18 @@ DBT_CHAIN = [
 ]
 
 
+# Rows whose container must run something other than the image's dbt entrypoint.
+_CMDS = {
+    "processed_zone": ["python", "/dbt/scripts/build_processed_zone.py"],
+}
+
+
 def _pod(task_id: str, image: str, args: list[str], env, name: str,
          env_from=None):
     return KubernetesPodOperator(
         task_id=task_id, name=name, namespace=NAMESPACE, image=image,
-        image_pull_policy="IfNotPresent", arguments=args, env_vars=env,
+        image_pull_policy="IfNotPresent", cmds=_CMDS.get(task_id),
+        arguments=args, env_vars=env,
         env_from=env_from or [], in_cluster=True, get_logs=True,
         on_finish_action="delete_succeeded_pod", startup_timeout_seconds=300)
 

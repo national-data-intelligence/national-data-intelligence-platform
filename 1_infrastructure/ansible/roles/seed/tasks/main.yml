@@ -49,7 +49,7 @@
   ansible.builtin.command: "kubectl -n {{ nhdw_namespace }} rollout status deploy/nhdw-gateway --timeout=180s"
   changed_when: false
 
-- name: Docs seed (docs/*.md -> MinIO nhdw-docs, served via /gw/docs)
+- name: Docs seed (docs/*.md -> object store nhdw-docs, served via /gw/docs)
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-docs.sh"
   args: { chdir: "{{ nhdw_repo_root }}" }
   changed_when: true

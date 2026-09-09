@@ -71,6 +71,7 @@ PUBLIC=(
   "python:3.12-alpine"
   "curlimages/curl:8.10.1"
   "minio/minio:RELEASE.2025-02-28T09-55-16Z"
+  "chrislusf/seaweedfs:4.45"                 # object storage (replaces minio — 3_storage/seaweedfs/); tag = Phase 1 tested digest
   "clickhouse/clickhouse-server:24.3"
   "trinodb/trino:476"                         # federated SQL engine (marts + ops + lake)
   "minio/mc:RELEASE.2025-04-08T15-39-49Z"    # dbt-jobs minio-init / seed steps

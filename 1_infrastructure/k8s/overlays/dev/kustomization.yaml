@@ -65,10 +65,34 @@ patches:
                 imagePullPolicy: IfNotPresent
                 env:
                   - { name: ML_RUNNER_IMAGE, value: "nhdw/ml-runner:1.0.0" }
+                  # Phase 6 G3: the DAG builds EVERY pipeline image name from these vars (default = an
+                  # unreachable nhdw-registry:5500 …:v1); only the runner was ever patched here.
+                  - { name: INGESTOR_DHIS2_IMAGE, value: "nhdw/dhis2-ingestor:1.0.0" }
+                  - { name: INGESTOR_CLIMATE_IMAGE, value: "nhdw/climate-ingestor:1.0.0" }
+                  - { name: INGESTOR_ETHIOEMR_IMAGE, value: "nhdw/ethioemr-ingestor:1.0.0" }
+                  - { name: INGESTOR_HCMISWDM_IMAGE, value: "nhdw/hcmiswdm-ingestor:1.0.0" }
+                  - { name: INGESTOR_MBRANA_IMAGE, value: "nhdw/mbrana-ingestor:1.0.0" }
+                  - { name: INGESTOR_MFR_IMAGE, value: "nhdw/mfr-ingestor:1.0.0" }
+                  - { name: STAGING_DBT_IMAGE, value: "nhdw/staging-dbt:1.0.0" }
+                  - { name: VAULT_BRIDGE_IMAGE, value: "nhdw/vault-bridge:1.0.0" }
+                  - { name: VAULT_DBT_IMAGE, value: "nhdw/vault-dbt:1.0.0" }
+                  - { name: MARTS_DBT_IMAGE, value: "nhdw/marts-dbt:1.0.0" }
               - name: webserver
                 imagePullPolicy: IfNotPresent
                 env:
                   - { name: ML_RUNNER_IMAGE, value: "nhdw/ml-runner:1.0.0" }
+                  # Phase 6 G3: the DAG builds EVERY pipeline image name from these vars (default = an
+                  # unreachable nhdw-registry:5500 …:v1); only the runner was ever patched here.
+                  - { name: INGESTOR_DHIS2_IMAGE, value: "nhdw/dhis2-ingestor:1.0.0" }
+                  - { name: INGESTOR_CLIMATE_IMAGE, value: "nhdw/climate-ingestor:1.0.0" }
+                  - { name: INGESTOR_ETHIOEMR_IMAGE, value: "nhdw/ethioemr-ingestor:1.0.0" }
+                  - { name: INGESTOR_HCMISWDM_IMAGE, value: "nhdw/hcmiswdm-ingestor:1.0.0" }
+                  - { name: INGESTOR_MBRANA_IMAGE, value: "nhdw/mbrana-ingestor:1.0.0" }
+                  - { name: INGESTOR_MFR_IMAGE, value: "nhdw/mfr-ingestor:1.0.0" }
+                  - { name: STAGING_DBT_IMAGE, value: "nhdw/staging-dbt:1.0.0" }
+                  - { name: VAULT_BRIDGE_IMAGE, value: "nhdw/vault-bridge:1.0.0" }
+                  - { name: VAULT_DBT_IMAGE, value: "nhdw/vault-dbt:1.0.0" }
+                  - { name: MARTS_DBT_IMAGE, value: "nhdw/marts-dbt:1.0.0" }
 
   # JupyterHub spawns lab pods from an env-carried image ref (SINGLEUSER_IMAGE)
   # that the images: transform can't reach — patch it to the local dev image

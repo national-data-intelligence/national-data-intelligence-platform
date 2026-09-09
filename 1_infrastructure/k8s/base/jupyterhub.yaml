@@ -93,7 +93,8 @@ spec:
             - { name: WORKSPACE_PROFILES_PATH, value: "/srv/jupyterhub/profiles.yaml" }
             # Injected into spawned labs by the pre-spawn hook:
             - { name: MLFLOW_TRACKING_URI, value: "http://mlflow.nhdw.svc.cluster.local:5000" }
-            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G2: project sync → SeaweedFS
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }   # passed into notebook pods (Phase 6 step 0)
             - { name: ARTIFACTS_BUCKET, value: "nhdw-artifacts" }
             # Least-privilege project-sync creds (scoped to nhdw-artifacts/
             # projects/* by minio-init) — these ride INSIDE user notebook

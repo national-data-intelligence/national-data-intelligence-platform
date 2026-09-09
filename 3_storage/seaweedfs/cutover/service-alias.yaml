@@ -1,0 +1,29 @@
+# PHASE 7 ONLY — do not apply before the data migration is verified.
+#
+# The cutover mechanism. 53 places in the repo say `minio-datalake…:9000`. Rather
+# than edit them all under pressure, cutover REPOINTS THE NAME: this Service is
+# called minio-datalake, listens on 9000, and selects the SeaweedFS S3 gateway.
+# Apply it and every consumer is on SeaweedFS after its next connection, with
+# zero code or config edits. Consumers are then migrated to the honest name
+# (seaweedfs-s3:8333) one at a time in Phase 6/8, at leisure.
+#
+#   cutover : kubectl -n nhdw apply -f 3_storage/seaweedfs/cutover/service-alias.yaml
+#   rollback: kubectl -n nhdw apply -f 1_infrastructure/k8s/base/minio.yaml   (restores the real Service)
+#
+# Both are a single Service object replace — seconds, no data movement. This is
+# why MinIO stays running-but-idle through the soak period: rollback only stays
+# this cheap while the original Service can be put back in front of a live pod.
+#
+# NOTE the console port (9001) is deliberately absent: there is no console.
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-datalake
+  namespace: nhdw
+  labels: { app: seaweedfs-s3, part-of: seaweedfs, nhdw.cutover/alias-for: minio-datalake }
+  annotations:
+    nhdw.cutover/note: "ALIAS — points the legacy minio-datalake name at seaweedfs-s3. See 3_storage/seaweedfs/README.md"
+spec:
+  selector: { app: seaweedfs-filer }   # the gateway is embedded in the filer (Phase 4A finding #3)
+  ports:
+    - { port: 9000, targetPort: s3, name: s3 }

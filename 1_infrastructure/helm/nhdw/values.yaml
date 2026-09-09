@@ -28,6 +28,32 @@ alertmanager:
 
 storageClass: local-path
 
+# ── SeaweedFS (object storage; replaces minio-datalake — see 3_storage/seaweedfs/) ──
+# Tag pinned to the exact image Phase 1 validated (digest fc9f76fa…). Bump only
+# after re-running 3_storage/seaweedfs/poc/compat_test.py against the new tag.
+seaweedfs:
+  tag: "4.45"
+  replication: "000"          # single volume server → no replica. Raise ONLY with >1 volume pod.
+  volumeSizeLimitMB: 1024     # size of one volume file; many small volumes = finer placement
+  master: { storage: 1Gi,  resources: {} }
+  volume:
+    storage: 20Gi             # MinIO's PVC is 10Gi at 75 MB used; room for the copy + growth
+    # MEASURED in Phase 3 (not a guess): SeaweedFS pre-allocates 7 volumes PER BUCKET
+    # the moment the bucket is first written, regardless of data volume — 5 buckets
+    # holding 49 MB occupied 47 volumes. When the cap is hit, puts do not fail
+    # cleanly: the gateway retries with backoff (~5 s per object) and eventually
+    # hangs. The PoC hit this twice, at 8 and at 40.
+    #   minimum = 7 × (buckets + 1 default collection) = 7 × 11 = 77 for our 10 buckets
+    #   200 leaves room for growth; a volume only consumes the disk it actually holds,
+    #   so this is NOT a 200 GB reservation. Watch `Free` on the master's /dir/status.
+    maxVolumes: 200
+    resources: {}
+  filer:
+    database: seaweedfs_filer  # in postgres-vault (3_storage/postgres/init/23_seaweedfs_filer_db.sh)
+    dbUser: seaweedfs_filer
+    resources: {}
+  s3: { resources: {} }
+
 # Per-component replicas + resources. Fleet profile raises these.
 components:
   internal-bi:      { replicas: 1, resources: {} }

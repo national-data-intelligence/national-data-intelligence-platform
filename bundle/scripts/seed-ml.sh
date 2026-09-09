@@ -30,21 +30,14 @@ step() { echo; echo "▸ $*"; }
 ok()   { echo "  ✓ $*"; }
 warn() { echo "  ! $*" >&2; }
 
-echo "== ML seed (packages → MinIO → train → predict-batch) =="
+echo "== ML seed (packages → object store → train → predict-batch) =="
 
-# ── 1. packages → MinIO ml-packages/<name>/current/ (bundled host-side mc) ──
-MC="$REPO/bundle/bin/mc"
-[ -x "$MC" ] || { warn "bundle/bin/mc missing — see pack.sh for the fetch fallback"; exit 1; }
-MUSER=$(kubectl -n "$NS" get secret minio-secrets -o jsonpath='{.data.ROOT_USER}' | base64 -d)
-MPW=$(kubectl -n "$NS" get secret minio-secrets -o jsonpath='{.data.ROOT_PASSWORD}' | base64 -d)
-kubectl -n "$NS" port-forward svc/minio-datalake 19000:9000 >/dev/null 2>&1 &
-PF=$!
-for i in $(seq 1 12); do
-  curl -s -o /dev/null --max-time 2 http://127.0.0.1:19000/minio/health/live && break
-  sleep 2
-done
-MC_CFG=$(mktemp -d)
-"$MC" --config-dir "$MC_CFG" alias set L http://127.0.0.1:19000 "$MUSER" "$MPW" >/dev/null
+# ── 1. packages → object store ml-packages/<name>/current/ (bundled host-side mc) ──
+. "$REPO/bundle/scripts/lib/objstore.sh"
+objstore_mc    || { warn "no mc client — see lib/objstore.sh"; exit 1; }
+objstore_creds || { warn "object-store credentials not readable"; exit 1; }
+objstore_pf 19000
+objstore_alias
 
 MODELS=()
 for dir in "$SEEDS"/*/; do
@@ -52,11 +45,11 @@ for dir in "$SEEDS"/*/; do
   [ "$name" = "_template" ] && continue
   [ -f "$dir/manifest.yaml" ] || continue
   MODELS+=("$name")
-  "$MC" --config-dir "$MC_CFG" mirror --quiet --overwrite "$dir" "L/nhdw-artifacts/ml-packages/$name/current" \
+  "$MC" --config-dir "$OS_MC_CFG" mirror --quiet --overwrite "$dir" "L/nhdw-artifacts/ml-packages/$name/current" \
     && ok "package $name → ml-packages/$name/current/" \
     || warn "package upload FAILED: $name"
 done
-rm -rf "$MC_CFG"; kill $PF 2>/dev/null
+objstore_pf_stop
 
 # ── 2. model_deployment rows (upsert from deployments.yaml) ──────────────────
 step "model_deployment seed rows"
@@ -97,7 +90,9 @@ spec:
           args: [$(printf '"%s",' "$@" | sed 's/,$//')]
           env:
             - { name: MLFLOW_TRACKING_URI, value: "http://mlflow.nhdw.svc.cluster.local:5000" }
-            - { name: MLFLOW_S3_ENDPOINT_URL, value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MLFLOW_S3_ENDPOINT_URL, value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6: SeaweedFS
+            - { name: MINIO_ENDPOINT,        value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: AWS_DEFAULT_REGION, value: "et-addis-1" }
             - { name: AWS_ACCESS_KEY_ID,     valueFrom: { secretKeyRef: { name: mlflow-secrets, key: S3_ACCESS_KEY } } }
             - { name: AWS_SECRET_ACCESS_KEY, valueFrom: { secretKeyRef: { name: mlflow-secrets, key: S3_SECRET_KEY } } }

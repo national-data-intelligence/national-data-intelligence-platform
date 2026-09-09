@@ -5,7 +5,7 @@
 # then runs the real dbt pipeline end to end so the marts are produced by the
 # actual transformations:
 #
-#   minio-init → [7 source ingestors, parallel] → ch-raw-views → processed-zone
+#   seaweedfs-init → [7 source ingestors, parallel] → ch-raw-views → processed-zone
 #              → dbt-staging → bridge-sync → dbt-vault → dbt-marts → (component views)
 #
 # The source replicas must already be up (bundle/scripts/sources-up.sh —
@@ -44,11 +44,14 @@ PIPELINE=(ch-raw-views processed-zone dbt-staging bridge-sync dbt-vault dbt-mart
 CORRECTED="$(kustomize build --load-restrictor=LoadRestrictionsNone "$REPO/1_infrastructure/k8s/jobs")"
 
 extract_job() { # job-name → writes /tmp/nhdw-job-<name>.yaml
-  printf '%s' "$CORRECTED" | python3 -c "
+  # Jobs come from the k8s/jobs build (dbt + ingestor Jobs, images remapped). The
+  # object-store init Job (seaweedfs-init) lives with its stack in base/seaweedfs.yaml
+  # (rendered from the chart) — read it from there so it is never duplicated.
+  { printf '%s\n---\n' "$CORRECTED"; cat "$REPO/1_infrastructure/k8s/base/seaweedfs.yaml"; } | python3 -c "
 import sys,yaml
 docs=[d for d in yaml.safe_load_all(sys.stdin) if isinstance(d,dict)]
 j=[d for d in docs if d.get('kind')=='Job' and d['metadata']['name']=='$1']
-if not j: sys.exit('  no Job named $1 in dbt-jobs.yaml/ingestor-jobs.yaml')
+if not j: sys.exit('  no Job named $1 in dbt-jobs.yaml/ingestor-jobs.yaml/seaweedfs.yaml')
 print(yaml.safe_dump(j[0]))
 " > /tmp/nhdw-job-$1.yaml
 }
@@ -89,10 +92,10 @@ run_job() {
 echo "== REALISTIC seeding (source replicas → ingestors → lake → dbt pipeline → marts) =="
 command -v kustomize >/dev/null || export PATH="$HOME/.local/bin:$PATH"
 
-MINIO_POD=$(kubectl -n "$NS" get pods -l app=minio-datalake -o jsonpath='{.items[0].metadata.name}')
-
-# ── stage 1: the lake bucket must exist before the ingestors write to it ──────
-run_job minio-init || { echo "FAILED at minio-init"; exit 1; }
+# ── stage 1: the lake buckets must exist before the ingestors write to them ──
+# Phase 6 (2026-09-09): the lake lives on SeaweedFS; seaweedfs-init creates the
+# buckets/lifecycle there (idempotent). minio-init is no longer part of the seed.
+run_job seaweedfs-init || { echo "FAILED at seaweedfs-init"; exit 1; }
 
 # ── stage 2: source → lake via the real dlt ingestors ────────────────────────
 if [ "$INGEST" = 1 ]; then
@@ -128,11 +131,13 @@ sys.exit(1 if bad else 0)' 2>/dev/null; then
   # append sources pull only their delta; replace sources rewrite their prefix.)
   if [ "$FULL_REFRESH" = 1 ]; then
     echo "▸ [ingest] FULL REFRESH — purging lake prefixes (data + dlt state)"
+    . "$REPO/bundle/scripts/lib/objstore.sh"
+    objstore_mc && objstore_creds && objstore_pf 19004 && objstore_alias || { echo "  ✗ cannot reach the object store for the purge"; exit 1; }
     for src in dhis2 climate ethioemr hcmiswdm mbrana mfr; do
-      kubectl -n "$NS" exec "$MINIO_POD" -- sh -c \
-        'mc alias set L http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; mc rm --recursive --force L/nhdw-raw/'"$src"'/ >/dev/null 2>&1; true' \
-        && echo "  purged nhdw-raw/$src/"
+      "$MC" --config-dir "$OS_MC_CFG" rm --recursive --force "L/nhdw-raw/$src/" >/dev/null 2>&1; true
+      echo "  purged nhdw-raw/$src/"
     done
+    objstore_pf_stop
   fi
 
   # Bounded-concurrency launch (INGEST_BATCH, default 3): run the memory-heavy

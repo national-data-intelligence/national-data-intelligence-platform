@@ -31,7 +31,8 @@ spec:
             - { name: DHIS2_USER,     valueFrom: { secretKeyRef: { name: source-creds, key: DHIS2_USER } } }
             - { name: DHIS2_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: DHIS2_PASSWORD } } }
             - { name: DHIS2_PAGE_SIZE, value: "200" }
-            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -61,7 +62,8 @@ spec:
             # append + dlt incremental(last_updated): later runs pull only the delta
             # (dlt restores the watermark from lake state), so re-runs do NOT double-count.
             - { name: DHIS2_INITIAL_LAST_UPDATED, value: "2020-01-01" }
-            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -84,7 +86,8 @@ spec:
           args: ["weekly"]
           env:
             - { name: CLIMATE_API_BASE_URL, value: "http://host.k3d.internal:8095" }
-            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -111,7 +114,8 @@ spec:
             - { name: ETHIOEMR_MYSQL_DB,   value: "openmrs" }
             - { name: ETHIOEMR_MYSQL_USER, value: "ingestor" }
             - { name: ETHIOEMR_MYSQL_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: ETHIOEMR_READER_PASSWORD } } }
-            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -139,7 +143,8 @@ spec:
             - { name: HCMISWDM_USER, value: "nscd_reader" }
             - { name: HCMISWDM_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: HCMISWDM_READER_PASSWORD } } }
             - { name: HCMISWDM_TRUST_SERVER_CERTIFICATE, value: "yes" }
-            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -168,7 +173,8 @@ spec:
             - { name: MBRANA_USER, value: "ingestor" }
             - { name: MBRANA_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: MBRANA_READER_PASSWORD } } }
             - { name: MBRANA_TRUST_SERVER_CERTIFICATE, value: "yes" }
-            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -191,7 +197,8 @@ spec:
           args: ["all"]
           env:
             - { name: MFR_FHIR_BASE_URL, value: "http://host.k3d.internal:8093/fhir" }
-            - { name: MINIO_ENDPOINT,   value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }

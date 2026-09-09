@@ -1,5 +1,5 @@
 #!/bin/bash
-# verify.sh — sanity-check the ClickHouse engine + MinIO connectivity.
+# verify.sh — sanity-check the ClickHouse engine + object-store (s3()) connectivity.
 #
 # Exit 0  : engine healthy, named collection works, raw views read parquet
 # Exit 1  : something is wrong (per-check error line printed)
@@ -28,7 +28,7 @@ dbs=$(docker exec clickhouse clickhouse-client --query "SELECT name FROM system.
 [ "$(echo "$dbs" | wc -l)" -eq 2 ] && ok "nhdw_staging + nhdw_marts present" \
     || fail "databases" "missing one of nhdw_staging/nhdw_marts: $dbs"
 
-echo "▸ MinIO named collection (staging_writer → nhdw_minio)"
+echo "▸ object-store named collection (staging_writer → nhdw_minio; SeaweedFS since Phase 6)"
 $CC --query "SELECT count() FROM nhdw_staging.raw_dhis2__organisation_units" > /tmp/cc_test 2>&1 \
     && ok "s3() read OK ($(cat /tmp/cc_test) rows in dhis2.organisation_units)" \
     || fail "s3() read" "$(cat /tmp/cc_test)"

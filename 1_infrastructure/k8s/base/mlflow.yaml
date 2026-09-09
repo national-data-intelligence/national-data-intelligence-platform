@@ -36,7 +36,8 @@ spec:
             - name:  MLFLOW_DB_PASSWORD
               valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: MLFLOW_DB_PASSWORD } }
             - { name: MLFLOW_DEFAULT_ARTIFACT_ROOT, value: "s3://nhdw-artifacts/mlflow" }
-            - { name: MLFLOW_S3_ENDPOINT_URL,       value: "http://minio-datalake.nhdw.svc.cluster.local:9000" }
+            - { name: MLFLOW_S3_ENDPOINT_URL,       value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G2
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }   # botocore#3755
             - { name: MLFLOW_S3_IGNORE_TLS,         value: "true" }
             - { name: AWS_DEFAULT_REGION,           value: "et-addis-1" }
             - name:  AWS_ACCESS_KEY_ID

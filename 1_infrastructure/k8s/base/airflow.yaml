@@ -34,6 +34,13 @@ rules:
   - apiGroups: [ "" ]
     resources: [ pods/log ]
     verbs:     [ get ]
+  # pods/exec: KubernetesPodOperator reads a task's XCom result by exec-ing into the
+  # xcom sidecar (connect_get_namespaced_pod_exec). Without it every do_xcom_push task is
+  # marked FAILED after its pod exited 0 (403 on the exec handshake). Found 2026-09-08 by
+  # the Phase 6 G3 prerequisite check; pre-existing, unrelated to storage.
+  - apiGroups: [ "" ]
+    resources: [ pods/exec ]
+    verbs: [ get, create ]
   - apiGroups: [ "" ]
     resources: [ events ]
     verbs:     [ get, list, watch ]
@@ -115,6 +122,7 @@ spec:
             # Runner image launched by ml_batch_predict (KubernetesPodOperator).
             # kustomize image remaps can't reach into the DAG's python, so the
             # dev overlay patches THIS env var to nhdw/ml-runner:1.0.0.
+            - { name: NHDW_S3_ENDPOINT, value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3: DAG-spawned ingestors / dbt / runner pods use SeaweedFS
             - { name: ML_RUNNER_IMAGE, value: "nhdw-registry:5500/nhdw/ml-runner:1.0.0" }
             # alert_evaluation DAG → gateway POST /api/alerts/evaluate.
             - { name: NHDW_GATEWAY_URL, value: "http://nhdw-gateway.nhdw.svc.cluster.local:8000" }
@@ -154,6 +162,7 @@ spec:
             # Runner image launched by ml_batch_predict (KubernetesPodOperator).
             # kustomize image remaps can't reach into the DAG's python, so the
             # dev overlay patches THIS env var to nhdw/ml-runner:1.0.0.
+            - { name: NHDW_S3_ENDPOINT, value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3: DAG-spawned ingestors / dbt / runner pods use SeaweedFS
             - { name: ML_RUNNER_IMAGE, value: "nhdw-registry:5500/nhdw/ml-runner:1.0.0" }
             # ── Native Keycloak OIDC (Tool-SSO C) — read by webserver_config.py.
             # Split-URL: the browser authorizes on the PUBLIC host; the pod
