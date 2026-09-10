@@ -254,3 +254,82 @@
   granularity: raw
   default_sensitivity: restricted
   description: "Self-test fixture — raw PT encounters (only R-SUPER reads)."
+# ── eLMIS v2 history (OpenLMIS family, lane 2; option (c) standalone) — 2026-09-10 ──
+- schema_name: bi_supply
+  table_name: mart_elmis_hist_monthly_activity
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "eLMIS v2 history — month × programme supply activity (2017-18, Zambia archive)."
+- schema_name: bi_supply
+  table_name: mart_elmis_hist_availability
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "eLMIS v2 history — period availability (OSA proxy) per month × product set × product."
+- schema_name: bi_supply
+  table_name: mart_elmis_hist_timeliness
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "eLMIS v2 history — requisition timeliness (created ≤ period end + 15d) per month × programme."
+- schema_name: bi_supply
+  table_name: mart_elmis_hist_satp
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "eLMIS v2 history — Stock According To Plan bands per month × programme (facility-grain adaptation)."
+- schema_name: bi_supply
+  table_name: mart_elmis_hist_product_stockout
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "eLMIS v2 history — month × tracer product stockout pressure."
+- schema_name: bi_supply
+  table_name: mart_elmis_hist_facility_activity
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional, not personal
+  description: "eLMIS v2 history — facility × programme × month; carries archive facility identities (governed)."
+- schema_name: bi_supply
+  table_name: mart_elmis_hist_facility_product_month
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional, not personal
+  description: "eLMIS v2 history — facility × product × month feature mart (governed facility identities)."
+- schema_name: bi_supply
+  table_name: mart_elmis_hist_resupply_plan
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional, not personal
+  description: "eLMIS v2 history — planning-module mock: latest stock position + suggested resupply per facility × tracer product (governed)."
+# ── MDM augmentation (PCT dataflow design): golden records + discovered relationships ──
+- schema_name: bi_mdm
+  table_name: mdm_commodity_match_candidates
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "MDM discovered-relationship table: eLMIS products ↔ entity-model commodities (candidates, steward review)."
+- schema_name: bi_mdm
+  table_name: mart_mdm_commodity_golden
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "MDM golden commodity record with per-source coverage."
+- schema_name: bi_mdm
+  table_name: mart_mdm_commodity_match_review
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "MDM steward review queue."

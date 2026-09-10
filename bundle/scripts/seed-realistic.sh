@@ -35,7 +35,7 @@ esac; done
 
 # Ingestors run in parallel (independent sources → disjoint lake prefixes; hcmiswdm
 # + mbrana share one SQL Server but are read-only). dbt stages are strictly ordered.
-INGEST_JOBS=(dhis2-ingest-metadata dhis2-ingest-dvs climate-ingest ethioemr-ingest hcmiswdm-ingest mbrana-ingest mfr-ingest)
+INGEST_JOBS=(dhis2-ingest-metadata dhis2-ingest-dvs climate-ingest ethioemr-ingest hcmiswdm-ingest mbrana-ingest mfr-ingest elmis-hist-ingest)   # elmis-hist: OpenLMIS family lane 2 (openlmis-ingest = lane 1, suspended)
 PIPELINE=(ch-raw-views processed-zone dbt-staging bridge-sync dbt-vault dbt-marts publish-datasets)
 
 # Registry→local image remap via kustomize's BUILT-IN images transform
@@ -108,7 +108,7 @@ if [ "$INGEST" = 1 ]; then
       --command -- python3 -c '
 import socket, sys
 ports = {"dhis2": 8080, "climate": 8095, "mfr": 8093,
-         "sqlserver(hcmiswdm+mbrana)": 1433, "ethioemr-mysql": 33306}
+         "sqlserver(hcmiswdm+mbrana)": 1433, "ethioemr-mysql": 33306, "elmis-hist-postgres": 5434}
 bad = []
 for name, p in ports.items():
     s = socket.socket(); s.settimeout(4)
@@ -133,7 +133,7 @@ sys.exit(1 if bad else 0)' 2>/dev/null; then
     echo "▸ [ingest] FULL REFRESH — purging lake prefixes (data + dlt state)"
     . "$REPO/bundle/scripts/lib/objstore.sh"
     objstore_mc && objstore_creds && objstore_pf 19004 && objstore_alias || { echo "  ✗ cannot reach the object store for the purge"; exit 1; }
-    for src in dhis2 climate ethioemr hcmiswdm mbrana mfr; do
+    for src in dhis2 climate ethioemr hcmiswdm mbrana mfr elmis_hist; do
       "$MC" --config-dir "$OS_MC_CFG" rm --recursive --force "L/nhdw-raw/$src/" >/dev/null 2>&1; true
       echo "  purged nhdw-raw/$src/"
     done

@@ -292,3 +292,47 @@ K-anonymised public view — facility counts per region. n_facilities is the tot
 
 Vaccine procurement pipeline — one row per OPEN purchase order (HCMIS Vaccine.PurchaseOrder), with commodity name + destination-hub region and a LIVE eta_days (expected_delivery_date − CURRENT_DATE). Backs rm-pipeline.
 
+### mart_elmis_hist_monthly_activity
+
+eLMIS v2 history (OpenLMIS family, lane 2) — month × programme supply activity, Sep 2017–Aug 2018: requisitions, dispensed, fill_rate_pct, stockout_days. 140 rows. Zambian archive, option (c) standalone — never joins the entity model.
+
+### mart_elmis_hist_availability
+
+eLMIS v2 history — "period availability" (the OSA proxy; never labelled OSA) per month × product set (tracer 64, ppe 12) × product. 697 rows. Gate: tracer 2018-01 = 17,851 / 6,798 / 38.1%.
+
+### mart_elmis_hist_timeliness
+
+eLMIS v2 history — requisition timeliness (on time = created ≤ period end + 15 d) per month × programme; median lag. Σ requisitions = 73,926 = source.
+
+### mart_elmis_hist_satp
+
+eLMIS v2 history — Stock According To Plan, facility-grain adaptation (bands by amc and max_stock_quantity) per month × programme. 138 rows.
+
+### mart_elmis_hist_product_stockout
+
+eLMIS v2 history — month × tracer product stockout pressure (stockout_days, stockout_line_pct, dispensed). 607 rows.
+
+### mart_elmis_hist_facility_activity
+
+eLMIS v2 history — facility × programme × month (72,242 rows). GOVERNED: archive facility identities; internal dashboards only (R-DEC, R-CONS-ANA).
+
+### mart_elmis_hist_facility_product_month
+
+eLMIS v2 history — facility × product × month, non-skipped lines only: the feature mart for `elmis_consumption_forecast` and the base of the resupply plan. GOVERNED.
+
+### mart_elmis_hist_resupply_plan
+
+eLMIS v2 history — planning-module mock: latest-month stock position, months of stock, suggested resupply quantity and SATP band per facility × tracer product. GOVERNED.
+
+### mdm_commodity_match_candidates (bi_mdm)
+
+MDM discovered-relationship table (PCT dataflow design): eLMIS products ↔ entity-model commodities, top-3 trigram candidates per product with score, rule and review_status. Never a same-as link until a steward accepts.
+
+### mart_mdm_commodity_golden (bi_mdm)
+
+MDM golden commodity record: each entity-model commodity with per-source coverage (HCMIS and mBrana resolved through the vault; eLMIS as candidates).
+
+### mart_mdm_commodity_match_review (bi_mdm)
+
+MDM steward review queue over the discovered candidates.
+

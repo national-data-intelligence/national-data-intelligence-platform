@@ -151,34 +151,26 @@ requisition lines, the reporting-period span, and the installed mutation scenari
 
 ## Integration status
 
-| Stage | State |
-|---|---|
-| Dump transferred + integrity-checked | **done** |
-| Source stack (compose, restore, verify) | **done** |
-| Registered in `bundle/scripts/sources-up.sh` | **done** |
-| dlt ingestor (`2_pipelines/ingestor/eLMIS/`) | **not started** |
-| Raw vault hubs/links/sats | **not started** |
-| Staging + marts models | **not started** |
-| Conformance to the shared entity model | **blocked — needs a decision** |
+**Landed 2026-09-10 as the historical lane (`elmis_hist`) of the OpenLMIS source family —
+option (c), standalone by decision (2026-09-02; reaffirmed at landing).** The
+Zambian identities are preserved end to end; nothing is re-keyed to the Ethiopian entity
+model; the only bridge to the master data is the MDM *candidate* table for commodities
+(`bi_mdm.mdm_commodity_match_candidates`), which a steward must accept before any link exists.
 
-The last row is the real blocker, and it is a modelling decision rather than a
-coding one. Three options, in rough order of effort:
+| Layer | Object | Gate (measured at landing) |
+|---|---|---|
+| replica | this container, read-only user `ingestor`, port 5434 | 7,543,506 / 73,926 / 2,807 / 1,100 rows |
+| ingestor | `2_pipelines/ingestor/OpenLMIS/` verb `history` → `nhdw-raw/elmis_hist/` (16 tables, 16 `_manifest.json`) | lake count 7,543,506; Σ quantity_dispensed 1,072,527,469 |
+| ClickHouse | 7 `raw_elmis_hist__*` views, 7 `stg_elmis_hist__*` models, `pii_policy.yaml` ×16 (`drop: []`) | staging count 7,543,506 |
+| landing | bridge → `nhdw_landing.stg_elmis_hist__*` | 7,543,506 |
+| vault | `raw_vault/elmis_hist/` 6 hubs · 2 links · 7 sats + `v_sat_elmis_hist_*_current` | `lnk_elmis_hist_requisition_line` = 7,543,506 |
+| marts | `bi_supply.mart_elmis_hist_{monthly_activity,availability,timeliness,satp,product_stockout,facility_activity,facility_product_month,resupply_plan}` | Σ dispensed 1,072,527,469; tracer 2018-01 38.1%; ARV timeliness 2018-01 543/391/72.0% |
+| MDM | `bi_mdm.{mdm_commodity_match_candidates, mart_mdm_commodity_golden, mart_mdm_commodity_match_review}` | candidates populated, no eLMIS key in any conformed hub |
+| ML | `bundle/seed-pack/app/ml/elmis_consumption_forecast` (damped-trend Holt) | registered `@champion`, batch predictions written |
 
-1. **Land it as an unconformed source.** Ingest into its own raw-vault
-   namespace, expose it in its own marts, and do not try to join it to Ethiopian
-   facilities or periods. Honest, cheap, and useful for demonstrating LMIS
-   analytics — but it never appears in a cross-source view.
-2. **Map the dimensions.** Build a crosswalk from the 2,807 Zambian facilities to
-   the 893 `FAC-*` facilities and from the eLMIS programme codes to the shared
-   `programme_id`s, then rebase the 2017–2018 periods onto the 2023–2026 window.
-   Everything joins, but the mapping is invented, and that invention has to be
-   documented wherever the numbers surface.
-3. **Regenerate the extract against the shared entity model.** Whatever produced
-   `elmis_historical_data_simulated.sql.gz` gets pointed at
-   `bundle/seeds/entity-model/_build/` so facilities, programmes, and periods come
-   out Ethiopian in the first place. Most faithful; requires the generator, which
-   is not in this repo.
+Orchestration: Job `elmis-hist-ingest` (`ingestor-jobs.yaml`), DAG row `elmis_hist` in `pipeline_refresh`,
+`seed-realistic.sh` `INGEST_JOBS`. The live OpenLMIS v3 lane (`openlmis-ingest`, suspended) is NOT deployed
+on this VM (13 containers; no analytical value at demo scale). Evidence of the landing run is kept with the operator's backups (`~/nhdw-backups/elmis-evidence/`).
 
-`mutation.scenario_manifest` records the contract, algorithm version, and seed
-hashes of the simulation that produced this extract — useful input if option 3 is
-on the table.
+Governance: facility-named marts are `default_sensitivity: sensitive` in `mart_attrs.yaml`; the dump is
+classified restricted-derived-known-entity-scenario; data-owner clearance for facility display is still open.

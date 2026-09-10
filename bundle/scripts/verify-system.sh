@@ -92,6 +92,14 @@ lake=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --pa
 pz=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
   "SELECT count() FROM (SELECT DISTINCT _path FROM s3(nhdw_minio, url='http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-processed/**/*.parquet', format='One'))" 2>/dev/null)
 [ "${pz:-0}" -gt 0 ] && pass "processed zone populated ($pz tables)" || fail "processed zone EMPTY"
+
+# 6b. eLMIS v2 history lane (OpenLMIS family, lane 2 — landed 2026-09-10): lake → marts gates
+el=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
+  "SELECT count() FROM nhdw_staging.raw_elmis_hist__history_requisition_line" 2>/dev/null)
+[ "${el:-0}" = "7543506" ] && pass "eLMIS history lane in the lake (7,543,506 lines)" || fail "eLMIS history lane lake count = ${el:-0} (expected 7,543,506)"
+eld=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_vault -At -c "SELECT sum(dispensed)::bigint FROM bi_supply.mart_elmis_hist_monthly_activity" 2>/dev/null)
+[ "${eld:-0}" = "1072527469" ] && pass "eLMIS marts reconcile (Σ dispensed = 1,072,527,469)" || fail "eLMIS marts Σ dispensed = ${eld:-0} (expected 1,072,527,469)"
 pat_cols=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
   "DESCRIBE s3(nhdw_minio, url='http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-processed/ethioemr/patient/*.parquet', format='Parquet')" 2>/dev/null | cut -f1)
 if [ -n "$pat_cols" ]; then

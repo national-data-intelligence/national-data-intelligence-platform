@@ -124,3 +124,25 @@ CREATE OR REPLACE VIEW raw_mbrana__dbo_zone AS
 -- ── Climate (weekly meteorological drivers; region × ISO-week) ──────────────
 CREATE OR REPLACE VIEW raw_climate__weekly AS
     SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/climate/weekly/**/*.parquet', format = 'Parquet');
+
+-- ── eLMIS v2 history (OpenLMIS source family, lane 2) — landed 2026-09-10 ──
+CREATE OR REPLACE VIEW raw_elmis_hist__reference_facility AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_facility/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_elmis_hist__reference_geographic_zone AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_geographic_zone/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_elmis_hist__reference_product AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_product/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_elmis_hist__reference_programme AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_programme/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_elmis_hist__reference_reporting_period AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_reporting_period/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_elmis_hist__history_requisition AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/history_requisition/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_elmis_hist__history_requisition_line AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/history_requisition_line/**/*.parquet', format = 'Parquet');

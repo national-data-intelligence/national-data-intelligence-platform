@@ -155,6 +155,12 @@ INGESTORS = [
         _plain("MBRANA_TRUST_SERVER_CERTIFICATE", "yes")]),
     ("mfr", "INGESTOR_MFR_IMAGE", "mfr-ingestor", ["all"], [
         _plain("MFR_FHIR_BASE_URL", f"http://{HOST}:8093/fhir")]),
+    ("elmis_hist", "INGESTOR_OPENLMIS_IMAGE", "openlmis-ingestor", ["history"], [
+        _plain("OPENLMIS_HIST_HOST", HOST), _plain("OPENLMIS_HIST_PORT", "5434"),
+        _plain("OPENLMIS_HIST_DB", "elmis"),
+        _sec("OPENLMIS_HIST_USER", "source-creds", "OPENLMIS_HIST_USER"),
+        _sec("OPENLMIS_HIST_PASSWORD", "source-creds", "OPENLMIS_HIST_PASSWORD"),
+        _plain("DLT_PIPELINE_NAME", "openlmis")]),   # eLMIS historical lane (2026-09-10); immutable → replace
 ]
 
 # ── ordered dbt / bridge pipeline → (task_id, image env, image name, args, env)

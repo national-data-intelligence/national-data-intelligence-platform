@@ -1,0 +1,7 @@
+# Damped-trend Holt hyperparameters (fixed; the archive is too short for per-series estimation).
+alpha: 0.5        # level smoothing
+beta: 0.2         # trend smoothing
+phi: 0.85         # damping (phi < 1 = damped trend; 1 would be plain Holt)
+horizon_days: 30  # projection horizon; alarm half-life = horizon/2
+min_months: 4     # series shorter than this fall back to the positive mean
+holdout_months: 3 # last N months held out at training time for the MASE report

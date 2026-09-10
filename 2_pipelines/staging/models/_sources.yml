@@ -98,3 +98,18 @@ sources:
       - name: climate__weekly
         identifier: raw_climate__weekly
         description: "Weekly rainfall / temperature / humidity per region."
+      # ── eLMIS v2 history (legacy lane of the OpenLMIS source family) ─────
+      - name: elmis_hist__reference_facility
+        identifier: raw_elmis_hist__reference_facility
+      - name: elmis_hist__reference_geographic_zone
+        identifier: raw_elmis_hist__reference_geographic_zone
+      - name: elmis_hist__reference_product
+        identifier: raw_elmis_hist__reference_product
+      - name: elmis_hist__reference_programme
+        identifier: raw_elmis_hist__reference_programme
+      - name: elmis_hist__reference_reporting_period
+        identifier: raw_elmis_hist__reference_reporting_period
+      - name: elmis_hist__history_requisition
+        identifier: raw_elmis_hist__history_requisition
+      - name: elmis_hist__history_requisition_line
+        identifier: raw_elmis_hist__history_requisition_line

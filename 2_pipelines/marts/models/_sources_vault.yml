@@ -37,6 +37,15 @@ sources:
       - name: hub_mfr_organization        # BK holder (FHIR Organization id) — DQ registry pulse
       # Climate (weekly meteorological drivers)
       - name: hub_climate_week            # BK holder (region_id × iso_week)
+      # eLMIS v2 history (lane 2)
+      - name: hub_elmis_hist_facility     # BK holder (Zambian facility code — governed display)
+      - name: hub_elmis_hist_product      # BK holder (product code) — feature mart + MDM candidates
+      - name: hub_elmis_hist_programme    # BK holder (programme code)
+      - name: hub_elmis_hist_period       # BK holder (period source id)
+      - name: hub_elmis_hist_requisition  # BK holder (source requisition id)
+      - name: hub_elmis_hist_zone         # BK holder (geographic zone code)
+      - name: lnk_elmis_hist_requisition  # requisition × facility × programme × period edge
+      - name: lnk_elmis_hist_requisition_line  # requisition × product R&R line edge (7.5M)
 
   - name: nhdw_vault_business
     description: "Business Data Vault — the mart-facing surface: spine + dims, resolution views, current-record views."
@@ -57,6 +66,7 @@ sources:
       # identity decode (facility-id slug extraction, indicator → programme).
       # Marts join these instead of re-deriving the regex/CASE locally.
       - name: v_facility_resolution
+      - name: v_commodity_resolution   # MDM golden-record coverage (2026-09-10)
       - name: v_programme_resolution
       # Current-record views (business_vault/current/) — sats are insert-only,
       # so marts MUST read these (latest row per hash key), never the raw sats,
@@ -83,3 +93,11 @@ sources:
       - name: v_sat_ethioemr_encounter_current  # EthioEMR encounter pulse (provider ref + FHIR status)
       - name: v_sat_mbrana_stock_event_current  # mBrana USSD SOH-log pulse (quantity ≥ 0 validity)
       - name: v_sat_mbrana_ussd_facility_current # USSD facility identity (canonical FAC-<region>- codes)
+      # eLMIS v2 history current views
+      - name: v_sat_elmis_hist_facility_current   # legacy facility identity + zone code
+      - name: v_sat_elmis_hist_zone_current       # legacy zone names/hierarchy
+      - name: v_sat_elmis_hist_product_current    # legacy product catalogue (tracer flag)
+      - name: v_sat_elmis_hist_programme_current  # legacy programme identity
+      - name: v_sat_elmis_hist_period_current     # 173 monthly reporting periods (2013+)
+      - name: v_sat_elmis_hist_requisition_current      # historical workflow status
+      - name: v_sat_elmis_hist_requisition_line_current # historical R&R measures (7.5M)

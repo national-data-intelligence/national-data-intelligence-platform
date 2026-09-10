@@ -203,3 +203,69 @@ spec:
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
             - { name: MINIO_REGION,     value: "et-addis-1" }
+---
+# ─── elmis-hist-ingest · historical eLMIS v2 lane (OpenLMIS source family, lane 2) ──
+# Reads the restored Zambian dump (0_external/sources/OpenLMIS, host port 5434) through
+# dlt sql_database and lands 16 tables under nhdw-raw/elmis_hist/. Immutable history:
+# every run is a byte-identical `replace`. Landed 2026-09-10.
+apiVersion: batch/v1
+kind: Job
+metadata: { name: elmis-hist-ingest, namespace: nhdw, labels: { app: openlmis-ingestor, tier: pipeline, lane: elmis-hist } }
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata: { labels: { app: openlmis-ingestor, tier: pipeline } }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: ingestor
+          image: nhdw-registry:5500/nhdw/openlmis-ingestor:1.0.0
+          imagePullPolicy: Always
+          args: ["history"]
+          env:
+            - { name: OPENLMIS_HIST_HOST, value: "host.k3d.internal" }
+            - { name: OPENLMIS_HIST_PORT, value: "5434" }
+            - { name: OPENLMIS_HIST_DB,   value: "elmis" }
+            - { name: OPENLMIS_HIST_USER,     valueFrom: { secretKeyRef: { name: source-creds, key: OPENLMIS_HIST_USER } } }
+            - { name: OPENLMIS_HIST_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: OPENLMIS_HIST_PASSWORD } } }
+            - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }   # botocore#3755: dlt writes a 0-byte init marker
+            - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
+            - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
+            - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
+            - { name: MINIO_REGION,     value: "et-addis-1" }
+            - { name: DLT_PIPELINE_NAME, value: "openlmis" }
+          resources:
+            requests: { cpu: "500m", memory: "1Gi" }
+            limits:   { memory: "3Gi" }
+---
+# ─── openlmis-ingest · LIVE OpenLMIS v3 API lane (lane 1) — NOT run on the VM ──
+# The v3 reference distribution (13 containers) is not deployed here by decision
+# (plans/elmis-source-and-forecasting.md D1). The manifest is kept so the lane can be
+# switched on by deploying the replica and adding OPENLMIS_* keys to source-creds.
+apiVersion: batch/v1
+kind: Job
+metadata: { name: openlmis-ingest, namespace: nhdw, labels: { app: openlmis-ingestor, tier: pipeline, lane: openlmis-v3 } }
+spec:
+  backoffLimit: 1
+  suspend: true
+  template:
+    metadata: { labels: { app: openlmis-ingestor, tier: pipeline } }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: ingestor
+          image: nhdw-registry:5500/nhdw/openlmis-ingestor:1.0.0
+          imagePullPolicy: Always
+          args: ["all"]
+          env:
+            - { name: OPENLMIS_BASE_URL, value: "http://host.k3d.internal:8086" }
+            - { name: OPENLMIS_USER,     valueFrom: { secretKeyRef: { name: source-creds, key: OPENLMIS_USER, optional: true } } }
+            - { name: OPENLMIS_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: OPENLMIS_PASSWORD, optional: true } } }
+            - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
+            - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
+            - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
+            - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
+            - { name: MINIO_REGION,     value: "et-addis-1" }

@@ -112,3 +112,12 @@ sources:
       # ── Climate (weekly meteorological drivers; bridged from ClickHouse) ──
       - name: stg_climate__weekly
         description: "Weekly rainfall / temperature / humidity per region."
+      # ── eLMIS v2 history (OpenLMIS source family, lane 2) — 7 landing tables ──
+      - name: stg_elmis_hist__reference_facility
+      - name: stg_elmis_hist__reference_geographic_zone
+      - name: stg_elmis_hist__reference_product
+      - name: stg_elmis_hist__reference_programme
+      - name: stg_elmis_hist__reference_reporting_period
+      - name: stg_elmis_hist__history_requisition
+      - name: stg_elmis_hist__history_requisition_line
+        description: "7.5M historical R&R lines (pattern-preserving Zambia dump)."

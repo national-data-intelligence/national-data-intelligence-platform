@@ -1,0 +1,20 @@
+# Feature query: monthly facility × TRACER product series from the eLMIS v2 history mart.
+# Tracer-only (64 products) keeps the batch to ≤ ~180k series; drop the tracer filter for a
+# full-catalogue run (params/feature scoping is the only change).
+input:
+  query: |
+    SELECT month_id, facility_code, product_code, product_name,
+           quantity_dispensed, normalized_consumption, stock_in_hand, amc, stockout_days
+    FROM bi_supply.mart_elmis_hist_facility_product_month
+    WHERE COALESCE(tracer::text, 'false') IN ('true', 't', '1')
+    ORDER BY facility_code, product_code, month_id
+  signature:
+    - { name: month_id,               dtype: string }
+    - { name: facility_code,          dtype: string }
+    - { name: product_code,           dtype: string }
+    - { name: product_name,           dtype: string }
+    - { name: quantity_dispensed,     dtype: float }
+    - { name: normalized_consumption, dtype: float }
+    - { name: stock_in_hand,          dtype: float }
+    - { name: amc,                    dtype: float }
+    - { name: stockout_days,          dtype: float }   # nullable in the mart → float (runner int-coercion refuses NA)

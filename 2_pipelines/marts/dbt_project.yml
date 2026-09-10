@@ -73,6 +73,15 @@ models:
       +schema: bi_staging
       +tags: ["mart:staging", "promotion-required"]
 
+    mdm:
+      +schema: bi_mdm
+      +tags: ["mart:mdm"]
+      # bi_mdm (MDM golden records + discovered relationships, 2026-09-10) is declared in
+      # 3_storage/postgres/init/07_marts_schemas_extras.sql for cold boots; on a cluster
+      # booted before that, dbt creates it as vault_writer — grant USAGE here so the
+      # governed read path (Trino/bi_reader) always sees the MDM marts.
+      +post-hook:
+        - "GRANT USAGE ON SCHEMA {{ this.schema }} TO bi_reader"
     supply_chain:
       +schema: bi_supply
       +tags: ["mart:supply"]

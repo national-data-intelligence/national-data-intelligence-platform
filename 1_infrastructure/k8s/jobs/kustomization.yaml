@@ -24,6 +24,7 @@ images:
   - { name: "nhdw-registry:5500/nhdw/hcmiswdm-ingestor", newName: nhdw/hcmiswdm-ingestor, newTag: 1.0.0 }
   - { name: "nhdw-registry:5500/nhdw/mbrana-ingestor",   newName: nhdw/mbrana-ingestor,   newTag: 1.0.0 }
   - { name: "nhdw-registry:5500/nhdw/mfr-ingestor",      newName: nhdw/mfr-ingestor,      newTag: 1.0.0 }
+  - { name: "nhdw-registry:5500/nhdw/openlmis-ingestor", newName: nhdw/openlmis-ingestor, newTag: 1.0.0 }
 
 patches:
   # Local images are pre-imported into k3d — never pull from a registry.

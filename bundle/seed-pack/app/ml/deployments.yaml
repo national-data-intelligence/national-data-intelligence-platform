@@ -55,3 +55,9 @@
   schedule: "0 4 * * 1"
   enabled: true
   params: {}
+- model_name: elmis_consumption_forecast
+  model_alias: champion
+  deployment_kind: batch
+  schedule: "0 4 * * 1"
+  enabled: true
+  params: {}
