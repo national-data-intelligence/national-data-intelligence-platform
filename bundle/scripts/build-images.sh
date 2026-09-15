@@ -82,6 +82,7 @@ IMAGES=(
   "nhdw/mbrana-ingestor:1.0.0|2_pipelines/ingestor/mBrana|Dockerfile"
   "nhdw/mfr-ingestor:1.0.0|2_pipelines/ingestor/MFR|Dockerfile"
   "nhdw/climate-ingestor:1.0.0|2_pipelines/ingestor/Climate|Dockerfile"
+  "nhdw/openlmis-ingestor:1.0.0|2_pipelines/ingestor/OpenLMIS|Dockerfile"   # OpenLMIS family: elmis-hist (lane 2) + openlmis-v3 (lane 1, suspended)
 )
 
 BUILT=()
