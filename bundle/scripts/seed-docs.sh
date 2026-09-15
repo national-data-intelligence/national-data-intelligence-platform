@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # seed-docs.sh — boot step: publish the curated operator docs (docs/*.md) into
-# the private MinIO bucket `nhdw-docs`, plus a docs-index.json catalogue. The
+# the private object-store bucket `nhdw-docs` (SeaweedFS since Phase 6), plus a docs-index.json catalogue. The
 # admin Documentation page reads these through the gateway (GET /gw/docs), so an
 # operator can OPEN each doc in-app or DOWNLOAD it — no repo checkout needed and
-# it survives reboots (MinIO is on a persistent volume; re-run is idempotent).
+# it survives reboots (the store is on a persistent volume; re-run is idempotent).
 #
 # SELF-CONTAINED BUNDLE: the boot reads the served docs from IN the bundle
 # (bundle/docs/*.md) — never the developer docs/ tree — so nothing outside
 # bundle/ is a seed input. Those bundle copies are kept in sync with the authored
 # docs/ originals by bundle/scripts/sync-docs.sh (run at pack time), so the same
-# docs serve the operator (via MinIO) and remain the developer reference in docs/.
-# Reaches MinIO the same way the other host-side seeds reach the cluster —
-# kubectl cp into the minio pod + mc cp — no configmap
+# docs serve the operator (via the object store) and remain the developer reference in docs/.
+# Reaches the store the same way the other host-side seeds do — bundled mc through
+# a port-forward (bundle/scripts/lib/objstore.sh) — no configmap
 # (the changelog exceeds the 1 MiB configmap limit). Fails LOUDLY so bootstrap
 # gates on it.
 set -uo pipefail
@@ -24,7 +24,7 @@ step() { echo; echo "▸ $*"; }
 ok()   { echo "  ✓ $*"; }
 warn() { echo "  ! $*" >&2; }
 
-echo "== docs seed (docs/*.md → MinIO $BUCKET, served via /gw/docs) =="
+echo "== docs seed (docs/*.md → object store $BUCKET, served via /gw/docs) =="
 
 # Curated set: file|Title|Section|Description. Order = display order. Keep in
 # sync with what the Documentation page groups by (Section).
@@ -36,26 +36,21 @@ DOC_ROWS=(
   "data-dictionary.md|Data dictionary|Reference|Generated catalogue of every programme, HMIS indicator, supply commodity, region and mart the warehouse carries."
 )
 
-# ── minio pod + root creds ───────────────────────────────────────────────────
-POD=$(kubectl -n "$NS" get pod -l app=minio-datalake -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-[ -n "$POD" ] || { warn "minio-datalake pod not found"; exit 1; }
-RU=$(kubectl -n "$NS" get secret minio-secrets -o jsonpath='{.data.ROOT_USER}' | base64 -d)
-RP=$(kubectl -n "$NS" get secret minio-secrets -o jsonpath='{.data.ROOT_PASSWORD}' | base64 -d)
-
-# mc must be present in the pod (the minio image ships it). Verify, then alias.
-if ! kubectl -n "$NS" exec "$POD" -- sh -c 'command -v mc >/dev/null 2>&1'; then
-  warn "mc not available in the minio pod — cannot seed docs"; exit 1
-fi
-kubectl -n "$NS" exec "$POD" -- sh -c \
-  "mc alias set loc http://localhost:9000 '$RU' '$RP' >/dev/null 2>&1 && mc mb --ignore-existing loc/$BUCKET >/dev/null 2>&1" \
-  || { warn "mc alias/mb failed"; exit 1; }
-ok "bucket $BUCKET ready"
+# ── object store (SeaweedFS since Phase 6) via the bundled host-side mc ────────
+. "$REPO/bundle/scripts/lib/objstore.sh"
+objstore_mc    || { warn "no mc client available — cannot seed docs"; exit 1; }
+objstore_creds || { warn "object-store credentials ($OBJSTORE_SECRET) not readable"; exit 1; }
+objstore_pf 19003
+trap 'objstore_pf_stop' EXIT
+objstore_alias && "$MC" --config-dir "$OS_MC_CFG" mb --ignore-existing "L/$BUCKET" >/dev/null 2>&1 \
+  || { warn "mc alias/mb failed against $OBJSTORE_SVC"; exit 1; }
+ok "bucket $BUCKET ready on $OBJSTORE_SVC"
 
 # ── build the index on the host, then STREAM each doc + the index into MinIO
 # via `mc pipe` over stdin (no kubectl cp / tar, no /tmp staging, no configmap
 # size limit — the large changelog streams fine). Overwrite = always fresh.
 STAGE=$(mktemp -d)
-trap 'rm -rf "$STAGE"' EXIT
+trap 'rm -rf "$STAGE"; objstore_pf_stop' EXIT
 FAILED=0
 UP=0
 INDEX="$STAGE/docs-index.json"
@@ -72,14 +67,14 @@ import json,sys
 f,t,s,d,z=sys.argv[1:6]
 sys.stdout.write(json.dumps({"name":f,"title":t,"section":s,"description":d,"size":int(z)}))
 PY
-  if kubectl -n "$NS" exec -i "$POD" -- mc pipe "loc/$BUCKET/$file" < "$src" >/dev/null 2>&1; then
+  if "$MC" --config-dir "$OS_MC_CFG" pipe "L/$BUCKET/$file" < "$src" >/dev/null 2>&1; then
     ok "uploaded $file"; UP=$((UP+1))
   else
     warn "mc pipe $file failed"; FAILED=1
   fi
 done
 printf '\n]\n' >> "$INDEX"
-kubectl -n "$NS" exec -i "$POD" -- mc pipe "loc/$BUCKET/docs-index.json" < "$INDEX" >/dev/null 2>&1 \
+"$MC" --config-dir "$OS_MC_CFG" pipe "L/$BUCKET/docs-index.json" < "$INDEX" >/dev/null 2>&1 \
   && ok "uploaded docs-index.json" || { warn "index upload failed"; FAILED=1; }
 ok "$BUCKET now holds $UP docs + docs-index.json"
 

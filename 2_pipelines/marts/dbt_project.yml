@@ -37,6 +37,9 @@ seeds:
       - "ALTER TABLE {{ this }} OWNER TO vault_admin"
       - "GRANT SELECT ON {{ this }} TO bi_reader"
 
+on-run-end:
+  - "GRANT USAGE ON SCHEMA bi_mdm TO bi_reader"
+
 models:
   nhdw_marts:
     +materialized: view
@@ -73,6 +76,13 @@ models:
       +schema: bi_staging
       +tags: ["mart:staging", "promotion-required"]
 
+    mdm:
+      +schema: bi_mdm
+      +tags: ["mart:mdm"]
+      # bi_mdm is declared in 3_storage/postgres/init/07_marts_schemas_extras.sql for cold
+      # boots; on a cluster booted before that, dbt creates it as vault_writer. The USAGE
+      # grant for bi_reader is issued ONCE in on-run-end (below) — a per-model post-hook
+      # made parallel threads collide on the schema row ("tuple concurrently updated").
     supply_chain:
       +schema: bi_supply
       +tags: ["mart:supply"]

@@ -1,0 +1,17 @@
+# dlt provides: pipelines, incremental loading, filesystem destination (S3/MinIO), Parquet writer.
+dlt[filesystem,parquet,sql_database]==1.4.0
+
+# DHIS2 Web API client (no official SDK; vanilla requests is the norm).
+requests==2.32.3
+
+# Legacy eLMIS v2 history DB (direct Postgres read via dlt sql_database).
+SQLAlchemy==2.0.35
+psycopg2-binary==2.9.9
+
+# Parquet engine. dlt pulls it in transitively but we pin explicitly so a dlt
+# upgrade can't silently bump pyarrow and break our file format on disk.
+pyarrow==17.0.0
+
+# dlt 1.4 still imports `pkg_resources` (removed from setuptools 76+). Hold
+# setuptools at a version that still ships it.
+setuptools<76

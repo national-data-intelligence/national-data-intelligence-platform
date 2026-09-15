@@ -100,35 +100,20 @@ if [ -n "${PGPW:-}" ]; then
   done
 else warn "cluster not reachable — ops dumps skipped"; fi
 
-step "MinIO non-derivable artifacts → bundle/state/minio (lake excluded — re-derived)"
-# Host-side BUNDLED mc binary against a short-lived port-forward. Never docker:
-# on Docker Desktop/WSL2 a container (even --network=host) lives in the Desktop
-# VM and cannot reach a port-forward bound on the WSL host — only the host can.
-MC="$REPO/bundle/bin/mc"
-if [ ! -x "$MC" ]; then
-  warn "bundle/bin/mc missing — falling back to NETWORK download (FIX THE BUNDLE)"
-  mkdir -p "$REPO/bundle/bin"
-  curl -fsSL --max-time 120 -o "$MC" https://dl.min.io/client/mc/release/linux-amd64/mc \
-    && chmod +x "$MC" || { warn "mc unavailable — artifact mirror skipped"; MC=""; }
-fi
-MUSER=$(kubectl -n "$NS" get secret minio-secrets -o jsonpath='{.data.ROOT_USER}' 2>/dev/null | base64 -d)
-MPW=$(kubectl -n "$NS" get secret minio-secrets -o jsonpath='{.data.ROOT_PASSWORD}' 2>/dev/null | base64 -d)
-if [ -n "${MUSER:-}" ] && [ -n "$MC" ]; then
-  kubectl -n "$NS" port-forward svc/minio-datalake 19000:9000 >/dev/null 2>&1 &
-  PF=$!
-  for i in $(seq 1 12); do
-    curl -s -o /dev/null --max-time 2 http://127.0.0.1:19000/minio/health/live && break
-    sleep 2
-  done
+step "object-store non-derivable artifacts → bundle/state/minio (lake excluded — re-derived)"
+# Phase 6 (2026-09-09): the live store is SeaweedFS; access goes through
+# bundle/scripts/lib/objstore.sh (bundled host-side mc + port-forward). The
+# state/minio directory NAME is kept so existing packed bundles restore unchanged.
+. "$REPO/bundle/scripts/lib/objstore.sh"
+if objstore_mc && objstore_creds; then
+  objstore_pf 19000
   rm -rf "$STATE/minio/nhdw-artifacts" && mkdir -p "$STATE/minio/nhdw-artifacts"
-  MC_CONFIG_DIR=$(mktemp -d)
-  "$MC" --config-dir "$MC_CONFIG_DIR" alias set L http://127.0.0.1:19000 "$MUSER" "$MPW" >/dev/null \
-    && "$MC" --config-dir "$MC_CONFIG_DIR" mirror --quiet L/nhdw-artifacts "$STATE/minio/nhdw-artifacts" \
-    && ok "state/minio/nhdw-artifacts mirrored ($(du -sh "$STATE/minio/nhdw-artifacts" | cut -f1))" \
-    || warn "MinIO mirror failed"
-  rm -rf "$MC_CONFIG_DIR"
-  kill $PF 2>/dev/null
-else warn "minio creds or mc unavailable — artifact mirror skipped"; fi
+  objstore_alias \
+    && "$MC" --config-dir "$OS_MC_CFG" mirror --quiet L/nhdw-artifacts "$STATE/minio/nhdw-artifacts" \
+    && ok "state/minio/nhdw-artifacts mirrored from $OBJSTORE_SVC ($(du -sh "$STATE/minio/nhdw-artifacts" | cut -f1))" \
+    || warn "artifact mirror failed"
+  objstore_pf_stop
+else warn "object-store creds or mc unavailable — artifact mirror skipped"; fi
 
 # ── 2b. OPTIONAL derived snapshot → bundle/state/derived (a CACHE, not truth) ─
 # The marts/vault/landing are normally NEVER packed — the boot re-derives them

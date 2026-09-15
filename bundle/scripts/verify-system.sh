@@ -23,6 +23,7 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS=nhdw
+NHDW_HOSTBASE="${NHDW_HOSTBASE:-127.0.0.1.nip.io}"   # ingress host base (values.yaml hostBase); e.g. NHDW_HOSTBASE=20.84.70.78.nip.io on the shared VM
 export PATH="$HOME/.local/bin:$PATH"
 FAIL=0
 pass() { echo "  ✓ $*"; }
@@ -71,7 +72,7 @@ prov=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
                        || fail "provenance managed_by missing on ops_identity.user"
 
 # 5. gateway + fayda OIDC
-curl -sk --max-time 5 https://gateway.127.0.0.1.nip.io/health | grep -q '"ok"' \
+curl -sk --max-time 5 https://gateway.${NHDW_HOSTBASE}/health | grep -q '"ok"' \
   && pass "gateway healthy" || fail "gateway health check failed"
 curl -s --max-time 5 http://localhost:8096/.well-known/openid-configuration | grep -q issuer \
   && pass "fayda-replica OIDC discovery on :8096" || fail "fayda-replica OIDC discovery failed"
@@ -82,24 +83,32 @@ nviews=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --
   "SELECT count() FROM system.tables WHERE database='nhdw_staging' AND name LIKE 'raw_%'" 2>/dev/null)
 [ "${nviews:-0}" -gt 0 ] && pass "nhdw_staging raw_* views present ($nviews)" || fail "no raw_* views"
 lake=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
-  "SELECT count() FROM (SELECT DISTINCT _path FROM s3(nhdw_minio, url='http://minio-datalake:9000/nhdw-raw/**/*.parquet', format='One'))" 2>/dev/null)
+  "SELECT count() FROM (SELECT DISTINCT _path FROM s3(nhdw_minio, url='http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/**/*.parquet', format='One'))" 2>/dev/null)
 [ "${lake:-0}" -gt 0 ] && pass "lake reachable via named collection ($lake parquet paths)" \
                        || fail "named-collection lake probe failed"
 
 # 6b. processed zone — populated AND actually PII-stripped (spot-check the two
 #     highest-risk tables: FHIR narrative + the mBrana user directory)
 pz=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
-  "SELECT count() FROM (SELECT DISTINCT _path FROM s3(nhdw_minio, url='http://minio-datalake:9000/nhdw-processed/**/*.parquet', format='One'))" 2>/dev/null)
+  "SELECT count() FROM (SELECT DISTINCT _path FROM s3(nhdw_minio, url='http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-processed/**/*.parquet', format='One'))" 2>/dev/null)
 [ "${pz:-0}" -gt 0 ] && pass "processed zone populated ($pz tables)" || fail "processed zone EMPTY"
+
+# 6b. eLMIS v2 history lane (OpenLMIS family, lane 2 — landed 2026-09-10): lake → marts gates
+el=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
+  "SELECT count() FROM nhdw_staging.raw_elmis_hist__history_requisition_line" 2>/dev/null)
+[ "${el:-0}" = "7543506" ] && pass "eLMIS history lane in the lake (7,543,506 lines)" || fail "eLMIS history lane lake count = ${el:-0} (expected 7,543,506)"
+eld=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_vault -At -c "SELECT sum(dispensed)::bigint FROM bi_supply.mart_elmis_hist_monthly_activity" 2>/dev/null)
+[ "${eld:-0}" = "1072527469" ] && pass "eLMIS marts reconcile (Σ dispensed = 1,072,527,469)" || fail "eLMIS marts Σ dispensed = ${eld:-0} (expected 1,072,527,469)"
 pat_cols=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
-  "DESCRIBE s3(nhdw_minio, url='http://minio-datalake:9000/nhdw-processed/ethioemr/patient/*.parquet', format='Parquet')" 2>/dev/null | cut -f1)
+  "DESCRIBE s3(nhdw_minio, url='http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-processed/ethioemr/patient/*.parquet', format='Parquet')" 2>/dev/null | cut -f1)
 if [ -n "$pat_cols" ]; then
   echo "$pat_cols" | grep -qE "text__div|birth_date" \
     && fail "processed ethioemr/patient still carries PII columns" \
     || pass "processed ethioemr/patient is PII-stripped"
 fi
 usr_cols=$(kubectl -n "$NS" exec deploy/clickhouse -- clickhouse-client -u nhdw --password "$CHPW" -q \
-  "DESCRIBE s3(nhdw_minio, url='http://minio-datalake:9000/nhdw-processed/mbrana/mflowussd_users/*.parquet', format='Parquet')" 2>/dev/null | cut -f1)
+  "DESCRIBE s3(nhdw_minio, url='http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-processed/mbrana/mflowussd_users/*.parquet', format='Parquet')" 2>/dev/null | cut -f1)
 if [ -n "$usr_cols" ]; then
   echo "$usr_cols" | grep -qE "user_name|phone_no" \
     && fail "processed mbrana/mflowussd_users still carries PII columns" \
@@ -111,7 +120,7 @@ fi
 # without X-Mock-Secret the gateway 401s and this check could never pass.
 IMPSEC=$(kubectl -n "$NS" get secret nhdw-gateway-secrets \
   -o jsonpath='{.data.IMPERSONATION_SECRET}' 2>/dev/null | base64 -d)
-mlmodels=$(curl -sk --max-time 8 "https://gateway.127.0.0.1.nip.io/api/ml" \
+mlmodels=$(curl -sk --max-time 8 "https://gateway.${NHDW_HOSTBASE}/api/ml" \
   -H "X-Mock-User: 22222222-3333-4444-5555-666666666666" -H "X-Mock-Role: R-CONS-ANA" \
   -H "X-Mock-Secret: ${IMPSEC}" \
   | python3 -c "import json,sys; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)

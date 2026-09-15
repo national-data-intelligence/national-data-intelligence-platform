@@ -37,3 +37,10 @@ ALTER DEFAULT PRIVILEGES FOR ROLE vault_writer IN SCHEMA bi_quality
     GRANT SELECT ON TABLES TO bi_reader;
 ALTER DEFAULT PRIVILEGES FOR ROLE vault_writer IN SCHEMA bi_governance
     GRANT SELECT ON TABLES TO bi_reader;
+
+-- bi_mdm — MDM golden records + discovered relationships (PCT dataflow design, 2026-09-10)
+CREATE SCHEMA IF NOT EXISTS bi_mdm AUTHORIZATION vault_writer;
+COMMENT ON SCHEMA bi_mdm IS
+  'MDM golden records + discovered relationships (PCT dataflow design, 2026-09-10): steward-reviewed candidates, never silent same-as links.';
+GRANT USAGE ON SCHEMA bi_hmis, bi_idsr, bi_service, bi_quality, bi_mdm TO bi_reader;
+ALTER DEFAULT PRIVILEGES FOR ROLE vault_writer IN SCHEMA bi_mdm

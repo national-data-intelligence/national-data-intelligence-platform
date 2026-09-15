@@ -78,6 +78,7 @@ SOURCES: list[dict[str, Any]] = [
     {"key": "EthioEMR", "raw_prefix": "ethioemr", "sla_hours": 1},
     {"key": "HCMIS",    "raw_prefix": "hcmiswdm", "sla_hours": 4},
     {"key": "mBrana",   "raw_prefix": "mbrana",   "sla_hours": 2},
+    {"key": "eLMIS-hist", "raw_prefix": "elmis_hist", "sla_hours": 24 * 30},   # immutable archive lane: re-run on demand
     {"key": "MFR",      "raw_prefix": "mfr",      "sla_hours": 48},
     {"key": "Climate",  "raw_prefix": "climate",  "sla_hours": 168},
 ]

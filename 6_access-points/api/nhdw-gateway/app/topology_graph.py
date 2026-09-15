@@ -5,7 +5,7 @@ Deployments + StatefulSets. Jobs/CronJobs (ingestors, dbt, bridge-sync,
 ml-runner), DB tables/schemas, MinIO buckets, external SOURCE systems and every
 data-lineage / ETL edge are deliberately EXCLUDED (that story belongs to
 dbt-docs + the data-lineage page, not here). Storage apps (postgres-vault,
-minio-datalake, clickhouse) DO appear — we just never show their internal
+seaweedfs-filer, clickhouse) DO appear — we just never show their internal
 tables/buckets or the ETL between them.
 
 One EPHEMERAL exception to "declared workloads only": JupyterHub singleuser lab
@@ -89,12 +89,11 @@ KIND_BY_TIER: dict[str, str] = {
 
 # ─── edge kind inference ──────────────────────────────────────────────
 # Storage/auth targets carry a fixed protocol regardless of the port the caller
-# used (minio & clickhouse both surface on :9000 — port alone can't tell them
-# apart, so the target node disambiguates). Everything else falls back to a
+# used (the target node disambiguates; SeaweedFS's S3 port 8333 is also mapped below). Everything else falls back to a
 # small port→protocol map, then to plain http.
 SPECIAL_TARGET_KIND: dict[str, str] = {
     "keycloak":       "oidc",
-    "minio-datalake": "s3",
+    "seaweedfs-filer": "s3",   # SeaweedFS filer runs the S3 gateway (Service seaweedfs-s3:8333)
     "clickhouse":     "native",
     "postgres-vault": "db",
     "fayda-replica":  "oidc",
@@ -161,9 +160,9 @@ PORT_KIND: dict[int, str] = {
     11434: "http",
     4180: "http",
     3100: "http",
-    9000: "native",   # clickhouse native TCP (minio :9000 is special-cased s3)
+    9000: "native",   # clickhouse native TCP
+    8333: "s3",       # seaweedfs S3 gateway
     8123: "native",   # clickhouse http
-    9001: "http",     # minio console
     8096: "oidc",     # fayda replica auth
 }
 

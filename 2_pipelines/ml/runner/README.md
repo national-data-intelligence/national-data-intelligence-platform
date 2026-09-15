@@ -81,7 +81,7 @@ Names match what the retired ml CronJobs already used.
 | Var | Default | Source |
 |---|---|---|
 | `MLFLOW_TRACKING_URI` (alias `MLFLOW_URL`) | `http://mlflow.nhdw.svc.cluster.local:5000` | plain env |
-| `MLFLOW_S3_ENDPOINT_URL` | `http://minio-datalake.nhdw.svc.cluster.local:9000` | plain env |
+| `MLFLOW_S3_ENDPOINT_URL` | `http://seaweedfs-s3.nhdw.svc.cluster.local:8333` | plain env |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | `mlflow-secrets` (`S3_ACCESS_KEY`/`S3_SECRET_KEY`) |
 | `AWS_DEFAULT_REGION` | `et-addis-1` | plain env |
 | `MINIO_ENDPOINT` / `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | fall back to the three MLflow S3 vars | optional override when package/adhoc I/O needs a different MinIO principal |

@@ -175,7 +175,6 @@ SUPERSET_OIDC_SECRET = os.environ.get("SUPERSET_OIDC_SECRET", "").strip()
 # Confidential OIDC secret for the MinIO console's native OIDC (privileged-ops).
 # The console runs AssumeRoleWithWebIdentity against this client → temporary MinIO
 # creds mapped to the consoleAdmin policy, so an authenticated operator SSOs in.
-MINIO_OIDC_SECRET = os.environ.get("MINIO_OIDC_SECRET", "").strip()
 # Confidential OIDC secrets for the nhdw/tool-gate reverse proxies (one per tool
 # that has NO own role-aware OIDC — MLflow, Prometheus, Alertmanager, Headlamp).
 # Each gate runs its OWN OIDC handshake (/oauth2gate/callback), admitted silently
@@ -248,13 +247,6 @@ TOOL_CLIENTS = [
     # /oauth-authorized/keycloak (covered by base + /*). Same pattern as Airflow.
     {"realm": "moh-staff", "client_id": "superset",
      "base": f"https://superset.{_HOST_BASE}", "secret": SUPERSET_OIDC_SECRET},
-    # MinIO console native OIDC (privileged-ops — operator tool). The console's
-    # callback is /oauth_callback (covered by base + /*). MinIO server exchanges
-    # the code on the INTERNAL keycloak:8080 backchannel (KC_HOSTNAME_BACKCHANNEL_
-    # DYNAMIC=true keeps token/jwks internal while auth stays on the public host)
-    # and maps the identity to the consoleAdmin policy via ROLE_POLICY.
-    {"realm": "privileged-ops", "client_id": "minio-console",
-     "base": f"https://minio-console.{_HOST_BASE}", "secret": MINIO_OIDC_SECRET},
 ]
 
 # tool-gate clients — the nhdw/tool-gate reverse proxies (main.py). Same

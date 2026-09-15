@@ -207,6 +207,48 @@
         'volatile': ['modified_date'],
     },
 
+    'elmis_hist_facility': {
+        'payload': ['name', 'facility_type_code', 'geographic_zone_code',
+                    'parent_facility_code', 'catchment_population', 'latitude',
+                    'longitude', 'service_delivery_point', 'active', 'enabled',
+                    'virtual_facility', 'go_live_date', 'go_down_date'],
+        'volatile': [],
+    },
+    'elmis_hist_zone': {
+        'payload': ['name', 'geographic_level_code', 'parent_zone_code',
+                    'catchment_population', 'latitude', 'longitude'],
+        'volatile': [],
+    },
+    'elmis_hist_product': {
+        'payload': ['primary_name', 'full_name', 'generic_name', 'strength',
+                    'product_form_code', 'product_group_code', 'dispensing_unit',
+                    'pack_size', 'tracer', 'active', 'full_supply', 'refrigerated'],
+        'volatile': [],
+    },
+    'elmis_hist_programme': {
+        'payload': ['name', 'active'],
+        'volatile': [],
+    },
+    'elmis_hist_period': {
+        'payload': ['processing_schedule_code', 'name', 'period_start',
+                    'period_end', 'number_of_months'],
+        'volatile': [],
+    },
+    'elmis_hist_requisition': {
+        'payload': ['status', 'emergency', 'source_application',
+                    'requisition_created_at', 'modified_date'],
+        'volatile': ['modified_date'],
+    },
+    'elmis_hist_requisition_line': {
+        'payload': ['beginning_balance', 'quantity_received', 'quantity_dispensed',
+                    'stock_in_hand', 'quantity_requested', 'calculated_order_quantity',
+                    'quantity_approved', 'total_losses_and_adjustments', 'stockout_days',
+                    'normalized_consumption', 'amc', 'max_stock_quantity',
+                    'packs_to_ship', 'skipped', 'full_supply', 'reporting_days',
+                    'line_item_created_at', 'modified_date'],
+        'volatile': ['modified_date'],
+    },
+
     'mfr_facility': {
         'payload': ['name', 'status', 'mode', 'operational_status',
                     'facility_type_code', 'facility_type_display',

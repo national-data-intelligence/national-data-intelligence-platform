@@ -45,7 +45,10 @@ ML_RUNNER_IMAGE = os.environ.get(
 )
 
 MLFLOW_URL = "http://mlflow.nhdw.svc.cluster.local:5000"
-MINIO_URL = "http://minio-datalake.nhdw.svc.cluster.local:9000"
+# Storage endpoint seam (Phase 6 step 0): read from the Airflow Deployment env so the
+# backend can be switched later WITHOUT rebuilding this image. The default is the
+# SeaweedFS S3 gateway (MinIO was decommissioned 2026-09-09); NHDW_S3_ENDPOINT overrides.
+MINIO_URL = os.environ.get("NHDW_S3_ENDPOINT", "http://seaweedfs-s3.nhdw.svc.cluster.local:8333")
 PG_HOST = "postgres-vault.nhdw.svc.cluster.local"
 
 
@@ -64,6 +67,7 @@ RUNNER_ENV = [
     k8s.V1EnvVar(name="MLFLOW_URL", value=MLFLOW_URL),
     k8s.V1EnvVar(name="MLFLOW_TRACKING_URI", value=MLFLOW_URL),
     k8s.V1EnvVar(name="MLFLOW_S3_ENDPOINT_URL", value=MINIO_URL),
+    k8s.V1EnvVar(name="BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE", value="true"),   # botocore#3755
     _secret_env("AWS_ACCESS_KEY_ID", "mlflow-secrets", "S3_ACCESS_KEY"),
     _secret_env("AWS_SECRET_ACCESS_KEY", "mlflow-secrets", "S3_SECRET_KEY"),
     k8s.V1EnvVar(name="AWS_DEFAULT_REGION", value="et-addis-1"),

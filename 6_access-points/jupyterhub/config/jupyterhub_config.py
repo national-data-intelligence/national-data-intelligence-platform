@@ -235,12 +235,15 @@ c.KubeSpawner.profile_list = profile_list
 
 # ─── Pre-spawn: project reconciliation env + warehouse creds ─────────────
 MINIO_ENDPOINT   = os.environ.get(
-    "MINIO_ENDPOINT", "http://minio-datalake.nhdw.svc.cluster.local:9000")
+    "MINIO_ENDPOINT", "http://seaweedfs-s3.nhdw.svc.cluster.local:8333")
 ARTIFACTS_BUCKET = os.environ.get("ARTIFACTS_BUCKET", "nhdw-artifacts")
 
 
 async def pre_spawn_hook(spawner):
     env = spawner.environment
+    # botocore#3755 workaround for the lab's boto3 sync (Phase 6 step 0): empty PUTs
+    # poison pooled connections on Go-based S3 servers (MinIO and SeaweedFS alike).
+    env["BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE"] = os.environ.get("BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE", "true")
     env["MLFLOW_TRACKING_URI"] = os.environ.get(
         "MLFLOW_TRACKING_URI", "http://mlflow.nhdw.svc.cluster.local:5000")
     # Read-only warehouse access for notebooks (Phase-1 static; OpenBao

@@ -6,7 +6,7 @@
 # Components covered:
 #   - postgres-vault                          pg_dump --format=custom
 #   - clickhouse                              clickhouse-backup-style snapshot
-#   - minio                                   mc mirror of every nhdw-* bucket
+#   - object store (SeaweedFS)               S3 mirror of every nhdw-* bucket + sha256 manifest
 #   - openhim mongo                           mongodump
 #   - keycloak realm exports                  kcadm export for each realm
 #   - openbao file backend                    tar of /var/lib/openbao + sealed unseal-keys
@@ -42,10 +42,10 @@ docker exec -e PGPASSWORD="$PG_ADMIN_PW" postgres-vault \
     > "$OUT/postgres-vault.dump"
 echo "  -> $(du -h "$OUT/postgres-vault.dump" | cut -f1)"
 
-# 2. clickhouse — staging holds only views over MinIO Parquet, so a
+# 2. clickhouse — staging holds only views over lake Parquet (SeaweedFS), so a
 # dbt rebuild restores it for free. Snapshot the DDL so a clean host
 # can rebuild without re-running the full staging DAG.
-echo "▸ clickhouse: DDL snapshot (views over MinIO; data lives in the lake)"
+echo "▸ clickhouse: DDL snapshot (views over the lake Parquet; data lives in the object store)"
 docker exec clickhouse clickhouse-client --multiquery --query "
 SELECT 'DROP DATABASE IF EXISTS nhdw_staging;'
 UNION ALL
@@ -54,19 +54,12 @@ UNION ALL
 SELECT create_table_query FROM system.tables WHERE database='nhdw_staging' AND engine='View'
 " > "$OUT/clickhouse-staging.ddl.sql" 2>/dev/null || echo "  ! clickhouse query failed (acceptable in dev)"
 
-# 3. minio — tar the on-disk bucket layout. Faster + simpler than mc
-# mirror; works as long as MinIO uses a host-bind mount (it does in
-# the dev compose). Production swaps for object-store cross-region
-# replication and this step becomes a no-op.
-echo "▸ minio: snapshot data dir"
-MINIO_SRC=$(docker inspect minio-datalake --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)
-if [ -n "$MINIO_SRC" ]; then
-    echo "${BACKUP_SUDO_PASS:?set BACKUP_SUDO_PASS (or configure passwordless sudo for the backup paths)}" | sudo -S tar czf "$OUT/minio-buckets.tar.gz" -C "$MINIO_SRC" . 2>/dev/null \
-        && echo "  -> $(du -h "$OUT/minio-buckets.tar.gz" | cut -f1)" \
-        || echo "  ! minio snapshot failed"
-else
-    echo "  ! minio data dir not bind-mounted; skipping"
-fi
+# 3a. object store — S3-level mirror of every nhdw-* bucket from the LIVE store
+# (SeaweedFS since Phase 6, 2026-09-09) via the bundled mc + port-forward.
+echo "▸ object store: S3 mirror of every nhdw-* bucket (3_storage/seaweedfs/ops/backup-objstore.sh)"
+BACKUP_ROOT="$OUT" bash "$REPO/3_storage/seaweedfs/ops/backup-objstore.sh" 2>&1 | sed 's/^/  /' \
+    || echo "  ! object-store mirror failed"
+
 
 # 4. openhim mongo
 echo "▸ openhim mongo: dump"

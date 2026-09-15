@@ -6,7 +6,7 @@ resources:
   - namespace.yaml
   # storage
   - postgres-vault.yaml
-  - minio.yaml
+  - seaweedfs.yaml           # object store (S3) — replaced MinIO 2026-09-09 (3_storage/seaweedfs/README.md)
   - clickhouse.yaml
   - trino.yaml
   # security
@@ -110,6 +110,7 @@ configMapGenerator:
       - ../../../3_storage/postgres/init/29_alert_routing.sql
       - ../../../3_storage/postgres/init/30_demo_patient_phi.sql
       - ../../../3_storage/postgres/init/31_superset_db.sh
+      - ../../../3_storage/postgres/init/23_seaweedfs_filer_db.sh
 
 
   - name: keycloak-seed-script

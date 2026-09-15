@@ -86,6 +86,7 @@ spec:
           imagePullPolicy: IfNotPresent
           ports: [ { containerPort: 80, name: http } ]
           env:
+            - { name: NHDW_MINIO_INTERNAL, value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G1: nhdw-static is read from SeaweedFS (was the code default minio-datalake)
             # Fayda identity verification is an email-OTP round-trip owned entirely
             # by the EXTERNAL Fayda replica (0_external/fayda, compose on host port
             # 8096 — like the source replicas). This server's /api/proxy/fayda/*

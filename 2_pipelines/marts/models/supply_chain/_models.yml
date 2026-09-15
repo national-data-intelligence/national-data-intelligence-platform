@@ -315,3 +315,95 @@ models:
         tests: [not_null]
       - name: units
         tests: [not_null]
+
+  # ── eLMIS v2 history (OpenLMIS family, lane 2; option (c) standalone — never joins the entity model) ──
+  - name: mart_elmis_hist_monthly_activity
+    description: |
+      Legacy eLMIS v2 history — month × programme national supply activity
+      (requisitions, dispensed/AMC, fill rate, stockout days) across 173
+      monthly periods from Jan 2013. Aggregated once from 7.5M R&R lines
+      (table materialization). Added 2026-08-31.
+    columns:
+      - name: month_id
+        tests: [not_null]
+      - name: programme_name
+        tests: [not_null]
+      - name: requisitions
+        tests: [not_null]
+
+  - name: mart_elmis_hist_product_stockout
+    description: |
+      Legacy eLMIS v2 history — month × tracer product stockout pressure
+      (stockout days, share of lines out of stock, dispensed volume).
+    columns:
+      - name: month_id
+        tests: [not_null]
+      - name: product_name
+        tests: [not_null]
+
+  - name: mart_elmis_hist_facility_activity
+    description: |
+      Legacy eLMIS v2 history — facility × programme × month rollup with
+      zone context (≤74k rows). GOVERNED: facility identities derive from a
+      restricted known-entity dump — internal display only pending data-owner
+      clearance.
+    columns:
+      - name: facility_code
+        tests: [not_null]
+      - name: month_id
+        tests: [not_null]
+
+  - name: mart_elmis_hist_availability
+    description: |
+      "Period availability" (the OSA-PROXY — never labeled OSA) per month ×
+      product set (tracer / ppe) × product: share of non-skipped reporting
+      lines in stock with zero stockout days. PPE list pending user review.
+    columns:
+      - name: month_id
+        tests: [not_null]
+      - name: availability_pct
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 AND availability_pct <= 100 OR availability_pct IS NULL"
+
+  - name: mart_elmis_hist_timeliness
+    description: |
+      Facility reporting timeliness per month × programme — on-time =
+      requisition created within 15 days of period end (P1 baseline 79.8%).
+    columns:
+      - name: month_id
+        tests: [not_null]
+      - name: on_time_pct
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 AND on_time_pct <= 100 OR on_time_pct IS NULL"
+
+  - name: mart_elmis_hist_satp
+    description: |
+      Stock According To Plan (facility-grain ADAPTATION of the GF central-
+      store measure) per month × programme: lines banded stocked_out /
+      understocked / according / overstocked via amc and max_stock_quantity.
+    columns:
+      - name: month_id
+        tests: [not_null]
+      - name: satp_pct
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 AND satp_pct <= 100 OR satp_pct IS NULL"
+
+  - name: mart_elmis_hist_facility_product_month
+    description: "eLMIS v2 history — facility × product × month (non-skipped lines): the feature mart for elmis_consumption_forecast and the base of the resupply plan. Governed (facility codes)."
+    columns:
+      - name: facility_code
+        tests: [not_null]
+      - name: product_code
+        tests: [not_null]
+      - name: month_id
+        tests: [not_null]
+  - name: mart_elmis_hist_resupply_plan
+    description: "eLMIS v2 history — planning-module mock: latest-month stock position, months of stock, suggested resupply quantity and SATP band per facility × tracer product."
+    columns:
+      - name: plan_band
+        tests:
+          - accepted_values:
+              arguments: { values: ['stocked_out', 'understocked', 'according_to_plan', 'overstocked'] }

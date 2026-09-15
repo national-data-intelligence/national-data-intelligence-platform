@@ -119,6 +119,8 @@ _tools/reactivity-harness/report*.json
 0_external/sources/*/sample-data/*.bak
 0_external/sources/*/sample-data/*.pgdump
 0_external/sources/*/sample-data/*.dump
+0_external/sources/*/sample-data/*.sql.gz
+0_external/sources/*/sample-data/*.gz
 
 # --- dbt / tool run logs (never belong in version control) ---
 **/logs/*.log

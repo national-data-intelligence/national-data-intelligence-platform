@@ -122,10 +122,7 @@ seed_if_missing "services/airflow-fernet" \
     "$REPO/5_orchestrator/.env" "AIRFLOW_FERNET_KEY" \
     "key_use=airflow-fernet"
 
-# MinIO root + Grafana admin
-seed_if_missing "services/minio" \
-    "$REPO/3_storage/minio/.env" "MINIO_ROOT_PASSWORD" \
-    "username=minioadmin"
+# Grafana admin
 
 seed_if_missing "services/grafana" \
     "$REPO/4_monitoring/.env" "GRAFANA_ADMIN_PASSWORD" \

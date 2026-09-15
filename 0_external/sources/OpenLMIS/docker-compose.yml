@@ -1,0 +1,76 @@
+# eLMIS source replica — EXTERNAL to the NHDW k8s cluster (models the third-party
+# national logistics/LMIS the ingestor pulls from). Postgres-only: the OpenLMIS
+# web app is intentionally NOT run here — this dump is a *historical extract*
+# already reshaped into `reference` + `history` schemas (it is not a live OpenLMIS
+# operational schema), so there is no app that could serve it. The in-cluster dlt
+# ingestor reads the requisition tables directly over the Postgres wire.
+#
+# Offline seeding path (NO app bootstrap needed):
+#   1. docker compose -f 0_external/sources/OpenLMIS/docker-compose.yml up -d
+#   2. wait for health (pg_isready) — restore.sh health-gates on this
+#   3. bash 0_external/sources/OpenLMIS/scripts/restore.sh
+#        (streams sample-data/elmis_historical_data_simulated.sql.gz straight into
+#         psql — 1.5 GB uncompressed, never unpacked to disk — and provisions the
+#         read-only `ingestor` user the pipeline connects as)
+#   4. bash 0_external/sources/OpenLMIS/scripts/verify.sh
+# The in-cluster dlt ingestor then reads reference.* + history.requisition[_line]
+# over host.k3d.internal:5434.
+#
+# Ports are published on 0.0.0.0 (NOT 127.0.0.1) so cluster pods can reach Postgres
+# via host.k3d.internal. 5434 because 5433 is already dhis2-db. This stack has NO
+# nhdw_net attachment — it is the outside world; a private bridge only.
+services:
+  elmis-db:
+    # Pin 16.x: the dump is pg_dump 16.14 output and carries the \restrict /
+    # \unrestrict psql meta-commands introduced in the Aug-2025 patch releases
+    # (16.10+). An older psql chokes on line 5 — restore.sh strips them as a
+    # fallback, but a current image means it never has to.
+    image: postgres:${ELMIS_PG_IMAGE_TAG:-16}
+    container_name: elmis-postgres
+    restart: unless-stopped
+    # Capped for the shared 31 GB no-swap host. The 7.5M-row restore (index + FK
+    # build at the tail of the dump) is the only real spike.
+    mem_limit: 2g
+    environment:
+      POSTGRES_DB: ${ELMIS_DB_NAME:-elmis}
+      POSTGRES_USER: ${ELMIS_DB_USER:-elmis}
+      POSTGRES_PASSWORD: ${ELMIS_DB_PASSWORD:-changeme-elmis-password}
+      # Dump is UTF8; keep initdb from inheriting a C locale that would sort text
+      # keys differently from the source system.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=512MB"
+      # Index + FK build at the end of the restore is the bottleneck (7.5M-row
+      # requisition_line); a large maintenance_work_mem is what makes it minutes
+      # instead of tens of minutes.
+      - "-c"
+      - "maintenance_work_mem=512MB"
+      - "-c"
+      - "max_connections=100"
+      # Disposable read-only replica of a historical extract — it is restored from
+      # the dump, never written to in anger. Trading fsync-per-commit for restore
+      # speed is safe here and NOT a pattern to copy into the warehouse itself.
+      - "-c"
+      - "synchronous_commit=off"
+    ports:
+      - "0.0.0.0:5434:5432"   # reachable from cluster pods via host.k3d.internal
+    volumes:
+      # Named docker volume (NOT a ./data bind mount — that broke on a symlink
+      # under the project's POSIX ACL, same as EthioEMR). The dump is streamed in
+      # over stdin by scripts/restore.sh once the container is healthy.
+      - elmis_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ELMIS_DB_USER:-elmis} -d ${ELMIS_DB_NAME:-elmis}"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [elmis_net]
+
+networks:
+  elmis_net:
+    driver: bridge
+
+volumes:
+  elmis_db_data:

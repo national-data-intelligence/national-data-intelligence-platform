@@ -41,7 +41,7 @@ class Config:
             climate_timeout=int(_env("CLIMATE_TIMEOUT", "60")),
             climate_initial_updated_since=_env("CLIMATE_INITIAL_UPDATED_SINCE", ""),
             climate_dev_max_rows=int(_env("CLIMATE_DEV_MAX_ROWS", "0")),
-            minio_endpoint=_env("MINIO_ENDPOINT", "http://minio-datalake.nhdw.svc.cluster.local:9000"),
+            minio_endpoint=_env("MINIO_ENDPOINT", "http://seaweedfs-s3.nhdw.svc.cluster.local:8333"),
             minio_region=_env("MINIO_REGION", "et-addis-1"),
             minio_access_key=_env("MINIO_ACCESS_KEY", ""),
             minio_secret_key=_env("MINIO_SECRET_KEY", ""),

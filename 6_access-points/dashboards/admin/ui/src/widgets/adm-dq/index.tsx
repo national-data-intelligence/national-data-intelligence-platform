@@ -51,10 +51,8 @@ const SOURCE_META: Record<string, string> = {
 const TOOLS = [
   { label: 'dbt Docs', sub: 'Full interactive lineage DAG',
     href: toolUrl('dbt-docs', '/'), ico: 'i-database' },
-  // The browsable MinIO CONSOLE (:9001), not the S3 API host (minio.* → :9000,
-  // which isn't a web UI and fails to load). See ing-minio-console.
-  { label: 'MinIO Console', sub: 'Browse the raw data lake · nhdw-raw',
-    href: toolUrl('minio-console', '/'), ico: 'i-folder' },
+  // (The MinIO console tile was removed with MinIO on 2026-09-09; SeaweedFS ships no console —
+  //  the lake is browsed through dbt Docs, the DQ manifests and the gateway.)
   { label: 'Airflow', sub: 'Ingestion + build run history',
     href: toolUrl('airflow', '/'), ico: 'i-refresh' },
 ];

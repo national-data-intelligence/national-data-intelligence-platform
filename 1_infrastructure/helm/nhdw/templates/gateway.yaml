@@ -49,11 +49,12 @@ spec:
             - { name: OPS_PG_DATABASE, value: "nhdw_ops" }
             - { name: OPS_PG_USER,    value: "ops_gateway" }
             - { name: OPS_PG_PASSWORD, valueFrom: { secretKeyRef: { name: nhdw-gateway-secrets, key: OPS_GATEWAY_PASSWORD } } }
-            - { name: MINIO_ENDPOINT,    value: "http://minio-datalake.{{ $ns }}.svc.cluster.local:9000" }
+            - { name: MINIO_ENDPOINT,    value: "http://seaweedfs-s3.{{ $ns }}.svc.cluster.local:8333" }   # Phase 6 G2
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - { name: MINIO_ACCESS_KEY,  valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER     } } }
             - { name: MINIO_SECRET_KEY,  valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MLFLOW_URL,        value: "http://mlflow.{{ $ns }}.svc.cluster.local:5000" }
-            - { name: MINIO_PUBLIC_ENDPOINT, value: "https://minio.{{ .Values.hostBase }}" }
+            - { name: MINIO_PUBLIC_ENDPOINT, value: "https://s3.{{ .Values.hostBase }}" }
             - { name: WORKSPACE_PROFILES_PATH, value: "/app/config/profiles.yaml" }
             - { name: JUPYTERHUB_URL, value: "http://jupyterhub.{{ $ns }}.svc.cluster.local:8081" }
             - name: JUPYTERHUB_API_TOKEN

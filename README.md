@@ -77,7 +77,7 @@ looking. The public portal needs no login.
 0_external/        source-system replicas + restore scripts
 1_infrastructure/  Kubernetes manifests (kustomize) — the declarative definition
 2_pipelines/       dbt projects (staging → vault → marts) + the lake→warehouse bridge
-3_storage/         Postgres, ClickHouse, MinIO, Trino — schemas and init
+3_storage/         Postgres, ClickHouse, SeaweedFS (object store), Trino — schemas and init
 6_access-points/   the API gateway + the five dashboard SPAs + tool gateway
 7_security/        Keycloak, OPA, OpenBao — identity, policy, secrets
 bundle/            everything that brings the system up from zero: scripts, seeds, docs

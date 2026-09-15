@@ -15,7 +15,7 @@ Each one is a real instance of the real software, seeded to a demoable state:
 - **MFR** — the Master Facility Registry, exposed over FHIR.
 - **Climate** — a weather/climate feed used for outbreak signals.
 
-Ingestors read from those sources and land the data, untyped, in a MinIO object
+Ingestors read from those sources and land the data, untyped, in a SeaweedFS (S3-compatible) object
 lake. From there ClickHouse stages it, a bridge moves it into Postgres, and a dbt
 project builds two layers: a Data Vault (hubs, links, satellites) that keeps an
 insert-only history, and a set of `bi_*` marts that are the serving layer the
@@ -43,7 +43,7 @@ routes the `*.127.0.0.1.nip.io` hosts to the services.
 ## The pieces
 
 - **Storage** — Postgres (the warehouse and the operational databases),
-  ClickHouse (staging), MinIO (the lake and an artifact store), and Trino as a
+  ClickHouse (staging), SeaweedFS (the lake and an artifact store), and Trino as a
   federating query engine over them.
 - **Pipeline** — the per-source ingestors, the three dbt projects, and the
   ClickHouse-to-Postgres bridge.

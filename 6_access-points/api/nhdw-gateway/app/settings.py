@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     OPS_PG_PASSWORD: str = ""
 
     # ── MinIO ──
-    MINIO_ENDPOINT: str = "http://minio-datalake:9000"
+    MINIO_ENDPOINT: str = "http://seaweedfs-s3:8333"   # SeaweedFS S3 gateway (env var name kept for compatibility)
     MINIO_PUBLIC_ENDPOINT: str = "http://127.0.0.1:9100"
     MINIO_ACCESS_KEY: str = ""
     MINIO_SECRET_KEY: str = ""

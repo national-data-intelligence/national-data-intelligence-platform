@@ -20,39 +20,20 @@ export PATH="$HOME/.local/bin:$PATH"
 
 echo "== restore-state: applying packed runtime state =="
 
-# ── 1. MinIO artifacts first (DB rows reference these objects) ───────────────
-# Host-side BUNDLED mc binary against a short-lived port-forward. Never docker:
-# on Docker Desktop/WSL2 a container (even --network=host) lives in the Desktop
-# VM and cannot reach a port-forward bound on the WSL host — only the host can.
+# ── 1. object-store artifacts first (DB rows reference these objects) ─────────
+# Phase 6 (2026-09-09): restored INTO SeaweedFS via bundle/scripts/lib/objstore.sh
+# (bundled host-side mc + port-forward). The packed directory is still
+# state/minio/nhdw-artifacts — the bundle format did not change.
 if [ -d "$STATE/minio/nhdw-artifacts" ]; then
-  MC="$REPO/bundle/bin/mc"
-  if [ ! -x "$MC" ]; then
-    echo "  ! bundle/bin/mc missing — falling back to NETWORK download (FIX THE BUNDLE)" >&2
-    mkdir -p "$REPO/bundle/bin"
-    curl -fsSL --max-time 120 -o "$MC" https://dl.min.io/client/mc/release/linux-amd64/mc \
-      && chmod +x "$MC" || { echo "  ! mc unavailable — MinIO artifact restore SKIPPED" >&2; MC=""; }
-  fi
-  MUSER=$(kubectl -n "$NS" get secret minio-secrets -o jsonpath='{.data.ROOT_USER}' 2>/dev/null | base64 -d)
-  MPW=$(kubectl -n "$NS" get secret minio-secrets -o jsonpath='{.data.ROOT_PASSWORD}' 2>/dev/null | base64 -d)
-  for i in $(seq 1 24); do
-    kubectl -n "$NS" get pods -l app=minio-datalake -o jsonpath='{.items[0].status.phase}' 2>/dev/null | grep -q Running && break
-    sleep 5
-  done
-  kubectl -n "$NS" port-forward svc/minio-datalake 19000:9000 >/dev/null 2>&1 &
-  PF=$!
-  for i in $(seq 1 12); do
-    curl -s -o /dev/null --max-time 2 http://127.0.0.1:19000/minio/health/live && break
-    sleep 2
-  done
-  if [ -n "$MC" ]; then
-    MC_CONFIG_DIR=$(mktemp -d)
-    "$MC" --config-dir "$MC_CONFIG_DIR" alias set L http://127.0.0.1:19000 "$MUSER" "$MPW" >/dev/null \
-      && { "$MC" --config-dir "$MC_CONFIG_DIR" mb --ignore-existing L/nhdw-artifacts >/dev/null 2>&1
-           "$MC" --config-dir "$MC_CONFIG_DIR" mirror --quiet --overwrite "$STATE/minio/nhdw-artifacts" L/nhdw-artifacts; } \
-      && echo "  ✓ MinIO artifacts restored" || echo "  ! MinIO artifact restore failed" >&2
-    rm -rf "$MC_CONFIG_DIR"
-  fi
-  kill $PF 2>/dev/null
+  . "$REPO/bundle/scripts/lib/objstore.sh"
+  if objstore_mc && objstore_creds; then
+    objstore_pf 19000
+    objstore_alias \
+      && { "$MC" --config-dir "$OS_MC_CFG" mb --ignore-existing L/nhdw-artifacts >/dev/null 2>&1
+           "$MC" --config-dir "$OS_MC_CFG" mirror --quiet --overwrite "$STATE/minio/nhdw-artifacts" L/nhdw-artifacts; } \
+      && echo "  ✓ artifacts restored into $OBJSTORE_SVC" || echo "  ! artifact restore failed" >&2
+    objstore_pf_stop
+  else echo "  ! mc or object-store creds unavailable — artifact restore SKIPPED" >&2; fi
 fi
 
 # ── 2. ops databases — FAST-BOOT ONLY (a warm-start CACHE, not truth) ─────────

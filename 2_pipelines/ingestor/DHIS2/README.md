@@ -85,7 +85,8 @@ OK  manifest: s3://nhdw-raw/dhis2/smoke_test/year=YYYY/month=MM/day=DD/_manifest
 After running, clean up the test artifact:
 
 ```bash
-docker exec minio-datalake mc rm --recursive --force local/nhdw-raw/dhis2/smoke_test/
+# via bundle/scripts/lib/objstore.sh (bundled mc + port-forward):
+"$MC" --config-dir "$OS_MC_CFG" rm --recursive --force L/nhdw-raw/dhis2/smoke_test/
 ```
 
 ## Configuration knobs
@@ -99,7 +100,7 @@ All env-driven, see `.env.example` for the canonical list.
 | `DHIS2_PAGE_SIZE` | `200` | Page size for metadata endpoints. |
 | `DHIS2_INITIAL_LAST_UPDATED` | `2020-01-01` | Floor watermark for the first `data-value-sets` run. |
 | `DHIS2_TIMEOUT` | `120` | HTTP timeout (seconds). |
-| `MINIO_ENDPOINT` | `http://minio-datalake:9000` | In-network MinIO. |
+| `MINIO_ENDPOINT` | `http://seaweedfs-s3.nhdw.svc.cluster.local:8333` | In-cluster SeaweedFS S3 gateway. |
 | `MINIO_ACCESS_KEY` | `nhdw_ingestor` | Must match data-lake `INGESTOR_ACCESS_KEY`. |
 | `MINIO_SECRET_KEY` | (changeme) | Must match data-lake `INGESTOR_SECRET_KEY`. |
 | `MINIO_RAW_BUCKET` | `nhdw-raw` | |

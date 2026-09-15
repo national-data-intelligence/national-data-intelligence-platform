@@ -138,4 +138,20 @@ tables:
     drop:
       - telecom  # Facility contact JSON (phone/fax/email per ingestor docs); gray-zone default DROP since it
       - raw_resource  # Whole-record FHIR Organization JSON blob that embeds every field including telecom, so it 
-
+  # ── elmis_hist (OpenLMIS family, lane 2; no patient-level data — facility identity is governed at display) ──
+  elmis_hist/reference_geographic_level: { drop: [] }
+  elmis_hist/reference_geographic_zone: { drop: [] }
+  elmis_hist/reference_facility_type: { drop: [] }
+  elmis_hist/reference_facility: { drop: [] }
+  elmis_hist/reference_product_category: { drop: [] }
+  elmis_hist/reference_product_form: { drop: [] }
+  elmis_hist/reference_product_group: { drop: [] }
+  elmis_hist/reference_dosage_unit: { drop: [] }
+  elmis_hist/reference_product: { drop: [] }
+  elmis_hist/reference_programme: { drop: [] }
+  elmis_hist/reference_programme_product: { drop: [] }
+  elmis_hist/reference_processing_schedule: { drop: [] }
+  elmis_hist/reference_reporting_period: { drop: [] }
+  elmis_hist/reference_facility_programme_schedule: { drop: [] }
+  elmis_hist/history_requisition: { drop: [] }
+  elmis_hist/history_requisition_line: { drop: [] }

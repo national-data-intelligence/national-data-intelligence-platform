@@ -113,33 +113,18 @@ spec:
     - host: airflow.127.0.0.1.nip.io
       http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: airflow, port: { number: 8080 } } } } ] }
 ---
-# MinIO S3 API — needed ONLY for gateway-presigned browser downloads
+# Object-store S3 API (SeaweedFS) — needed ONLY for gateway-presigned browser downloads
 # (ml result CSVs, exports, artifact downloads). The gateway signs against
 # MINIO_PUBLIC_ENDPOINT (this host); data-plane access stays gateway-mediated.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
-metadata: { name: ing-minio, namespace: nhdw }
+metadata: { name: ing-s3, namespace: nhdw }
 spec:
   ingressClassName: traefik
-  tls: [ { hosts: [ minio.127.0.0.1.nip.io ], secretName: nhdw-wildcard-tls } ]
+  tls: [ { hosts: [ s3.127.0.0.1.nip.io ], secretName: nhdw-wildcard-tls } ]
   rules:
-    - host: minio.127.0.0.1.nip.io
-      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: minio-datalake, port: { number: 9000 } } } } ] }
----
-# MinIO web CONSOLE (:9001) — the browsable object-browser the operator opens
-# from Admin → Quality & lineage to inspect the raw data lake. The minio.*
-# host above is the S3 API (:9000) and is NOT browsable — pointing a "browse"
-# link there fails ("site can't be reached"). This routes a distinct host to
-# the console port the Deployment already serves (--console-address :9001).
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata: { name: ing-minio-console, namespace: nhdw }
-spec:
-  ingressClassName: traefik
-  tls: [ { hosts: [ minio-console.127.0.0.1.nip.io ], secretName: nhdw-wildcard-tls } ]
-  rules:
-    - host: minio-console.127.0.0.1.nip.io
-      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: minio-datalake, port: { number: 9001 } } } } ] }
+    - host: s3.127.0.0.1.nip.io
+      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: seaweedfs-s3, port: { number: 8333 } } } } ] }
 ---
 # Observability UIs (#81) — operator-facing. Prometheus expression browser +
 # Alertmanager, now fronted by their tool-gates (nhdw/tool-gate): per-role OIDC

@@ -47,5 +47,7 @@ COPY runner.py /app/runner.py
 COPY lib/      /app/lib/
 
 ENV PYTHONPATH=/app
+# botocore#3755 (Phase 6 step 0): both launchers (DAGs and the gateway) inherit this default.
+ENV BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE=true
 ENTRYPOINT ["python3", "/app/runner.py"]
 CMD ["--help"]

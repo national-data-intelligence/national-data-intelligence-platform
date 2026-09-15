@@ -1,7 +1,7 @@
 # bundle/docs — served operator docs (synced copy, do not edit here)
 
 These are the operator-facing docs the system serves in the **admin Documentation
-page** (published to the private MinIO `nhdw-docs` bucket at boot by
+page** (published to the private object-store `nhdw-docs` bucket (SeaweedFS) at boot by
 `bundle/scripts/seed-docs.sh`). Keeping them **inside the bundle** is what makes
 the bundle self-contained — nothing outside `bundle/` is a seed input.
 
