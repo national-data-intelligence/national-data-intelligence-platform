@@ -18,10 +18,10 @@ DASH_CTX="$REPO/6_access-points/dashboards"
 # component map:  <path-prefix> | <image> | <dockerfile (rel to context)> | <context> | <deploy>
 COMPONENTS=(
   "6_access-points/dashboards/internal-bi|nhdw/internal-bi:1.0.0|internal-bi/Dockerfile|$DASH_CTX|internal-bi"
-  "6_access-points/dashboards/public|nhdw/public-dashboard:1.0.0|public/Dockerfile|$DASH_CTX|public-dashboard"
+  "6_access-points/dashboards/public|nhdw/public-dashboard:1.0.0|Dockerfile|$DASH_CTX/public|public-dashboard"
   "6_access-points/dashboards/admin|nhdw/admin:1.0.0|admin/Dockerfile|$DASH_CTX|admin"
   "6_access-points/dashboards/workshop|nhdw/workshop:1.0.0|workshop/Dockerfile|$DASH_CTX|workshop"
-  "6_access-points/api/nhdw-gateway|nhdw/nhdw-gateway:1.0.0|Dockerfile|$REPO/6_access-points/api/nhdw-gateway|nhdw-gateway"
+  "6_access-points/api/nhdw-gateway|nhdw/gateway:1.0.0|Dockerfile|$REPO/6_access-points/api/nhdw-gateway|nhdw-gateway"
 )
 # paths whose change triggers a catalog/RBAC reseed (no image rebuild)
 RESEED_GLOBS=("6_access-points/dashboards/internal-bi/catalog" "bundle/seed-pack/app/security" "6_access-points/dashboards/public/static/articles")
