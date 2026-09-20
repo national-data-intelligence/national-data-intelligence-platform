@@ -66,15 +66,28 @@
     dest: /etc/apt/keyrings/docker.asc
     mode: "0644"
 
-- name: Docker apt repository
+# OWN the source file rather than appending to it. apt_repository adds a line
+# and leaves any pre-existing one alone, so a host that already had Docker's
+# repo (set up by hand with the older /etc/apt/keyrings/docker.gpg convention)
+# ends up with TWO entries for the same source and different Signed-By values —
+# apt then refuses to read ANY source: "Conflicting values set for option
+# Signed-By ... docker.gpg != docker.asc". This host is exactly that case, and
+# from-bare provisioning must be able to run against a machine that is not bare.
+- name: Docker apt repository (single owned entry)
   become: true
-  ansible.builtin.apt_repository:
-    repo: >-
-      deb [arch={{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}
-      signed-by=/etc/apt/keyrings/docker.asc]
-      https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
-    filename: docker
-    state: present
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/docker.list
+    mode: "0644"
+    content: |
+      deb [arch={{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+
+# Debian/Ubuntu also read .sources files; a legacy deb822 entry for the same
+# repo would conflict with the line above just as a duplicate .list would.
+- name: Remove a conflicting deb822 Docker source, if any
+  become: true
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/docker.sources
+    state: absent
 
 - name: Install Docker engine + compose plugin
   become: true
