@@ -15,6 +15,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import * as dq from '../../api/dq';
+import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKit';
 import '../../styles/dq.css';
 
 // Operator-tool hosts follow the host this admin SPA is served on (admin.<base> -> <sub>.<base>),
@@ -156,6 +157,10 @@ function DQ() {
   const [dims,       setDims]       = useState<dq.Dimensions | null>(null);
   const [recon,      setRecon]      = useState<dq.ReconResp | null>(null);
   const [compliance, setCompliance] = useState<dq.Compliance | null>(null);
+  const [flagsResp,  setFlagsResp]  = useState<dq.FlagsResp | null>(null);
+  const [kpi,        setKpi]        = useState<dq.DqKpi | null>(null);
+  const [detectBusy, setDetectBusy] = useState(false);
+  const [detectMsg,  setDetectMsg]  = useState<string | null>(null);
   const [errs,       setErrs]       = useState<string[]>([]);
 
   const [ackBusy,  setAckBusy]  = useState<Record<string, boolean>>({});
@@ -169,10 +174,13 @@ function DQ() {
         dq.getSummary(), dq.getTests('fail', 25), dq.getTests('warn', 25),
         dq.getLineage(), dq.getSources(), dq.getIngestion(),
         dq.getDimensions(), dq.getReconciliation(), dq.getCompliance(),
+        dq.getFlags('open', 50, 0), dq.getKpi(),
       ]);
       if (cancelled) return;
       const nextErrs: string[] = [];
-      const [s, f, w, l, src, ing, dm, rc, cp] = settled;
+      const [s, f, w, l, src, ing, dm, rc, cp, fl, kp] = settled;
+      if (fl.status === 'fulfilled') setFlagsResp(fl.value); // absent pre-38 clusters degrade to the note
+      if (kp.status === 'fulfilled') setKpi(kp.value);
       if (s.status  === 'fulfilled') setSummary(s.value);       else nextErrs.push(`summary: ${s.reason}`);
       if (f.status  === 'fulfilled') setFails(f.value);
       if (w.status  === 'fulfilled') setWarns(w.value);
@@ -437,7 +445,7 @@ function DQ() {
             <div className="dqc-list">
               {DIM_ORDER.map(d => {
                 const v = dims?.dimensions?.[d.key] ?? null;
-                const tone = pctTone(v);
+                const tone = pctTone(v, summary?.bands?.scorecard_good ?? 90, summary?.bands?.scorecard_watch ?? 75);
                 return (
                   <div className={`dqc-dim ${tone}`} key={d.key} title={dims?.basis?.[d.key] ?? d.hint}>
                     <span className="dqc-dim-name">{d.label}</span>
@@ -458,7 +466,7 @@ function DQ() {
             {recon && recon.checks.length > 0 ? (
               <div className="dqc-list">
                 {recon.checks.map(c => {
-                  const tone = pctTone(c.agreement_pct, 85, 60);
+                  const tone = pctTone(c.agreement_pct, summary?.bands?.agreement_good ?? 85, summary?.bands?.agreement_watch ?? 60);
                   return (
                     <div className="dqc-row" key={c.check}>
                       <div className="dqc-row-head">
@@ -489,6 +497,19 @@ function DQ() {
           </div>
         </div>
       </div>
+
+      {/* ═══ Incidents & governance KPIs (durable record — batch 2) ═══ */}
+      <IncidentsSection flagsResp={flagsResp} kpi={kpi}
+        onDetect={async () => {
+          setDetectBusy(true); setDetectMsg(null);
+          try {
+            const r = await dq.runDetect();
+            setDetectMsg(`ran in ${r.latency_ms} ms · ${r.findings} findings · ${r.open_flags} open`);
+            const [fl2, kp2] = await Promise.all([dq.getFlags('open', 50, 0), dq.getKpi()]);
+            setFlagsResp(fl2); setKpi(kp2);
+          } catch (e) { setDetectMsg(`detection failed: ${e instanceof Error ? e.message : e}`); }
+          finally { setDetectBusy(false); }
+        }} detectBusy={detectBusy} detectMsg={detectMsg} />
 
       {/* ═══ dbt tests ═══ */}
       <div className="page-section">
@@ -610,6 +631,95 @@ function DQ() {
     </section>
   );
 }
+
+function IncidentsSection({ flagsResp, kpi, onDetect, detectBusy, detectMsg }: {
+  flagsResp: dq.FlagsResp | null; kpi: dq.DqKpi | null;
+  onDetect: () => void; detectBusy: boolean; detectMsg: string | null;
+}) {
+  const rows = flagsResp?.flags ?? null;
+  const kit = useTableKit(rows ?? [], {
+    pageSize: 8,
+    search: r => `${r.source} ${r.table_name} ${r.error_class} ${r.description}`,
+    sortVals: {
+      raised_at: r => r.raised_at, source: r => r.source,
+      error_class: r => r.error_class, severity: r => r.severity,
+    },
+    initialSort: { key: 'raised_at', dir: 'desc' },
+  });
+  const fmtH = (h: number | null) => (h === null || h === undefined ? '—' : `${h}h`);
+  return (
+    <div className="card dq-card">
+      <div className="dq-card-head">
+        <h3>Incidents &amp; governance KPIs</h3>
+        <span className="muted">the durable DQ record — every raise, ack and resolution is kept and measured</span>
+        <button className="btn btn-sm" onClick={onDetect} disabled={detectBusy}>
+          {detectBusy ? 'Running…' : 'Run detection now'}
+        </button>
+      </div>
+      {detectMsg && <p className="dq-note">{detectMsg}</p>}
+      {/* KPI strip — nulls render as —, never as 0 (an unmeasured latency is not a fast one) */}
+      <div className="grid grid-4 dq-kpis">
+        <div className={`kpi kpi-${(flagsResp?.counts?.open ?? 0) > 0 ? 'watch' : 'good'}`}>
+          <div className="kpi-lbl">Open incidents</div>
+          <div className="kpi-val">{flagsResp ? (flagsResp.counts.open ?? 0) : '—'}</div>
+          <div className="kpi-delta">{kpi ? `${kpi.reopened_fingerprints} re-opened all-time` : ''}</div>
+        </div>
+        <div className="kpi kpi-info">
+          <div className="kpi-lbl">Time to acknowledge</div>
+          <div className="kpi-val">{kpi ? fmtH(kpi.avg_hours_to_ack) : '—'}</div>
+          <div className="kpi-delta">avg, raise → first ack</div>
+        </div>
+        <div className="kpi kpi-info">
+          <div className="kpi-lbl">Time to resolve</div>
+          <div className="kpi-val">{kpi ? fmtH(kpi.avg_hours_to_resolve) : '—'}</div>
+          <div className="kpi-delta">{kpi ? `${kpi.resolved_total} resolved all-time` : ''}</div>
+        </div>
+        <div className={`kpi kpi-${(kpi?.steward?.backlog ?? 0) > 100 ? 'watch' : 'info'}`}>
+          <div className="kpi-lbl">Steward backlog</div>
+          <div className="kpi-val">{kpi?.steward?.backlog ?? '—'}</div>
+          <div className="kpi-delta">{kpi?.steward ? `${kpi.steward.decisions ?? 0} decisions made` : 'MDM stores unavailable'}</div>
+        </div>
+      </div>
+      {rows === null ? (
+        <p className="dq-note">Incident queue not yet available on this cluster (init 38 / gateway update pending).</p>
+      ) : rows.length === 0 ? (
+        <p className="dq-note">No open incidents — the detector last found nothing above thresholds.</p>
+      ) : (
+        <>
+          <TableToolbar kit={kit} placeholder="filter incidents…" />
+          <table className="dq-src-table">
+            <thead>
+              <tr>
+                <SortTh kit={kit} k="raised_at">Raised</SortTh>
+                <SortTh kit={kit} k="source">Source</SortTh>
+                <th>Table</th>
+                <SortTh kit={kit} k="error_class">Class</SortTh>
+                <SortTh kit={kit} k="severity">Severity</SortTh>
+                <th>Description</th>
+                <th>History</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kit.pageRows.map(r => (
+                <tr key={r.id}>
+                  <td title={r.raised_at}>{fmtAgo(r.raised_at)}</td>
+                  <td>{r.source}</td>
+                  <td className="mono">{r.table_name}</td>
+                  <td><span className="dq-chip">{r.error_class}</span></td>
+                  <td><span className={`dq-chip dq-chip-${r.severity === 'error' ? 'alert' : r.severity === 'warn' ? 'watch' : 'flat'}`}>{r.severity}</span></td>
+                  <td className="dq-desc">{r.description}</td>
+                  <td className="muted">{r.events} events · {r.acks} acks</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <TablePager kit={kit} />
+        </>
+      )}
+    </div>
+  );
+}
+
 
 /* ── widget-module registration (admin catalog runtime) ─────────────────
    Catalog-collapse (owner 2026-07-07): one organism = ONE grantable widget; this page's single catalog widget id is this module. */
