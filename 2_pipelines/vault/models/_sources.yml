@@ -134,3 +134,14 @@ sources:
         description: "Canonical concepts (programmes, commodities, regions, tiers, diseases, indicators)."
       - name: source_to_concept_map
         description: "Source-code → canonical-concept crosswalk (replaces regex/dict/CASE mappings)."
+
+  # ── nhdw_vault_governance — steward MDM decisions (read-only seam) ─────────
+  # postgres_fdw foreign table over nhdw_ops ops_governance.mdm_match_decision
+  # (DDL: 36_mdm_decisions_read.sql; written ONLY by the steward console via
+  # the gateway). v_facility_resolution LEFT JOINs the CURRENT accepted
+  # decisions; an empty log leaves every conformed key byte-identical.
+  - name: vault_governance
+    schema: nhdw_vault_governance
+    tables:
+      - name: mdm_match_decision
+        description: "Append-only bitemporal steward verdicts mapping a source record to its master conformed_bk."

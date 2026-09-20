@@ -28,6 +28,10 @@ vars:
   hash_content_casing: 'upper'
   null_placeholder_string: '^^'
   enable_native_hashes: false
+  # Country world this deployment builds (ET today; ZM etc. later). Filters
+  # the steward MDM decision log and namespaces master_entity_uid — one
+  # context per deployment, cross-context matching forbidden by definition.
+  deployment_context: 'ET'
 
 models:
   nhdw_vault:

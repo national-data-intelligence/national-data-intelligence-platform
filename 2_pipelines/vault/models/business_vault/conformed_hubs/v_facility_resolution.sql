@@ -1,9 +1,14 @@
 /*
-    v_facility_resolution — Master facility resolution (v2), and the
+    v_facility_resolution — Master facility resolution (v3), and the
     AutomateDV stage for hub_facility_conformed + lnk_same_as_facility.
 
-    Strategy (v2 — facility_id-first, normalised-name fallback):
-        1. Extract the shared canonical `facility_id` from each source.
+    Strategy (v3 — steward decision > facility_id > normalised name):
+        0. A CURRENT steward MDM decision (accept/merge in
+           ops_governance.mdm_match_decision, read via the
+           nhdw_vault_governance FDW seam) overrides everything for its
+           source record. Empty log ⇒ identical to v2, byte for byte.
+        1. Otherwise extract the shared canonical `facility_id` from each
+           source.
            After the 2026 source regeneration every source carries it:
              • MFR Organization / Location  → identifier JSON, system =
                  "http://moh.gov.et/identifier/facility"
@@ -122,20 +127,41 @@ unioned AS (
     UNION ALL SELECT * FROM mfr_loc
     UNION ALL SELECT * FROM mfr_org
 ),
+decisions AS (
+    -- CURRENT, in-validity steward verdicts for this deployment context
+    -- (36_mdm_decisions_read.sql: read-only FDW over nhdw_ops; written only
+    -- via the steward console). accept/merge map one source record — keyed
+    -- (source_system, hex(source hub hash)), the pair the MDM matcher also
+    -- emits — onto a master conformed_bk. A steward verdict OVERRIDES the
+    -- deterministic derivation; an EMPTY log leaves this view byte-identical
+    -- to the pre-MDM derivation (the parity contract, verified live).
+    SELECT source_system_code, source_record_key, master_bk
+    FROM {{ source('vault_governance', 'mdm_match_decision') }}
+    WHERE recorded_to IS NULL
+      AND decision IN ('accept', 'merge')
+      AND master_bk IS NOT NULL
+      AND deployment_context = '{{ var("deployment_context", "ET") }}'
+      AND entity_class_code = 'facility'
+      AND CURRENT_DATE >= valid_from AND CURRENT_DATE < valid_to
+),
 resolved AS (
     SELECT
-        source_hk AS hk_source_facility,
-        source_system,
-        source_name,
-        source_code,
-        facility_id,
-        norm_name,
-        COALESCE(facility_id, norm_name) AS conformed_bk,
-        CASE WHEN facility_id IS NOT NULL THEN 'facility_id'
+        u.source_hk AS hk_source_facility,
+        u.source_system,
+        u.source_name,
+        u.source_code,
+        u.facility_id,
+        u.norm_name,
+        COALESCE(d.master_bk, u.facility_id, u.norm_name) AS conformed_bk,
+        CASE WHEN d.master_bk IS NOT NULL   THEN 'steward_decision'
+             WHEN u.facility_id IS NOT NULL THEN 'facility_id'
              ELSE 'norm_name' END AS match_strategy,
-        load_ts
-    FROM unioned
-    WHERE COALESCE(facility_id, norm_name) <> ''
+        u.load_ts
+    FROM unioned u
+    LEFT JOIN decisions d
+      ON  d.source_system_code = u.source_system
+      AND d.source_record_key  = encode(u.source_hk, 'hex')
+    WHERE COALESCE(d.master_bk, u.facility_id, u.norm_name) <> ''
 ),
 keyed AS (
     SELECT

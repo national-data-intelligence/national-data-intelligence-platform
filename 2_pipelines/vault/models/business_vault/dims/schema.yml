@@ -15,6 +15,16 @@ models:
         description: 'Conformed BK (shared FAC-… id; normalised name for name-matched rows).'
         tests:
           - not_null
+      - name: master_entity_uid
+        description: 'Stable master identity — UUIDv5 over the conformed BK in the per-context namespace.'
+        tests:
+          - not_null
+          - unique
+      - name: mdm_state
+        description: 'conformed (>1 source system) | single_source — provenance marker for downstream surfaces.'
+        tests:
+          - not_null
+          - accepted_values: { values: ['conformed', 'single_source'] }
   - name: dim_period
     description: 'One row per (period_id, period_grain) with calendar bounds from sat_dhis2_period_resolved.'
     columns:
