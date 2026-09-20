@@ -8,6 +8,57 @@ Entries are newest-first.
 
 ---
 
+## 2026-09-21 · The from-bare provision path had never been run
+
+`provision.yml` (ansible `site.yml`) is what the working agreement calls the
+cold-boot path. Running it surfaced six defects in a row, none of them in the
+platform — all in the provisioning itself. Each failed before doing damage.
+
+**1. Missing ansible collections.** `couldn't resolve module/action
+'community.general.modprobe'`. The workflow installs `ansible-core`, which ships
+only `ansible.builtin`; the roles use `community.general` (modprobe) and
+`ansible.posix` (sysctl). → declared in `1_infrastructure/ansible/requirements.yml`
+and installed by the workflow.
+
+**2. `ansible-galaxy` not on PATH.** pip `--user` installs into `~/.local/bin`,
+which the runner's PATH lacks. The playbook step already used an explicit path;
+the new step didn't. → call it the same way.
+
+**3. Docker apt source conflict.** `E: Conflicting values set for option Signed-By
+... docker.gpg != docker.asc`. `apt_repository` ADDS a line and leaves existing
+ones alone, so a host that already had Docker's repo (the older `.gpg` keyring
+convention) ended up with two entries for one source — and apt then refuses to
+read ANY source. → the role writes `docker.list` itself, as a single owned entry.
+
+**4. …and that repair ran too late.** Fixing the file after the base-package
+install meant apt was already unusable, so provisioning failed even earlier, on
+`apt install curl`. → clear conflicting sources BEFORE the first apt operation;
+write the owned entry later. Converges either host state.
+
+**5. `nhdw_helm` pointed at a gitignored path.** Every helm task died with `rc=2`
+and *empty* output — the shell's "No such file or directory". `nhdw_helm` is
+`bundle/bin/helm`, `bundle/bin/` is gitignored, and a fresh checkout has no such
+file, while the role installs helm to `/usr/local/bin`. The variable and the
+install disagreed. → resolve at run time: the bundled binary when the bundle
+genuinely ships one (the airgapped path), else the system install.
+
+**6. Fixed `/tmp` log names collide between users.** Six images were reported
+FAILED while building perfectly: `build-images.sh` writes
+`/tmp/build-<image>.log`, `/tmp` is sticky, and those files belonged to another
+operator who had run the script earlier — the second user cannot overwrite them,
+the redirect fails, and the build is marked failed for a reason unrelated to the
+build. → both `build-images.sh` and `ci-redeploy.sh` use a private `mktemp -d`
+per run, and log names no longer carry the tag's colon.
+
+**The pattern worth remembering.** Three of these six (5, 6, and the
+`bundle/bin/mc` verifier check fixed the same day) are the same mistake: *a
+gitignored, derived artifact assumed to be present*. On the machine where someone
+once created it by hand everything works; on a fresh checkout nothing does. When
+a path lives under a gitignored directory, something must CREATE it or the code
+must tolerate its absence.
+
+---
+
 ## 2026-09-21 · CI/CD hardening (the data-layer epic)
 
 Eight deploy failures in one day, each with a distinct cause. Worth reading as a
