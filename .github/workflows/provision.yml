@@ -47,7 +47,9 @@ jobs:
           # ansible-core ships only ansible.builtin; the provisioning roles use
           # community.general (modprobe) and ansible.posix (sysctl). Without
           # these the playbook dies on its first real task.
-          ansible-galaxy collection install -r 1_infrastructure/ansible/requirements.yml
+          # explicit path: pip --user installs into ~/.local/bin, which is not
+          # on the runner's PATH (the playbook step below calls it the same way)
+          ~/.local/bin/ansible-galaxy collection install -r 1_infrastructure/ansible/requirements.yml
 
       # Only the fleet path needs SSH to the agents; single-node runs on the runner host itself.
       - name: Load SSH key (fleet only)
