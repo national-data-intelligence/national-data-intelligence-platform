@@ -324,6 +324,13 @@ fi
 step "5.5 · packed state (bundle/state — restored before seeds, if present)"
 bash "$SCRIPTS/restore-state.sh"
 
+# The reference vocabulary must exist BEFORE the dbt-vault build: the business-
+# vault resolution views JOIN nhdw_ref.source_to_concept_map at build time
+# (parity-first migrations — see 3_storage/postgres/init/34_ref_vocab.sql).
+step "5.7 · reference vocabulary (nhdw_ref crosswalks + concepts)"
+bash "$SCRIPTS/seed-ref-vocab.sh" \
+  || { echo "✗ nhdw_ref seed FAILED — the vault build would mis-resolve; aborting."; exit 1; }
+
 # ─── 6. seed the DATA tiers (sources → ingestors → dbt pipeline) ────────────
 step "6 · DATA seed (sources → ingestors → dbt pipeline)"
 
