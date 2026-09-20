@@ -74,6 +74,8 @@ spec:
               valueFrom: { secretKeyRef: { name: superset-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             - name: JUPYTERHUB_OIDC_SECRET
               valueFrom: { secretKeyRef: { name: jupyterhub-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: OPENMETADATA_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             # tool-gate confidential clients — one secret per gate, MUST match the
             # gate Deployment's OIDC_CLIENT_SECRET (tool-gates.yaml). optional:true
             # → absent ⇒ setup-keycloak skips that gate client (its SSO stays off).

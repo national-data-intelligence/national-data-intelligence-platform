@@ -22,6 +22,7 @@
   (dict "name" "ing-prometheus"    "sub" "prometheus"    "svc" "prometheus-gate"   "port" 80)
   (dict "name" "ing-alertmanager"  "sub" "alertmanager"  "svc" "alertmanager-gate" "port" 80)
   (dict "name" "ing-jupyter"       "sub" "jupyter"       "svc" "jupyterhub"        "port" 8000)
+  (dict "name" "ing-openmetadata"  "sub" "openmetadata"  "svc" "openmetadata"      "port" 8585)
 }}
 ---
 apiVersion: networking.k8s.io/v1

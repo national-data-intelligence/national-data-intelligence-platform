@@ -74,6 +74,10 @@ const TOOLS: Array<{ name: string; ico: string; desc: string; url: string; auth:
   // marts via Trino). Same cross-realm gate as Jupyter — its home is the workshop.
   { name: 'Superset',      ico: 'i-chart-bar', desc: 'Self-service SQL Lab + no-code chart/dashboard building over the marts (Trino).', url: toolUrl('superset', '/login/keycloak'), auth: 'OIDC · Keycloak (moh-staff)', roles: ['R-SUPER'] },
   { name: 'Keycloak',      ico: 'i-lock',     desc: 'Identity provider admin console: realms, clients, users and identity-provider wiring.', url: toolUrl('keycloak', '/'), auth: 'Keycloak admin' },
+  // OpenMetadata is a moh-staff tool (steward/catalog audience) — same
+  // cross-realm posture as Jupyter/Superset; R-STEW gains admin access with the
+  // stewardship console (data-layer plan), R-OPS-ADM/R-SUPER may inspect now.
+  { name: 'OpenMetadata',  ico: 'i-database', desc: 'Data catalog: searchable assets, business glossary, column-level lineage and classification tags across lake, staging, vault and marts.', url: toolUrl('openmetadata', '/'), auth: 'OIDC \u00b7 Keycloak (moh-staff)', roles: ['R-STEW', 'R-OPS-ADM', 'R-SUPER'] },
 ];
 
 /** Minimal, dependency-free markdown → HTML for the in-app doc viewer. Handles

@@ -172,6 +172,8 @@ JUPYTERHUB_OIDC_SECRET = os.environ.get("JUPYTERHUB_OIDC_SECRET", "").strip()
 # Confidential OIDC secret for Superset's native FAB Keycloak login (moh-staff —
 # the analyst audience; #81). Same split-URL/native-OIDC pattern as Airflow.
 SUPERSET_OIDC_SECRET = os.environ.get("SUPERSET_OIDC_SECRET", "").strip()
+# OpenMetadata native OIDC (moh-staff — steward/catalog audience).
+OPENMETADATA_OIDC_SECRET = os.environ.get("OPENMETADATA_OIDC_SECRET", "").strip()
 # Confidential OIDC secret for the MinIO console's native OIDC (privileged-ops).
 # The console runs AssumeRoleWithWebIdentity against this client → temporary MinIO
 # creds mapped to the consoleAdmin policy, so an authenticated operator SSOs in.
@@ -247,6 +249,12 @@ TOOL_CLIENTS = [
     # /oauth-authorized/keycloak (covered by base + /*). Same pattern as Airflow.
     {"realm": "moh-staff", "client_id": "superset",
      "base": f"https://superset.{_HOST_BASE}", "secret": SUPERSET_OIDC_SECRET},
+    # OpenMetadata native OIDC (moh-staff — steward/catalog audience). OM's
+    # callback is /callback (covered by base + /*). Split-URL posture like
+    # Superset/Airflow: the pod fetches discovery/JWKS from Keycloak's internal
+    # http Service; only the browser redirect uses this public base.
+    {"realm": "moh-staff", "client_id": "openmetadata",
+     "base": f"https://openmetadata.{_HOST_BASE}", "secret": OPENMETADATA_OIDC_SECRET},
 ]
 
 # tool-gate clients — the nhdw/tool-gate reverse proxies (main.py). Same
