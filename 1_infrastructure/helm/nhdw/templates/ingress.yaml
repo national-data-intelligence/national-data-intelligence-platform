@@ -22,8 +22,9 @@
   (dict "name" "ing-prometheus"    "sub" "prometheus"    "svc" "prometheus-gate"   "port" 80)
   (dict "name" "ing-alertmanager"  "sub" "alertmanager"  "svc" "alertmanager-gate" "port" 80)
   (dict "name" "ing-jupyter"       "sub" "jupyter"       "svc" "jupyterhub"        "port" 8000)
-  (dict "name" "ing-openmetadata"  "sub" "openmetadata"  "svc" "openmetadata"      "port" 8585)
+  (dict "name" "ing-openmetadata"  "sub" "openmetadata"  "svc" "openmetadata"      "port" 8585 "if" "openmetadata")
 }}
+{{- if or (not (hasKey $ing "if")) (index $.Values $ing.if).enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -34,6 +35,7 @@ spec:
   rules:
     - host: {{ $ing.sub }}.{{ $h }}
       http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: {{ $ing.svc }}, port: { number: {{ $ing.port }} } } } } ] }
+{{- end }}
 {{- end }}
 ---
 # Headlamp (cluster console) — /k8s + /oauth2gate on the ADMIN host so the
