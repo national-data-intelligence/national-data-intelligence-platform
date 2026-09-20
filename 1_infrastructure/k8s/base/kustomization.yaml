@@ -27,6 +27,9 @@ resources:
   # archived to _archive/2026-07-06/in-cluster-llm/. (WSL2 can't do in-cluster GPU;
   # bare-metal Linux in-cluster GPU is the documented alternative in 0_external/llm/.)
   - mlflow.yaml
+  # metadata plane (catalog/lineage) — OpenMetadata + its OpenSearch backend
+  - opensearch.yaml
+  - openmetadata.yaml
   # orchestrator (ML batch-inference DAG — ml-cronjobs retired 2026-07-03)
   - airflow.yaml
   # dashboards (5)
@@ -111,6 +114,7 @@ configMapGenerator:
       - ../../../3_storage/postgres/init/30_demo_patient_phi.sql
       - ../../../3_storage/postgres/init/31_superset_db.sh
       - ../../../3_storage/postgres/init/23_seaweedfs_filer_db.sh
+      - ../../../3_storage/postgres/init/37_openmetadata_db.sh
 
 
   - name: keycloak-seed-script

@@ -183,3 +183,13 @@ spec:
           - path: /oauth2gate
             pathType: Prefix
             backend: { service: { name: headlamp-gate, port: { number: 80 } } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: ing-openmetadata, namespace: nhdw }
+spec:
+  ingressClassName: traefik
+  tls: [ { hosts: [ openmetadata.127.0.0.1.nip.io ], secretName: nhdw-wildcard-tls } ]
+  rules:
+    - host: openmetadata.127.0.0.1.nip.io
+      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: openmetadata, port: { number: 8585 } } } } ] }

@@ -74,6 +74,17 @@ spec:
               valueFrom: { secretKeyRef: { name: superset-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             - name: JUPYTERHUB_OIDC_SECRET
               valueFrom: { secretKeyRef: { name: jupyterhub-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: OPENMETADATA_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            # Browser-facing base URLs (OIDC single-host convention). WITHOUT these the
+            # script falls back to compose-era localhost defaults and a rerun of this
+            # Job rewrites every client's redirect URIs to them (2026-09-20 incident).
+            # Base carries the dev convention; provisioning rewrites per hostBase,
+            # mirroring helm/templates/keycloak-seed-job.yaml.
+            - { name: PUBLIC_HOST_BASE,      value: "127.0.0.1.nip.io" }
+            - { name: DASH_BASE_INTERNAL_BI, value: "https://internal-bi.127.0.0.1.nip.io" }
+            - { name: DASH_BASE_WORKSHOP,    value: "https://workshop.127.0.0.1.nip.io" }
+            - { name: DASH_BASE_ADMIN,       value: "https://admin.127.0.0.1.nip.io" }
             # tool-gate confidential clients — one secret per gate, MUST match the
             # gate Deployment's OIDC_CLIENT_SECRET (tool-gates.yaml). optional:true
             # → absent ⇒ setup-keycloak skips that gate client (its SSO stays off).

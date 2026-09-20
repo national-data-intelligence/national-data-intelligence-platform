@@ -14,6 +14,7 @@ on:
     paths:
       # app tier
       - '6_access-points/**'
+      - '5_orchestrator/**'                       # DAGs baked into nhdw/airflow
       - 'bundle/seed-pack/app/security/**'
       - '7_security/scripts/**'
       - '7_security/opa/**'                       # policy source → regen + reload

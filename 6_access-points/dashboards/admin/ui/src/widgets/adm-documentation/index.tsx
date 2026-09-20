@@ -57,23 +57,27 @@ function currentRoles(): string[] {
  *  existing privileged-ops session admits silently; `roles`, when present, MUST
  *  mirror that gate's ALLOWED_ROLES so a shown tile never lands on the 403 page
  *  (omitted ⇒ every role that can see this admin page may use the tool). */
-const TOOLS: Array<{ name: string; ico: string; desc: string; url: string; auth: string; roles?: string[] }> = [
-  { name: 'dbt Docs',      ico: 'i-database', desc: 'Model lineage graph, column-level docs and the compiled DAG for every staging, vault and mart model.', url: toolUrl('dbt-docs', `/?realm=${REALM}`), auth: 'OIDC · Keycloak' },
-  { name: 'Airflow',       ico: 'i-refresh',  desc: 'Pipeline & ML batch-inference orchestrator: DAG runs, task logs and schedules.', url: toolUrl('airflow', '/'), auth: 'OIDC · Keycloak' },
+const TOOLS: Array<{ name: string; ico: string; brand?: string; desc: string; url: string; auth: string; roles?: string[] }> = [
+  { name: 'dbt Docs', brand: '/static/assets/brand/dbt.svg',      ico: 'i-database', desc: 'Model lineage graph, column-level docs and the compiled DAG for every staging, vault and mart model.', url: toolUrl('dbt-docs', `/?realm=${REALM}`), auth: 'OIDC · Keycloak' },
+  { name: 'Airflow', brand: '/static/assets/brand/airflow.svg',       ico: 'i-refresh',  desc: 'Pipeline & ML batch-inference orchestrator: DAG runs, task logs and schedules.', url: toolUrl('airflow', '/'), auth: 'OIDC · Keycloak' },
   // MLflow's gate excludes the security-officer role (R-OPS-SEC) — hide the tile
   // for it so it never 403s (gate ALLOWED_ROLES: R-CONS-*, R-OPS-ADM, R-SUPER).
-  { name: 'MLflow',        ico: 'i-microscope', desc: 'Experiment tracking, the model registry and run artifacts for the workshop ML packages.', url: toolUrl('mlflow', `/oauth2gate/login?realm=${REALM}&rd=/`), auth: 'OIDC · Keycloak', roles: ['R-OPS-ADM', 'R-SUPER'] },
-  { name: 'Cluster console (Headlamp)', ico: 'i-tools', desc: 'Raw-Kubernetes control: edit/scale/exec on nhdw workloads (namespace edit), read-only elsewhere.', url: `/oauth2gate/login?realm=${REALM}&rd=/k8s/`, auth: 'OIDC · Keycloak (tool-gate)' },
-  { name: 'Prometheus',    ico: 'i-pulse',    desc: 'Metrics store and query UI for the observability plane the topology page reads from.', url: toolUrl('prometheus', `/oauth2gate/login?realm=${REALM}&rd=/`), auth: 'OIDC · Keycloak' },
-  { name: 'Alertmanager',  ico: 'i-bell',     desc: 'Alert routing and silences for the Prometheus alert rules (see Alert routing page).', url: toolUrl('alertmanager', `/oauth2gate/login?realm=${REALM}&rd=/`), auth: 'OIDC · Keycloak' },
+  { name: 'MLflow', brand: '/static/assets/brand/mlflow.svg',        ico: 'i-microscope', desc: 'Experiment tracking, the model registry and run artifacts for the workshop ML packages.', url: toolUrl('mlflow', `/oauth2gate/login?realm=${REALM}&rd=/`), auth: 'OIDC · Keycloak', roles: ['R-OPS-ADM', 'R-SUPER'] },
+  { name: 'Cluster console (Headlamp)', brand: '/static/assets/brand/kubernetes.svg', ico: 'i-tools', desc: 'Raw-Kubernetes control: edit/scale/exec on nhdw workloads (namespace edit), read-only elsewhere.', url: `/oauth2gate/login?realm=${REALM}&rd=/k8s/`, auth: 'OIDC · Keycloak (tool-gate)' },
+  { name: 'Prometheus', brand: '/static/assets/brand/prometheus.svg',    ico: 'i-pulse',    desc: 'Metrics store and query UI for the observability plane the topology page reads from.', url: toolUrl('prometheus', `/oauth2gate/login?realm=${REALM}&rd=/`), auth: 'OIDC · Keycloak' },
+  { name: 'Alertmanager', brand: '/static/assets/brand/prometheus.svg',  ico: 'i-bell',     desc: 'Alert routing and silences for the Prometheus alert rules (see Alert routing page).', url: toolUrl('alertmanager', `/oauth2gate/login?realm=${REALM}&rd=/`), auth: 'OIDC · Keycloak' },
   // Jupyter is a moh-staff (workshop) tool; a privileged-ops operator can't
   // authenticate to it. Only R-SUPER spans both realms, so gate the tile to it
   // (its real home is the workshop dashboard's tools).
-  { name: 'Jupyter',       ico: 'i-notebook', desc: 'The workshop research sandbox: notebooks over the governed marts.', url: toolUrl('jupyter', '/'), auth: 'OIDC · Keycloak (moh-staff)', roles: ['R-SUPER'] },
+  { name: 'Jupyter', brand: '/static/assets/brand/jupyter.svg',       ico: 'i-notebook', desc: 'The workshop research sandbox: notebooks over the governed marts.', url: toolUrl('jupyter', '/'), auth: 'OIDC · Keycloak (moh-staff)', roles: ['R-SUPER'] },
   // Superset is likewise a moh-staff analyst tool (self-service SQL/BI over the
   // marts via Trino). Same cross-realm gate as Jupyter — its home is the workshop.
-  { name: 'Superset',      ico: 'i-chart-bar', desc: 'Self-service SQL Lab + no-code chart/dashboard building over the marts (Trino).', url: toolUrl('superset', '/login/keycloak'), auth: 'OIDC · Keycloak (moh-staff)', roles: ['R-SUPER'] },
-  { name: 'Keycloak',      ico: 'i-lock',     desc: 'Identity provider admin console: realms, clients, users and identity-provider wiring.', url: toolUrl('keycloak', '/'), auth: 'Keycloak admin' },
+  { name: 'Superset', brand: '/static/assets/brand/superset.svg',      ico: 'i-chart-bar', desc: 'Self-service SQL Lab + no-code chart/dashboard building over the marts (Trino).', url: toolUrl('superset', '/login/keycloak'), auth: 'OIDC · Keycloak (moh-staff)', roles: ['R-SUPER'] },
+  { name: 'Keycloak', brand: '/static/assets/brand/keycloak.svg',      ico: 'i-lock',     desc: 'Identity provider admin console: realms, clients, users and identity-provider wiring.', url: toolUrl('keycloak', '/'), auth: 'Keycloak admin' },
+  // OpenMetadata is a moh-staff tool (steward/catalog audience) — same
+  // cross-realm posture as Jupyter/Superset; R-STEW gains admin access with the
+  // stewardship console (data-layer plan), R-OPS-ADM/R-SUPER may inspect now.
+  { name: 'OpenMetadata', brand: '/static/assets/brand/openmetadata.png',  ico: 'i-database', desc: 'Data catalog: searchable assets, business glossary, column-level lineage and classification tags across lake, staging, vault and marts.', url: toolUrl('openmetadata', '/'), auth: 'OIDC \u00b7 Keycloak (moh-staff)', roles: ['R-STEW', 'R-OPS-ADM', 'R-SUPER'] },
 ];
 
 /** Minimal, dependency-free markdown → HTML for the in-app doc viewer. Handles
@@ -281,7 +285,9 @@ function Documentation() {
         <div className="doc-tools">
           {TOOLS.filter(t => !t.roles || t.roles.some(r => currentRoles().includes(r))).map(t => (
             <a className="card doc-tool" key={t.name} href={t.url} target="_blank" rel="noreferrer">
-              <span className="doc-tool-ico"><svg className="ico"><use href={`#${t.ico}`} /></svg></span>
+              <span className="doc-tool-ico">{t.brand
+                ? <img src={t.brand} alt="" style={{ width: 26, height: 26, objectFit: 'contain' }} />
+                : <svg className="ico"><use href={`#${t.ico}`} /></svg>}</span>
               <span className="doc-tool-txt">
                 <span className="doc-tool-name">{t.name} <svg className="ico ico-sm"><use href="#i-external" /></svg></span>
                 <span className="doc-tool-desc">{t.desc}</span>

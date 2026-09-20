@@ -19,6 +19,7 @@ import dlt
 from ..config import Config
 from ..destination import build_destination
 from ..manifest import build_manifest, measure_partition, write_manifest
+from ..lineage import emit_source_lineage
 
 log = logging.getLogger("climate-ingestor.weekly")
 
@@ -98,5 +99,6 @@ def run(cfg: Config) -> dict:
             row_count=0, file_count=file_count, bytes_written=bytes_written,
         )
         manifest_paths.append(write_manifest(cfg, table_name=table_name, placeholders=placeholders, payload=payload))
+        emit_source_lineage(source=placeholders["source"], table=table_name)   # best-effort catalog hop (no-op unless OM_LINEAGE_* set)
 
     return {"run_id": run_id, "tables": sorted(tables), "manifests": manifest_paths}
