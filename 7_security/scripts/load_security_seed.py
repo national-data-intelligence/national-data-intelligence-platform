@@ -262,11 +262,14 @@ def upsert_column_classification(cur, rows: list[dict]) -> int:
     ] if rows else [])
     keys = [(r["schema_name"], r["table_name"], r["column_name"]) for r in rows]
     if keys:
-        cur.execute("""
-            DELETE FROM ops_perm.column_classification
-             WHERE managed_by = 'seed'
-               AND (schema_name, table_name, column_name) NOT IN %s
-        """, (tuple(keys),))
+        # psycopg3 does not adapt a tuple-of-tuples for IN — build an explicit
+        # parametrized VALUES list instead.
+        placeholders = ", ".join(["(%s, %s, %s)"] * len(keys))
+        cur.execute(
+            "DELETE FROM ops_perm.column_classification"
+            " WHERE managed_by = 'seed'"
+            f" AND (schema_name, table_name, column_name) NOT IN ({placeholders})",
+            [v for k in keys for v in k])
     else:
         cur.execute("DELETE FROM ops_perm.column_classification WHERE managed_by = 'seed'")
     return len(rows)
