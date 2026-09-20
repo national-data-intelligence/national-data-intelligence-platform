@@ -272,7 +272,9 @@ async def summary(user: UserCtx = Depends(get_user)) -> dict[str, Any]:
     warn_n = sum(1 for r in results if r.get("status") == "warn")
     skip_n = sum(1 for r in results if r.get("status") == "skip")
     total_runtime = sum(float(r.get("execution_time") or 0) for r in results)
+    _, _bands = await _thresholds()
     return {
+        "bands":      _bands,
         "total":      len(results),
         "pass":       pass_n,
         "fail":       fail_n,
@@ -517,11 +519,13 @@ async def ingestion(user: UserCtx = Depends(get_user)) -> dict[str, Any]:
 
     out: list[dict[str, Any]] = []
     note: str | None = None
+    _live_slas, _ = await _thresholds()
     try:
         s3 = _s3()
         for src in SOURCES:
             manifests = _scan_source_manifests(s3, src["raw_prefix"])
-            out.append(_rollup_source(src["key"], manifests, src["sla_hours"]))
+            out.append(_rollup_source(src["key"], manifests,
+                                       int(_live_slas.get(src["key"], src["sla_hours"]))))
         _ingest_cache = (now, out)
     except Exception as exc:                                    # noqa: BLE001
         note = f"raw-lake scan unavailable: {exc}"
@@ -857,17 +861,6 @@ def _detect_dbt_failures() -> list[dict[str, Any]]:
     return out
 
 
-async def _sla_hours(conn) -> dict[str, float]:
-    coded = {s["key"]: float(s["sla_hours"]) for s in SOURCES}
-    try:
-        rows = await conn.fetch(
-            "SELECT key, value FROM ops_governance.dq_threshold WHERE scope = 'sla_hours'")
-        coded.update({r["key"]: float(r["value"]) for r in rows})
-    except Exception as exc:                                    # noqa: BLE001
-        log.warning("detector: dq_threshold unreadable (%s) — coded SLA defaults", exc)
-    return coded
-
-
 def _detect_freshness_and_volume(slas: dict[str, float]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     now = time.time()
@@ -973,7 +966,7 @@ async def _upsert_flags(conn, findings: list[dict[str, Any]]) -> dict[str, int]:
 async def _run_detection() -> dict[str, Any]:
     pool = await ops_db.ensure_pool()
     async with pool.acquire() as conn:
-        slas = await _sla_hours(conn)
+        slas, _ = await _thresholds()
         findings = _detect_dbt_failures()
         findings += _detect_freshness_and_volume(slas)
         findings += await _detect_mdm_backlog(conn)
@@ -981,6 +974,34 @@ async def _run_detection() -> dict[str, Any]:
         open_total = await conn.fetchval(
             "SELECT count(*) FROM ops_governance.dq_flag WHERE status = 'open'")
     return {"findings": len(findings), "by_class": counts, "open_flags": int(open_total)}
+
+
+_thr_cache: tuple[float, dict[str, float], dict[str, float]] | None = None
+
+
+async def _thresholds() -> tuple[dict[str, float], dict[str, float]]:
+    """(sla_hours by source, ui bands) from ops_governance.dq_threshold —
+    60s cache; any failure falls back to the coded defaults so this table
+    can never take the DQ surface down."""
+    global _thr_cache
+    now = time.time()
+    if _thr_cache and now - _thr_cache[0] < 60:
+        return _thr_cache[1], _thr_cache[2]
+    slas = {s_["key"]: float(s_["sla_hours"]) for s_ in SOURCES}
+    bands = {"scorecard_good": 90.0, "scorecard_watch": 75.0,
+             "agreement_good": 85.0, "agreement_watch": 60.0}
+    try:
+        pool = await ops_db.ensure_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT scope, key, value FROM ops_governance.dq_threshold "
+                "WHERE scope IN ('sla_hours', 'ui_band')")
+        for r in rows:
+            (slas if r["scope"] == "sla_hours" else bands)[r["key"]] = float(r["value"])
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("dq_threshold unreadable (%s) — coded defaults", exc)
+    _thr_cache = (now, slas, bands)
+    return slas, bands
 
 
 @router.post("/detect")

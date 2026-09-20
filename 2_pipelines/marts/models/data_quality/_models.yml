@@ -9,7 +9,7 @@ models:
       report at their native geographic + temporal depth, so period_id and
       region_id are NULL where a source carries no such dimension (e.g. MFR
       is point-in-time reference data → period_id NULL; HCMIS/mBrana report
-      at national grain → region_id NULL). completeness_pct/validity_pct
+      at national grain → region_id NULL). completeness_pct/validity_pct/timeliness_pct
       are NULL where a source has no honest signal for that dimension yet;
       timeliness_pct is NULL until a reporting-deadline contract lands.
       Source labels are clean, human-facing names (the raw '!'-prefixed
