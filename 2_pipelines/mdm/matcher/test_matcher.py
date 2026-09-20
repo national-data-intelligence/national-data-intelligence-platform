@@ -72,6 +72,37 @@ INSERT INTO nhdw_vault_business.v_sat_mfr_facility_current VALUES
 INSERT INTO nhdw_vault_business.v_sat_mbrana_facility_current VALUES
   (decode(md5('mb-2'),'hex'),8.76,38.99,'Ada''a','East Shewa','Bishoftu'),
   (decode(md5('mb-9'),'hex'),NULL,NULL,NULL,NULL,NULL);  -- attribute-less record must not crash
+
+-- ── commodity lane: the master universe is the VOCABULARY ────────────────────
+DROP SCHEMA IF EXISTS nhdw_ref CASCADE;
+CREATE SCHEMA nhdw_ref;
+CREATE TABLE nhdw_ref.concept (
+    concept_code text, vocabulary_id text, invalid_reason text,
+    valid_from date DEFAULT '2000-01-01', valid_to date DEFAULT '2099-12-31'
+);
+INSERT INTO nhdw_ref.concept (concept_code, vocabulary_id, invalid_reason) VALUES
+  ('amoxicillin 500mg', 'NHDW-COMMODITY', NULL),
+  ('paracetamol 500mg', 'NHDW-COMMODITY', NULL),
+  ('retired thing',     'NHDW-COMMODITY', 'D'),      -- invalid: never a master
+  ('amoxicillin 500mg', 'SOME-OTHER-VOCAB', NULL);   -- other vocab: not commodity
+
+CREATE TABLE nhdw_vault_business.v_commodity_resolution (
+    hk_source_commodity bytea,
+    source_system  text,
+    source_name    text,
+    norm_name      text,
+    conformed_bk   text,
+    match_strategy text
+);
+INSERT INTO nhdw_vault_business.v_commodity_resolution VALUES
+  -- crosswalked: never a candidate source
+  (decode(md5('cm-1'),'hex'),'HCMIS','Amoxicillin 500mg','amoxicillin 500mg','amoxicillin 500mg','vocabulary'),
+  -- NEAR-name miss: the one real candidate (misspelt single l)
+  (decode(md5('cm-2'),'hex'),'mBrana','Amoxicilin 500mg','amoxicilin 500mg','amoxicilin 500mg','norm_name'),
+  -- EXACT-name miss: conforms implicitly by hash equality — no candidate
+  (decode(md5('cm-3'),'hex'),'mBrana','Paracetamol 500mg','paracetamol 500mg','paracetamol 500mg','norm_name'),
+  -- nothing close in the vocabulary: no candidate
+  (decode(md5('cm-4'),'hex'),'mBrana','Weird Elixir','weird elixir','weird elixir','norm_name');
 """
 
 
@@ -164,6 +195,37 @@ def main() -> int:
     # 6. rerun adds nothing
     n2 = q(conn, "SELECT count(*) FROM ops_governance.mdm_match_candidate")[0][0]
     check("rerun is idempotent", n2 == n1, f"{n2} vs {n1}")
+
+    # ── 7. commodity lane ────────────────────────────────────────────────
+    cpairs = matcher.generate_candidates(conn, threshold=0.5,
+                                         entity_class="commodity")
+    check("exactly one commodity candidate (the near-name miss)",
+          len(cpairs) == 1, str(cpairs))
+    cp = cpairs[0] if cpairs else {}
+    check("near-name maps onto the valid concept",
+          cp.get("master_bk") == "amoxicillin 500mg", str(cp))
+    check("commodity candidates are probabilistic only",
+          cp.get("match_rule") == "name_probabilistic")
+    check("exact-name miss conforms implicitly (no candidate)",
+          not any(p["match_features"].get("norm_name") == "paracetamol 500mg"
+                  for p in cpairs))
+    check("unrelated name attracts nothing",
+          not any(p["match_features"].get("norm_name") == "weird elixir"
+                  for p in cpairs))
+
+    matcher.store_candidates(conn, cpairs, context="ET",
+                             run_uid=str(uuid.uuid4()), entity_class="commodity")
+    row = q(conn, """SELECT entity_class_code, right_source_system_code,
+                            suggested_master_bk
+                     FROM ops_governance.mdm_match_candidate
+                     WHERE entity_class_code = 'commodity'""")
+    check("commodity candidate stored with vocabulary identity",
+          row == [("commodity", "NHDW.vocabulary", "amoxicillin 500mg")], str(row))
+    matcher.store_candidates(conn, cpairs, context="ET",
+                             run_uid=str(uuid.uuid4()), entity_class="commodity")
+    n3 = q(conn, "SELECT count(*) FROM ops_governance.mdm_match_candidate "
+                 "WHERE entity_class_code = 'commodity'")[0][0]
+    check("commodity rerun is idempotent", n3 == 1, str(n3))
 
     print(("PASS" if not fails else f"FAIL: {fails}"))
     return 0 if not fails else 1

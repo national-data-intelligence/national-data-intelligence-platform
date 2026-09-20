@@ -159,6 +159,28 @@ models:
           - relationships:
               to: ref('hub_facility_conformed')
               field: hk_facility_conformed
+  - name: sat_facility_canonical
+    description: >
+      Facility golden record, versioned (insert-only): one row per conformed
+      facility per canonical revision, best value per attribute by fixed source
+      priority, with field-level provenance (*_source columns). New revision
+      only when the golden payload's hashdiff changes vs the latest revision.
+    columns:
+      - name: hk_facility_conformed
+        description: 'FK to parent hub_facility_conformed.'
+        tests:
+          - not_null
+          - relationships:
+              to: ref('hub_facility_conformed')
+              field: hk_facility_conformed
+      - name: canonical_name
+        description: 'Golden facility name (most authoritative source that has one).'
+        tests:
+          - not_null
+      - name: hashdiff
+        description: 'Hash over the golden payload — the revision gate.'
+        tests:
+          - not_null
   - name: sat_date_eth_calendar
     description: 'Satellite carrying the descriptive payload for hk_date_conformed.'
     columns:

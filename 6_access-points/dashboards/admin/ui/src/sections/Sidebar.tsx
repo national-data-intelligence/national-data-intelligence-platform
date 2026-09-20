@@ -86,6 +86,14 @@ export default function Sidebar() {
           title: specPageTitle(spec, 'admin/mdm', 'MDM Stewardship'),
         });
       }
+      // Column governance — catalog order: dq (40) → mdm (41) → this (42),
+      // so anchor on 'mdm' when it is present, else on 'dq'.
+      if (specAllowsWidget(spec, 'admin/classification', 'adm-classification')) {
+        items = insertAfter(items, items.some(i => i.id === 'mdm') ? 'mdm' : 'dq', {
+          id: 'classification', ico: 'i-shield',
+          title: specPageTitle(spec, 'admin/classification', 'Column Governance'),
+        });
+      }
     }
     return { group: g.group, items };
   });

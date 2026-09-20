@@ -367,6 +367,7 @@
   - admin
   widgets:
     admin:
+    - adm-classification
     - adm-mdm-review
     public:
     - pub-hero
@@ -432,6 +433,7 @@
     - pub-supply
     admin:
     - adm-alerts-routing
+    - adm-classification
     - adm-dashboard-control
     - adm-documentation
     - adm-dq

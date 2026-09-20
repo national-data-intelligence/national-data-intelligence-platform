@@ -127,6 +127,45 @@ if [ "$changed_input" = "all" ] || [ "$RESEED" = 1 ]; then
   tail -5 /tmp/ci-reseed.log
 fi
 
+# Keycloak users/clients: refresh the seed configmaps from the checkout, then
+# re-run the CLUSTER'S OWN job spec — its env carries THIS deployment's
+# hostBase/DASH_BASE redirect bases. Never apply the base manifest's job here:
+# its dev defaults (127.0.0.1.nip.io) would rewrite every client's redirect
+# URIs and break login (the 2026-09-20 incident).
+if touched "bundle/seed-pack/app/security/users.yaml" \
+   || touched "7_security/keycloak/scripts/setup-keycloak.py"; then
+  log "reseed keycloak users/clients (live job spec)"
+  kubectl -n "$NS" create configmap keycloak-seed-script \
+    --from-file="$REPO/7_security/keycloak/scripts/setup-keycloak.py" \
+    --dry-run=client -o yaml | kubectl -n "$NS" apply -f - >/dev/null
+  kubectl -n "$NS" create configmap keycloak-users-seed \
+    --from-file="$REPO/bundle/seed-pack/app/security/users.yaml" \
+    --dry-run=client -o yaml | kubectl -n "$NS" apply -f - >/dev/null
+  if ! kubectl -n "$NS" get job keycloak-seed -o json > /tmp/kc-job-live.json 2>/dev/null; then
+    echo "  ✗ no live keycloak-seed job to re-run — seed by hand from the provisioned spec"; exit 1
+  fi
+  python3 - <<'PY' < /tmp/kc-job-live.json > /tmp/kc-job.json
+import json, sys
+j = json.load(sys.stdin)
+spec = {k: v for k, v in j["spec"].items()
+        if k not in ("selector", "manualSelector", "completionMode", "suspend")}
+tmpl_labels = spec.get("template", {}).get("metadata", {}).get("labels", {})
+for k in list(tmpl_labels):
+    if "controller-uid" in k or "job-name" in k:
+        del tmpl_labels[k]
+print(json.dumps({"apiVersion": "batch/v1", "kind": "Job",
+                  "metadata": {"name": "keycloak-seed",
+                               "namespace": j["metadata"]["namespace"]},
+                  "spec": spec}))
+PY
+  kubectl -n "$NS" delete job keycloak-seed --wait=true >/dev/null
+  kubectl -n "$NS" apply -f /tmp/kc-job.json >/dev/null
+  if ! kubectl -n "$NS" wait --for=condition=complete job/keycloak-seed --timeout=300s >/dev/null 2>&1; then
+    echo "  ✗ keycloak-seed did not complete"; kubectl -n "$NS" logs job/keycloak-seed --tail=20; exit 1
+  fi
+  kubectl -n "$NS" logs job/keycloak-seed 2>/dev/null | grep -E "users \(|imported" | head -4
+fi
+
 # OPA policy: recompile from the (just-reseeded) permission store, opa-test,
 # publish to the opa-policies ConfigMap + reload — whenever the policy source
 # changed.
@@ -208,8 +247,18 @@ for d in yaml.safe_load_all(sys.stdin):
   log "rerun job $1"
   kubectl -n "$NS" delete job "$1" --ignore-not-found >/dev/null 2>&1
   kubectl -n "$NS" apply -f /tmp/ci-job-$1.yaml >/dev/null
-  kubectl -n "$NS" wait --for=condition=complete "job/$1" --timeout="$2s" \
-    || { echo "  ✗ job $1 did not complete"; kubectl -n "$NS" logs "job/$1" --tail=25; exit 1; }
+  if ! kubectl -n "$NS" wait --for=condition=complete "job/$1" --timeout="$2s"; then
+    echo "  ✗ job $1 did not complete"
+    if ! kubectl -n "$NS" get "job/$1" >/dev/null 2>&1; then
+      # deploy #16 post-mortem: the job VANISHED mid-wait (something outside
+      # this deploy deleted it — a concurrent seed, another operator). Name
+      # that plainly instead of a bare timeout.
+      echo "  ✗ job $1 no longer EXISTS — deleted outside this deploy while we waited"
+    else
+      kubectl -n "$NS" logs "job/$1" --tail=25
+    fi
+    exit 1
+  fi
 }
 
 if [ "$first_stage" -le 4 ]; then

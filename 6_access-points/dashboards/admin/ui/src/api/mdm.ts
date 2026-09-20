@@ -66,9 +66,10 @@ async function _post<T>(path: string, payload: unknown): Promise<T> {
   return r.json();
 }
 
-export function queue(status = 'pending', rule?: string, limit = 500):
+export function queue(status = 'pending', rule?: string, limit = 500,
+                      entityClass = 'facility'):
     Promise<{ candidates: Candidate[]; counts: RuleCount[] }> {
-  const q = new URLSearchParams({ status, limit: String(limit) });
+  const q = new URLSearchParams({ status, limit: String(limit), entity_class: entityClass });
   if (rule) q.set('match_rule', rule);
   return _json(`queue?${q}`);
 }

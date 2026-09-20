@@ -15,6 +15,32 @@ and catchments, regions, and every mart with its description. It is generated fr
 the entity model and the dbt schema files, so it stays in step with what the
 system actually serves rather than drifting into a hand-maintained list.
 
+## Reference data and master data
+
+Two governed layers decide what things ARE across sources.
+
+**Reference vocabulary (`nhdw_ref`)** — an OMOP-style concept store (concepts,
+crosswalks, bitemporal validity) built from the entity model plus curated
+supplements (`bundle/seeds/ref-vocab/`). The vault's resolution views join the
+crosswalk instead of carrying regex/CASE mappings in code, so a mapping change
+is a data edit, not a model edit. Concept identity is stable across rebuilds
+(an append-only committed registry assigns ids).
+
+**Master data (MDM)** — a matcher (`2_pipelines/mdm`, a side-lane Job after the
+marts build) proposes same-entity candidates with scores and evidence: exact
+normalised-name twins across sources, ambiguous names with a geo/admin-area
+tie-break, and trigram near-names. It never merges anything. A steward works
+the queue in the admin console (MDM Stewardship); every verdict lands in an
+append-only, bitemporal decision log that the vault build reads — accept re-keys
+the source record onto its master on the next pipeline run, revert supersedes
+and falls back to the deterministic derivation, and an empty log leaves every
+conformed key byte-identical. Facility masters are conformed hub entities;
+commodity masters are vocabulary concepts (an exact-name commodity conforms
+implicitly because the concept code IS the normalised name). Downstream, the
+facility dimension and marts carry `master_entity_uid` (a stable UUID derived
+from the conformed key) and `mdm_state` (`conformed` vs `single_source`) so
+consumers can see and filter conformance provenance.
+
 ## The dashboards
 
 Five surfaces sit on the gateway:
