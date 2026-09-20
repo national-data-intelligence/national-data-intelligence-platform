@@ -54,11 +54,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS dq_flag_fingerprint_open_uq
     ON ops_governance.dq_flag (fingerprint)
     WHERE fingerprint IS NOT NULL AND status <> 'resolved';
 
+-- Governance HISTORY substrate (Abenezer 2026-09-20): incidents are a durable
+-- record, not a queue that forgets. Every status transition is appended to
+-- dq_flag_event; resolved/updated stamps live on the flag. This history is the
+-- raw material for governance KPIs (failure rates per source/layer/rule,
+-- time-to-acknowledge/resolve, recurrence) that steer engineering priorities.
+ALTER TABLE ops_governance.dq_flag
+    ADD COLUMN IF NOT EXISTS updated_at  timestamptz NOT NULL DEFAULT now(),
+    ADD COLUMN IF NOT EXISTS resolved_at timestamptz;
+
+CREATE TABLE IF NOT EXISTS ops_governance.dq_flag_event (
+    id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    flag_id     uuid        NOT NULL,
+    at          timestamptz NOT NULL DEFAULT now(),
+    actor       text        NOT NULL,          -- 'detector' | kc_sub | 'system'
+    from_status text,
+    to_status   text        NOT NULL,
+    note        text
+);
+CREATE INDEX IF NOT EXISTS dq_flag_event_flag_idx ON ops_governance.dq_flag_event (flag_id, at);
+
+COMMENT ON TABLE ops_governance.dq_flag_event IS
+    'Append-only status-transition history of dq_flag — never deleted; the source for governance KPIs.';
+
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ops_gateway') THEN
         GRANT SELECT ON ops_governance.dq_threshold TO ops_gateway;
         GRANT SELECT, INSERT, UPDATE ON ops_governance.dq_flag TO ops_gateway;
+        GRANT SELECT, INSERT ON ops_governance.dq_flag_event TO ops_gateway;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ops_reader') THEN
         GRANT SELECT ON ops_governance.dq_threshold TO ops_reader;

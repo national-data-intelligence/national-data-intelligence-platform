@@ -120,6 +120,9 @@ spec:
             - { name: SMTP_FROM, valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_FROM, optional: true } } }
             - { name: ALERT_EVAL_MODEL, value: "ears" }
             - { name: ALERT_EVAL_TOKEN, valueFrom: { secretKeyRef: { name: alert-eval-secrets, key: TOKEN } } }
+            # DQ detector service token (routes/dq.py /detect; Airflow dq_detection DAG).
+            # optional:true → absent secret ⇒ service path off, admin bearer still works.
+            - { name: DQ_DETECT_TOKEN, valueFrom: { secretKeyRef: { name: dq-detect-secrets, key: TOKEN, optional: true } } }
           volumeMounts:
             - { name: workspace-profiles, mountPath: /app/config, readOnly: true }
           readinessProbe:

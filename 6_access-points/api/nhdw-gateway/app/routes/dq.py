@@ -781,3 +781,226 @@ async def ack(body: AckBody, user: UserCtx = Depends(get_user)) -> dict[str, Any
                                          "model": model, "severity": sev})
     return {"ok": True, "flag_id": str(flag_id), "acked_by": user.username,
             "acked_at": acked_at.isoformat() if acked_at else None}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# DQ detector (data-layer plan item 4) — auto-raise tracked incidents into
+# ops_governance.dq_flag. Deduped by dq_flag.fingerprint (partial-unique on
+# non-resolved rows, init 38): re-runs update the open flag instead of
+# duplicating it; a resolved finding may re-open as a new row.
+#
+# Detection classes (v1 — deliberately derived from signals that already
+# exist; the ~750 dbt tests are NOT duplicated, their failures are ingested):
+#   fk_orphan / null_in_required / dbt_test_failure
+#       ← failing/warning dbt tests in the lake run_results of all three
+#         projects (relationships → fk_orphan, not_null → null_in_required)
+#   stale_ingest   ← newest lake manifest older than the source's SLA
+#                    (ops_governance.dq_threshold scope='sla_hours';
+#                     absent row → the coded SOURCES default)
+#   volume_outlier ← newest manifest bytes far outside the source/table's
+#                    own history (≥4 samples, ×3 / ÷3 band)
+#   mdm_backlog    ← undecided MDM match candidates (Track A's stores)
+#
+# NO email path exists here by construction: incidents land in the in-app
+# queue only. (Any future mailer integration must sit behind an explicit
+# DQ_EMAIL_ENABLED=true flag — default off; the live SMTP relay reaches a
+# real inbox.)
+# ═══════════════════════════════════════════════════════════════════════
+
+import hashlib as _hashlib
+from fastapi import Header, Request
+
+_DQ_DETECT_TOKEN = os.environ.get("DQ_DETECT_TOKEN", "")
+_DBT_PROJECTS = ("staging", "vault", "marts")
+_TEST_CLASS = {"relationships": "fk_orphan", "not_null": "null_in_required"}
+
+
+def _fingerprint(*parts: str) -> str:
+    return _hashlib.sha256("|".join(parts).encode()).hexdigest()[:32]
+
+
+def _load_project_artifact(project: str, name: str) -> dict[str, Any]:
+    """run_results/manifest for ANY dbt project (the module-level helpers are
+    pinned to the marts project)."""
+    try:
+        s3 = _s3()
+        obj = s3.get_object(Bucket=ARTIFACTS_BUCKET, Key=f"dbt/{project}/{name}")
+        return json.load(io.BytesIO(obj["Body"].read()))
+    except Exception as exc:                                    # noqa: BLE001
+        log.debug("detector: no %s for %s (%s)", name, project, exc)
+        return {}
+
+
+def _detect_dbt_failures() -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for proj in _DBT_PROJECTS:
+        rr = _load_project_artifact(proj, "run_results.json")
+        man = _load_project_artifact(proj, "manifest.json")
+        nodes = (man.get("nodes") or {})
+        for r in rr.get("results", []):
+            uid, status = r.get("unique_id", ""), (r.get("status") or "").lower()
+            if not uid.startswith("test.") or status in ("pass", "success", "skipped", ""):
+                continue
+            node = nodes.get(uid) or {}
+            test_name = (node.get("test_metadata") or {}).get("name") or node.get("name", uid)
+            models = [d.split(".")[-1] for d in (node.get("depends_on") or {}).get("nodes", [])
+                      if d.startswith(("model.", "seed."))]
+            out.append({
+                "source": "dbt", "table_name": (models[0] if models else proj),
+                "error_class": _TEST_CLASS.get((node.get("test_metadata") or {}).get("name", ""),
+                                               "dbt_test_failure"),
+                "severity": "error" if status in ("fail", "error") else "warn",
+                "description": f"[{proj}] {test_name} {status}: {str(r.get('message') or '')[:300]}",
+                "key": {"unique_id": uid, "project": proj},
+                "fingerprint": _fingerprint("dbt", proj, uid),
+            })
+    return out
+
+
+async def _sla_hours(conn) -> dict[str, float]:
+    coded = {s["key"]: float(s["sla_hours"]) for s in SOURCES}
+    try:
+        rows = await conn.fetch(
+            "SELECT key, value FROM ops_governance.dq_threshold WHERE scope = 'sla_hours'")
+        coded.update({r["key"]: float(r["value"]) for r in rows})
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("detector: dq_threshold unreadable (%s) — coded SLA defaults", exc)
+    return coded
+
+
+def _detect_freshness_and_volume(slas: dict[str, float]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    now = time.time()
+    try:
+        s3 = _s3()
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("detector: lake unreachable (%s)", exc)
+        return out
+    for src in SOURCES:
+        key, prefix = src["key"], src["raw_prefix"]
+        if not prefix:
+            continue
+        manifests = _scan_source_manifests(s3, prefix)
+        by_table: dict[str, list[dict[str, Any]]] = {}
+        for m in manifests:
+            by_table.setdefault(m.get("object_name") or m.get("table") or "?", []).append(m)
+        # stale_ingest: newest manifest across the whole source vs the SLA
+        newest = 0.0
+        for ms in by_table.values():
+            for m in ms:
+                ts = m.get("completed_at") or m.get("started_at")
+                try:
+                    newest = max(newest, datetime.fromisoformat(
+                        str(ts).replace("Z", "+00:00")).timestamp())
+                except Exception:                               # noqa: BLE001
+                    continue
+        sla = slas.get(key, 24.0)
+        if newest and (now - newest) > sla * 3600:
+            age_h = int((now - newest) / 3600)
+            out.append({
+                "source": key, "table_name": "*",
+                "error_class": "stale_ingest", "severity": "warn",
+                "description": f"newest lake manifest is {age_h}h old (SLA {int(sla)}h)",
+                "key": {"prefix": prefix, "age_hours": age_h},
+                "fingerprint": _fingerprint("stale", key),
+            })
+        # volume_outlier per table (needs history)
+        for table, ms in by_table.items():
+            sizes = sorted(float(m.get("bytes_written") or 0) for m in ms
+                           if m.get("bytes_written"))
+            if len(sizes) < 4 or not sizes[-1]:
+                continue
+            hist = sizes[:-1]
+            med = hist[len(hist) // 2]
+            latest = sizes[-1]
+            if med and (latest > med * 3 or latest < med / 3):
+                out.append({
+                    "source": key, "table_name": table,
+                    "error_class": "volume_outlier", "severity": "warn",
+                    "description": f"latest load {int(latest)}B vs median {int(med)}B",
+                    "key": {"prefix": prefix, "table": table},
+                    "fingerprint": _fingerprint("volume", key, table),
+                })
+    return out
+
+
+async def _detect_mdm_backlog(conn) -> list[dict[str, Any]]:
+    try:
+        n = await conn.fetchval("""
+            SELECT count(*) FROM ops_governance.mdm_match_candidate c
+            WHERE NOT EXISTS (SELECT 1 FROM ops_governance.mdm_match_decision d
+                              WHERE d.candidate_id = c.candidate_id)
+        """)
+    except Exception as exc:                                    # noqa: BLE001
+        log.debug("detector: mdm stores unreadable (%s) — skipping backlog", exc)
+        return []
+    if not n:
+        return []
+    return [{
+        "source": "mdm", "table_name": "mdm_match_candidate",
+        "error_class": "mdm_backlog", "severity": "warn" if n > 100 else "info",
+        "description": f"{n} match candidates await a steward decision",
+        "key": {"undecided": int(n)},
+        "fingerprint": _fingerprint("mdm", "backlog"),
+    }]
+
+
+async def _upsert_flags(conn, findings: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for f in findings:
+        row = await conn.fetchrow("""
+            INSERT INTO ops_governance.dq_flag
+                (raised_by, source, table_name, key, error_class,
+                 severity, description, status, fingerprint)
+            VALUES ('detector', $1, $2, $3::jsonb, $4, $5, $6, 'open', $7)
+            ON CONFLICT (fingerprint) WHERE fingerprint IS NOT NULL AND status <> 'resolved'
+            DO UPDATE SET description = EXCLUDED.description,
+                          severity    = EXCLUDED.severity,
+                          updated_at  = now()
+            RETURNING id, (xmax = 0) AS inserted
+        """, f["source"], f["table_name"], json.dumps(f["key"]),
+             f["error_class"], f["severity"], f["description"][:500], f["fingerprint"])
+        if row and row["inserted"]:
+            # history: the raise itself is the first recorded transition
+            await conn.execute("""
+                INSERT INTO ops_governance.dq_flag_event (flag_id, actor, from_status, to_status, note)
+                VALUES ($1, 'detector', NULL, 'open', left($2, 200))
+            """, row["id"], f["description"])
+        counts[f["error_class"]] = counts.get(f["error_class"], 0) + 1
+    return counts
+
+
+async def _run_detection() -> dict[str, Any]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        slas = await _sla_hours(conn)
+        findings = _detect_dbt_failures()
+        findings += _detect_freshness_and_volume(slas)
+        findings += await _detect_mdm_backlog(conn)
+        counts = await _upsert_flags(conn, findings)
+        open_total = await conn.fetchval(
+            "SELECT count(*) FROM ops_governance.dq_flag WHERE status = 'open'")
+    return {"findings": len(findings), "by_class": counts, "open_flags": int(open_total)}
+
+
+@router.post("/detect")
+async def detect(request: Request,
+                 x_detect_token: str | None = Header(default=None, alias="X-Detect-Token")
+                 ) -> dict[str, Any]:
+    """Run every detection and upsert incidents. Authorized by the service
+    token (Airflow dq_detection DAG) or an admin bearer — same posture as the
+    alert evaluator. Idempotent per fingerprint; never sends email."""
+    if not (_DQ_DETECT_TOKEN and x_detect_token == _DQ_DETECT_TOKEN):
+        try:
+            user = await get_user(
+                request,
+                authorization=request.headers.get("authorization"),
+                x_mock_user=request.headers.get("x-mock-user"),
+                x_mock_role=request.headers.get("x-mock-role"))
+            await _gate(user, action="admin.dq.detect", resource="dq")
+        except HTTPException:
+            raise HTTPException(403, "admin or valid service token required")
+    t0 = time.perf_counter()
+    summary = await _run_detection()
+    log.info("dq detection %s", summary)
+    return {**summary, "latency_ms": int((time.perf_counter() - t0) * 1000)}
