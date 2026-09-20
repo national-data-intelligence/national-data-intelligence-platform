@@ -208,6 +208,27 @@
     creates: /usr/local/bin/helm
   when: inventory_hostname in groups['control_plane']
 
+# `nhdw_helm` defaults to the BUNDLED binary (bundle/bin/helm), which is how an
+# airgapped deploy gets helm without network. But bundle/bin/ is gitignored, so
+# a fresh CI checkout has no such file and every helm task died with rc=2 and no
+# output ("No such file or directory" from the shell). Resolve it at run time:
+# prefer the bundled binary when the bundle actually carries it, else the one
+# installed just above. Runs in `provision`, which precedes cni and deploy, and
+# set_fact outranks the group_var for the rest of the play.
+- name: Check whether the bundle carries its own helm
+  ansible.builtin.stat:
+    path: "{{ nhdw_repo_root }}/bundle/bin/helm"
+  register: nhdw_helm_bundled
+  when: inventory_hostname in groups['control_plane']
+
+- name: Resolve the helm binary (bundled if shipped, else the system install)
+  ansible.builtin.set_fact:
+    nhdw_helm: >-
+      {{ (nhdw_repo_root ~ '/bundle/bin/helm')
+         if (nhdw_helm_bundled.stat.exists | default(false))
+         else '/usr/local/bin/helm' }}
+  when: inventory_hostname in groups['control_plane']
+
 - name: Install kustomize
   become: true
   ansible.builtin.shell:
