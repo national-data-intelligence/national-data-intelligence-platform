@@ -88,3 +88,17 @@ export function revert(decisionId: string, note?: string):
     Promise<{ decision_id: string; superseded: boolean }> {
   return _post(`decision/${decisionId}/revert`, { note: note ?? null });
 }
+
+export type MasterDetail = {
+  master_bk: string;
+  entity_class: string;
+  members: Array<{ source_system: string; source_name: string; match_strategy: string; source_record_key: string }>;
+  n_source_systems: number;
+  golden: Record<string, unknown> | null;
+  identifiers: Array<{ identifier_namespace: string; identifier_value: string }>;
+  decisions: Array<{ source_system_code: string; decision: string; decided_by: string; recorded_from: string }>;
+};
+
+export function master(entityClass: string, masterBk: string): Promise<MasterDetail> {
+  return _json(`master/${encodeURIComponent(entityClass)}/${encodeURIComponent(masterBk)}`);
+}

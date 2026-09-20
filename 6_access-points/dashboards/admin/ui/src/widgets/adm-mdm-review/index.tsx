@@ -41,6 +41,97 @@ function featureLine(f: Record<string, unknown>): string {
   return bits.join(' · ');
 }
 
+
+/** The "who is this?" panel: what the platform knows about one master —
+ *  its source members and HOW each resolves, the golden record with
+ *  per-field provenance, and every namespaced identifier it answers to.
+ *  Sections the vault has not built yet come back empty rather than
+ *  failing the panel. */
+function MasterPanel({ entity, masterBk, onClose }:
+    { entity: string; masterBk: string; onClose: () => void }) {
+  const [d, setD] = useState<mdm.MasterDetail | null>(null);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let live = true;
+    mdm.master(entity, masterBk)
+      .then(r => { if (live) { setD(r); setErr(''); } })
+      .catch(e => { if (live) setErr(String(e?.message || e)); });
+    return () => { live = false; };
+  }, [entity, masterBk]);
+
+  const g = (d?.golden ?? {}) as Record<string, any>;
+  const goldenRows: Array<[string, any, string | undefined]> = d?.golden ? [
+    ['Name', g.canonical_name, g.name_source],
+    ['Status', g.operational_status, g.status_source],
+    ['Contact', g.telecom, g.telecom_source],
+    ['Coordinates', (g.latitude != null && g.longitude != null)
+      ? `${g.latitude}, ${g.longitude}` : null, g.coord_source],
+    ['Woreda', g.woreda_name, g.admin_source],
+    ['Zone', g.zone_name, g.admin_source],
+  ] : [];
+
+  return (
+    <div className="card" style={{ marginBottom: '0.75rem' }}>
+      <div className="section-hdr">
+        <h4 style={{ margin: 0 }}>{masterBk}</h4>
+        <button className="btn btn-sm btn-ghost" onClick={onClose}>Close</button>
+      </div>
+      {err && <p className="muted">Detail unavailable: {err}</p>}
+      {!d && !err && <p className="muted text-xs">Loading…</p>}
+      {d && (
+        <div className="tk-scroll">
+          <p className="muted text-xs">
+            {d.members.length} source record{d.members.length === 1 ? '' : 's'} from{' '}
+            {d.n_source_systems} system{d.n_source_systems === 1 ? '' : 's'}
+            {d.decisions.length > 0 && ` · ${d.decisions.length} standing steward decision(s)`}
+          </p>
+          <table className="dash">
+            <thead>
+              <tr><th>Source record</th><th>Resolves by</th><th>Golden attribute</th><th>From</th></tr>
+            </thead>
+            <tbody>
+              {d.members.map((m, i) => (
+                <tr key={m.source_record_key + m.source_system}>
+                  <td>
+                    <div className="v">{m.source_name || '—'}</div>
+                    <div className="muted text-xs">{m.source_system}</div>
+                  </td>
+                  <td>
+                    <span className={`pill ${m.match_strategy === 'steward_decision' ? 'good' : 'info'}`}>
+                      {m.match_strategy}
+                    </span>
+                  </td>
+                  <td>{goldenRows[i]
+                    ? <><span className="muted text-xs">{goldenRows[i][0]}: </span>
+                        <span className="v">{String(goldenRows[i][1] ?? '—')}</span></>
+                    : ''}</td>
+                  <td className="muted text-xs">{goldenRows[i]?.[2] ?? ''}</td>
+                </tr>
+              ))}
+              {goldenRows.slice(d.members.length).map(([label, value, src]) => (
+                <tr key={label}>
+                  <td></td><td></td>
+                  <td><span className="muted text-xs">{label}: </span>
+                      <span className="v">{String(value ?? '—')}</span></td>
+                  <td className="muted text-xs">{src ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!d.golden &&
+            <p className="muted text-xs">No golden record yet — the canonical satellite builds with the vault.</p>}
+          <p className="muted text-xs" style={{ marginTop: '0.5rem' }}>
+            Known as: {d.identifiers.length === 0
+              ? 'no identifiers recorded yet'
+              : d.identifiers.map(i => `${i.identifier_namespace} ${i.identifier_value}`).join(' · ')}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function QueueTab({ onDecided }: { onDecided: () => void }) {
   const [rows, setRows] = useState<mdm.Candidate[] | null>(null);
   const [counts, setCounts] = useState<mdm.RuleCount[]>([]);
@@ -49,6 +140,7 @@ function QueueTab({ onDecided }: { onDecided: () => void }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState<string>('');   // candidate_id in flight
   const [flash, setFlash] = useState('');
+  const [inspect, setInspect] = useState<string>('');   // master_bk being inspected
 
   const load = useCallback(() => {
     mdm.queue('pending', rule || undefined, 500, entity)
@@ -113,6 +205,7 @@ function QueueTab({ onDecided }: { onDecided: () => void }) {
       {err && <p className="muted">Queue unavailable: {err}</p>}
       {rows !== null && rows.length === 0 && !err &&
         <p className="muted">Queue is clear — no pending candidates{rule ? ` for ${RULE_LABEL[rule]}` : ''}.</p>}
+      {inspect && <MasterPanel entity={entity} masterBk={inspect} onClose={() => setInspect('')} />}
       {rows !== null && rows.length > 0 && (
         <>
           <TableToolbar kit={kit} placeholder="Search record, master, name…" unit="candidates" />
@@ -134,7 +227,13 @@ function QueueTab({ onDecided }: { onDecided: () => void }) {
                       <div className="v">{c.left_source_system_code}</div>
                       <div className="muted text-xs">{c.left_source_record_key.slice(0, 16)}…</div>
                     </td>
-                    <td className="v">{c.suggested_master_bk}</td>
+                    <td>
+                      <button className="btn btn-sm btn-ghost"
+                              title="What does the platform know about this master?"
+                              onClick={() => setInspect(c.suggested_master_bk ?? '')}>
+                        {c.suggested_master_bk}
+                      </button>
+                    </td>
                     <td>
                       <span className={`pill ${rulePill(c.match_rule)}`}>{RULE_LABEL[c.match_rule] ?? c.match_rule}</span>
                       <div className="muted text-xs">{featureLine(c.match_features)}</div>

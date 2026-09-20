@@ -19,7 +19,7 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, Path as PathParam, Query
 
 from ..auth import UserCtx, get_user
-from .. import opa, ops_db
+from .. import opa, ops_db, trino_client
 
 log = logging.getLogger("gateway.mdm")
 router = APIRouter(prefix="/api/mdm", tags=["mdm"])
@@ -193,6 +193,87 @@ async def decide(
             "decision_id": str(dec["decision_id"]),
             "siblings_superseded": superseded,
             "note": "conformance updates on the next vault build"}
+
+
+@router.get("/master/{entity_class}/{master_bk}")
+async def master_detail(entity_class: str = PathParam(...),
+                        master_bk: str = PathParam(...),
+                        user: UserCtx = Depends(get_user)) -> dict:
+    """Everything the platform knows about ONE master — the answer to "who is
+    this?" that a steward needs before accepting a merge.
+
+    Three reads of the business vault (through Trino as bi_reader):
+      members      the source records that resolve to this master, and HOW
+                   (facility_id / vocabulary / norm_name / steward_decision)
+      golden       the current canonical revision, with per-field provenance
+      identifiers  every namespaced id the master is known by
+
+    Degrades honestly: a vault that has not built the golden/identifier models
+    yet returns those sections empty rather than failing the whole view.
+    """
+    _require_steward(user)
+    if entity_class != "facility":
+        raise HTTPException(422, "master detail is available for facilities today")
+
+    bk = master_bk.replace("'", "''")          # single quotes are the only risk
+    async def q(sql: str) -> list[dict]:
+        try:
+            return (await trino_client.query(sql)).get("rows", []) or []
+        except Exception as exc:                                  # noqa: BLE001
+            log.info("master detail: %s", exc)
+            return []
+
+    members = await q(f"""
+        SELECT source_system, source_name, match_strategy,
+               to_hex(hk_source_facility) AS source_record_key
+        FROM marts.nhdw_vault_business.v_facility_resolution
+        WHERE conformed_bk = '{bk}'
+        ORDER BY source_system
+    """)
+    golden = await q(f"""
+        SELECT c.canonical_name, c.name_source, c.operational_status,
+               c.status_source, c.telecom, c.telecom_source,
+               c.latitude, c.longitude, c.coord_source,
+               c.woreda_name, c.zone_name, c.admin_source, c.load_ts
+        FROM marts.nhdw_vault_business.sat_facility_canonical c
+        JOIN marts.nhdw_vault_business.hub_facility_conformed h
+          ON h.hk_facility_conformed = c.hk_facility_conformed
+        WHERE h.conformed_bk = '{bk}'
+        ORDER BY c.load_ts DESC
+        LIMIT 1
+    """)
+    identifiers = await q(f"""
+        SELECT i.identifier_namespace, i.identifier_value
+        FROM marts.nhdw_vault_business.lnk_facility_identifier i
+        JOIN marts.nhdw_vault_business.hub_facility_conformed h
+          ON h.hk_facility_conformed = i.hk_facility_conformed
+        WHERE h.conformed_bk = '{bk}'
+        ORDER BY i.identifier_namespace, i.identifier_value
+    """)
+
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        decisions = await conn.fetch("""
+            SELECT source_system_code, source_record_key, decision, decided_by,
+                   recorded_from
+            FROM ops_governance.mdm_match_decision
+            WHERE entity_class_code = $1 AND master_bk = $2 AND recorded_to IS NULL
+            ORDER BY recorded_from DESC
+        """, entity_class, master_bk)
+
+    return {
+        "master_bk": master_bk,
+        "entity_class": entity_class,
+        "members": members,
+        "n_source_systems": len({m["source_system"] for m in members}),
+        "golden": golden[0] if golden else None,
+        "identifiers": identifiers,
+        "decisions": [{"source_system_code": d["source_system_code"],
+                       "source_record_key": d["source_record_key"],
+                       "decision": d["decision"], "decided_by": d["decided_by"],
+                       "recorded_from": d["recorded_from"].isoformat()}
+                      for d in decisions],
+    }
 
 
 @router.get("/decisions")
