@@ -12,9 +12,16 @@ on:
   push:
     branches: [main, develop]
     paths:
+      # app tier
       - '6_access-points/**'
       - 'bundle/seed-pack/app/security/**'
       - 'bundle/scripts/ci-redeploy.sh'
+      # data tier (pipeline images, init DDL, reference vocabulary)
+      - '2_pipelines/staging/**'
+      - '2_pipelines/vault/**'
+      - '2_pipelines/marts/**'
+      - '3_storage/postgres/init/**'
+      - 'bundle/seeds/ref-vocab/**'
   workflow_dispatch:
     inputs:
       scope:
