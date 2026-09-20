@@ -107,8 +107,11 @@ SELECT
     CASE WHEN hb.last_reporting_date >= (CURRENT_DATE - INTERVAL '60 days')
          THEN 'online' ELSE 'silent' END AS reporting_status
 FROM dhis2 d
-LEFT JOIN {{ source('nhdw_vault_business', 'dim_facility') }} df
-       ON df.facility_id = d.facility_id
 LEFT JOIN mfr_loc       mloc USING (facility_id)
 LEFT JOIN mfr_org_fac   morg USING (facility_id)
 LEFT JOIN hcmis_heartbeat hb USING (facility_id)
+-- dim join comes LAST and by ON: an ON-joined relation that also carries
+-- facility_id would give the following USING clauses two candidates on their
+-- left side ("common column name appears more than once in left table").
+LEFT JOIN {{ source('nhdw_vault_business', 'dim_facility') }} df
+       ON df.facility_id = d.facility_id
