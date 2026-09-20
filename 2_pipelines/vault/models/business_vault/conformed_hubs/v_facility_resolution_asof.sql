@@ -14,13 +14,20 @@
     of the bitemporal log. Supersession is respected: a decision made before T
     and reverted before T is correctly absent.
 
-    Parameterised by the `release_as_of` var, so a caller pins one release:
+    Pinned PER SESSION, so one deployed view answers any point in time without
+    a rebuild:
 
-        dbt run -s v_facility_resolution_asof --vars '{release_as_of: "2026-09-21T10:00:00Z"}'
+        SET nhdw.release_as_of = '2026-09-20T20:30:00Z';
+        SELECT * FROM nhdw_vault_business.v_facility_resolution_asof;
 
-    The DEFAULT is far-future, which makes the unparameterised view identical
-    to the live one (every current decision qualifies) — so this model is
-    additive and cannot change today's numbers.
+    (`SET LOCAL` inside a transaction scopes it to that transaction.) A dbt var
+    of the same name sets the compile-time default; unset, both default to
+    far-future, which makes the view identical to the live one — so this model
+    is additive and cannot change today's numbers.
+
+    A session setting rather than a dbt var at BUILD time is deliberate: a
+    release is reproduced by whoever is asking, when they ask, and rebuilding
+    the warehouse to read history would make reproduction a deployment.
 
     IMPORTANT — the other half of a release. Decisions are only ONE of the two
     inputs that determine a master; the SOURCE RECORDS are the other. A source
@@ -37,20 +44,25 @@
 */
 {{ config(materialized='view', schema='nhdw_vault_business') }}
 
-WITH decisions_asof AS (
+WITH _asof AS (
+    -- the pinned instant: the session setting when present, else the
+    -- compile-time default (far future = "as things stand now")
+    SELECT COALESCE(NULLIF(current_setting('nhdw.release_as_of', true), ''),
+                    '{{ var("release_as_of", "2099-12-31T00:00:00Z") }}')::timestamptz AS t
+),
+decisions_asof AS (
     SELECT source_system_code, source_record_key, master_bk
-    FROM {{ source('vault_governance', 'mdm_match_decision') }}
+    FROM {{ source('vault_governance', 'mdm_match_decision') }}, _asof
     WHERE decision IN ('accept', 'merge')
       AND master_bk IS NOT NULL
       AND deployment_context = '{{ var("deployment_context", "ET") }}'
       AND entity_class_code = 'facility'
       -- knowledge time: what the platform knew at T
-      AND recorded_from <= '{{ var("release_as_of", "2099-12-31T00:00:00Z") }}'::timestamptz
-      AND (recorded_to IS NULL
-           OR recorded_to > '{{ var("release_as_of", "2099-12-31T00:00:00Z") }}'::timestamptz)
+      AND recorded_from <= _asof.t
+      AND (recorded_to IS NULL OR recorded_to > _asof.t)
       -- valid time: the mastering statement is true then too
-      AND '{{ var("release_as_of", "2099-12-31T00:00:00Z") }}'::date >= valid_from
-      AND '{{ var("release_as_of", "2099-12-31T00:00:00Z") }}'::date <  valid_to
+      AND _asof.t::date >= valid_from
+      AND _asof.t::date <  valid_to
 ),
 base AS (
     -- the source-side derivation is owned by the live view; re-deriving it
