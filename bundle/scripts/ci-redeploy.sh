@@ -2,6 +2,7 @@
 # ci-redeploy.sh — push-to-main redeploy for the live k3s cluster.
 #
 # Given a set of changed files (git diff of the push, or "all"), it rebuilds only
+# the affected images. Runs for pushes to main AND develop (see deploy.yml).
 # the affected images, imports them into k3s' containerd, restarts the affected
 # workloads, reseeds catalog/RBAC when the catalog or security seeds changed, and
 # runs the system verifier. This is the deterministic core the GitHub Actions
