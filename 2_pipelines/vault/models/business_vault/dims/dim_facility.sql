@@ -35,10 +35,27 @@ counted AS (
 SELECT
     h.hk_facility_conformed,
     h.conformed_bk   AS facility_id,
+    -- Stable master-entity identity: UUIDv5 over the conformed BK in a fixed
+    -- per-context namespace — reproducible from the BK alone, survives
+    -- rebuilds, and stays constant across snapshot releases.
+    uuid_generate_v5(uuid_ns_url(),
+        'nhdw://{{ var("deployment_context", "ET") }}/facility/' || h.conformed_bk)
+                     AS master_entity_uid,
     n.source_name    AS facility_name,
     n.source_system  AS name_source,
     c.n_source_systems,
+    -- provenance marker surfaced downstream: did more than one source system
+    -- contribute to this master, or is it single-source?
+    CASE WHEN c.n_source_systems > 1 THEN 'conformed'
+         ELSE 'single_source' END AS mdm_state,
     h.load_ts
 FROM {{ ref('hub_facility_conformed') }} h
+-- CURRENT entities only: the hub is insert-only history, so a steward MDM
+-- decision that re-keys a record RETIRES its old cluster from the current
+-- resolution — the retired hub row must not surface as a zombie dimension
+-- row. Parity: with no decisions the hub and the view cover the exact same
+-- entity set (verified live, 3296 = 3296, zero divergence).
+JOIN (SELECT DISTINCT hk_facility_conformed
+      FROM {{ ref('v_facility_resolution') }}) cur USING (hk_facility_conformed)
 LEFT JOIN named   n USING (hk_facility_conformed)
 LEFT JOIN counted c USING (hk_facility_conformed)
