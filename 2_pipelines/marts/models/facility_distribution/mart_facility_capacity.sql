@@ -89,6 +89,11 @@ hcmis_heartbeat AS (
 )
 SELECT
     d.facility_id,
+    -- MDM provenance (additive): the stable master identity + whether more
+    -- than one source system contributed to this master — surfaced from
+    -- dim_facility so downstream consumers can show/filter conformance state.
+    df.master_entity_uid,
+    df.mdm_state,
     d.tier_id AS facility_tier,
     d.region_id,
     d.dhis2_path,
@@ -102,6 +107,8 @@ SELECT
     CASE WHEN hb.last_reporting_date >= (CURRENT_DATE - INTERVAL '60 days')
          THEN 'online' ELSE 'silent' END AS reporting_status
 FROM dhis2 d
+LEFT JOIN {{ source('nhdw_vault_business', 'dim_facility') }} df
+       ON df.facility_id = d.facility_id
 LEFT JOIN mfr_loc       mloc USING (facility_id)
 LEFT JOIN mfr_org_fac   morg USING (facility_id)
 LEFT JOIN hcmis_heartbeat hb USING (facility_id)
