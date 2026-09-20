@@ -7,6 +7,8 @@ import rego.v1
 role_id := "R-PROD-CLIN"
 phase   := 2
 
+reveal_sensitivity := set()
+
 default allow := false
 
 # Data-plane deny-all — intentional.

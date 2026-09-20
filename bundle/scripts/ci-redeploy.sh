@@ -33,7 +33,7 @@ COMPONENTS=(
   "6_access-points/api/nhdw-gateway|nhdw/gateway:1.0.0|Dockerfile|$REPO/6_access-points/api/nhdw-gateway|nhdw-gateway"
 )
 # paths whose change triggers a catalog/RBAC reseed (no image rebuild)
-RESEED_GLOBS=("6_access-points/dashboards/internal-bi/catalog" "bundle/seed-pack/app/security" "6_access-points/dashboards/public/static/articles" "7_security/scripts/")
+RESEED_GLOBS=("6_access-points/dashboards/internal-bi/catalog" "bundle/seed-pack/app/security" "6_access-points/dashboards/public/static/articles" "7_security/scripts/" "bundle/roles/")
 
 changed_input="${1:-all}"
 if [ "$changed_input" = "all" ]; then
@@ -107,13 +107,11 @@ for c in "${COMPONENTS[@]}"; do
   fi
 done
 
-for d in "${RESTART[@]}"; do
-  log "rollout restart deploy/$d"
-  kubectl -n "$NS" rollout restart "deploy/$d" >/dev/null 2>&1 || true
-done
-for d in "${RESTART[@]}"; do
-  kubectl -n "$NS" rollout status "deploy/$d" --timeout=180s 2>&1 | tail -1
-done
+# Order below is LOAD-BEARING: reseed (fills ops_perm) → OPA policy regen →
+# THEN workload restarts. The gateway's startup self-tests interrogate the
+# LIVE OPA (allow/deny matrix + masking reveal sets) and refuse to boot on
+# drift — restarting it before the policy lands would crashloop a gateway
+# that is newer than its policy.
 
 RESEED=0
 for g in "${RESEED_GLOBS[@]}"; do touched "$g" && RESEED=1; done
@@ -124,9 +122,40 @@ if [ "$changed_input" = "all" ] || [ "$RESEED" = 1 ]; then
     echo "  ✗ catalog/RBAC reseed FAILED"; tail -40 /tmp/ci-reseed.log; exit 1
   fi
   tail -5 /tmp/ci-reseed.log
-  kubectl -n "$NS" rollout restart deploy/nhdw-gateway >/dev/null 2>&1 || true
-  kubectl -n "$NS" rollout status deploy/nhdw-gateway --timeout=120s 2>&1 | tail -1
 fi
+
+# OPA policy: recompile from the (just-reseeded) permission store, opa-test,
+# publish to the opa-policies ConfigMap + reload — whenever the policy source
+# changed.
+if [ "$changed_input" = "all" ] || touched "7_security/opa/" || touched "bundle/roles/"; then
+  log "regen OPA policy (opa-test gated)"
+  if ! bash "$REPO/bundle/scripts/regen-opa-policy.sh" >/tmp/ci-opa.log 2>&1; then
+    echo "  ✗ OPA policy regen FAILED (running OPA left untouched)"; tail -25 /tmp/ci-opa.log; exit 1
+  fi
+  grep -E "✓|PASS" /tmp/ci-opa.log | tail -4
+fi
+
+# restart rebuilt workloads (+ the gateway on a reseed, so it reloads the
+# catalog/RBAC caches) now that the policy matches the code
+if [ "$RESEED" = 1 ] || [ "$changed_input" = "all" ]; then
+  case " ${RESTART[*]} " in
+    *" nhdw-gateway "*) : ;;                       # already being restarted
+    *) RESTART+=("nhdw-gateway") ;;
+  esac
+fi
+for d in "${RESTART[@]}"; do
+  log "rollout restart deploy/$d"
+  kubectl -n "$NS" rollout restart "deploy/$d" >/dev/null 2>&1 || true
+done
+for d in "${RESTART[@]}"; do
+  # a workload that never becomes ready (e.g. the gateway fail-fasting on a
+  # policy drift) must FAIL the deploy, not scroll past
+  if ! kubectl -n "$NS" rollout status "deploy/$d" --timeout=180s 2>&1 | tail -1; then
+    echo "  ✗ deploy/$d did not become ready"
+    kubectl -n "$NS" logs "deploy/$d" --tail=20 2>/dev/null | sed 's/^/    /'
+    exit 1
+  fi
+done
 
 # ── DATA TIER (images + job chain; DDL/vocab already applied above) ──────────
 

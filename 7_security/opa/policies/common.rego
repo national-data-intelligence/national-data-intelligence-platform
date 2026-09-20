@@ -60,6 +60,48 @@ scope_row_filter[dim] := vals if {
 	count(vals) > 0
 }
 
+# ── Column-masking obligation ──────────────────────────────────────────────
+# The PEP sends the queried relation's CLASSIFIED columns (from
+# ops_perm.column_classification — a denylist, so unclassified columns never
+# appear here and stay visible) as
+#   input.resource.columns: [{"name": "lat", "sensitivity": "restricted"}, …]
+# A classified column is REVEALED only when positively established: the role's
+# compiled reveal_sensitivity set (bundle/roles/*.yaml `column_access.reveal`)
+# contains its sensitivity — and never for a low-trust identity. Everything
+# else lands in `masked_columns`; the PEP transforms each per its mask_class
+# (app/masking.py). Same routing table as role_decision, aliases included.
+role_reveal := data.nhdw.authz.role_r_pub_anon.reveal_sensitivity    if input.user.role == "R-PUB-ANON"
+role_reveal := data.nhdw.authz.role_r_prod_clin.reveal_sensitivity   if input.user.role == "R-PROD-CLIN"
+role_reveal := data.nhdw.authz.role_r_prod_submit.reveal_sensitivity if input.user.role == "R-PROD-SUBMIT"
+role_reveal := data.nhdw.authz.role_r_dec.reveal_sensitivity         if input.user.role == "R-DEC"
+role_reveal := data.nhdw.authz.role_r_dec.reveal_sensitivity         if input.user.role == "R-PD-HIV"
+role_reveal := data.nhdw.authz.role_r_dec.reveal_sensitivity         if input.user.role == "R-RHB-OROMIA"
+role_reveal := data.nhdw.authz.role_r_cons_ana.reveal_sensitivity    if input.user.role == "R-CONS-ANA"
+role_reveal := data.nhdw.authz.role_r_cons_sci.reveal_sensitivity    if input.user.role == "R-CONS-SCI"
+role_reveal := data.nhdw.authz.role_r_cons_res.reveal_sensitivity    if input.user.role == "R-CONS-RES"
+role_reveal := data.nhdw.authz.role_r_cons_prt.reveal_sensitivity    if input.user.role == "R-CONS-PRT"
+role_reveal := data.nhdw.authz.role_r_stew.reveal_sensitivity        if input.user.role == "R-STEW"
+role_reveal := data.nhdw.authz.role_r_ops_eng.reveal_sensitivity     if input.user.role == "R-OPS-ENG"
+role_reveal := data.nhdw.authz.role_r_ops_adm.reveal_sensitivity     if input.user.role == "R-OPS-ADM"
+role_reveal := data.nhdw.authz.role_r_ops_sec.reveal_sensitivity     if input.user.role == "R-OPS-SEC"
+
+# R-SUPER reveals every sensitivity (wildcard, matching its blanket allow).
+role_reveal := {"restricted", "privileged"} if input.user.role == "R-SUPER"
+
+# Unknown role ⇒ nothing revealed (fail-closed alongside the default deny).
+default role_reveal := set()
+
+_col_revealed(s) if {
+	not low_trust # a low-trust identity never sees a classified column clear
+	s in role_reveal
+}
+
+masked_cols := [c.name |
+	some c in object.get(input.resource, "columns", [])
+	c.sensitivity != "default"
+	not _col_revealed(c.sensitivity)
+]
+
 # ── Trust-tier guard (P1.3) ────────────────────────────────────────────────
 # A low-trust federated identity (idp_trust == "low" — e.g. a public Google
 # login, stamped by the Keycloak mapper) may still READ aggregate/de-identified
@@ -87,5 +129,9 @@ default decide := {"allow": false, "reason": "unknown role"}
 decide := {"allow": false, "reason": "low-trust identity denied sensitive action",
 	"obligations": {}} if trust_denied
 
-# Merge the scope row_filter obligation into the matched role decision.
-decide := object.union(role_decision, {"obligations": {"row_filter": scope_row_filter}}) if not trust_denied
+# Merge the scope row_filter and masking obligations into the matched role
+# decision. masked_columns rides top-level (the PEP's Decision dataclass
+# already parses it there).
+decide := object.union(role_decision,
+	{"obligations": {"row_filter": scope_row_filter},
+		"masked_columns": masked_cols}) if not trust_denied

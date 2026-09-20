@@ -7,6 +7,8 @@ import rego.v1
 role_id := "R-SUPER"
 phase   := 1
 
+reveal_sensitivity := set()
+
 default allow := false
 
 # permission[0]: PT / members=scoped / gran=raw / verbs=['read', 'export', 'schedule', 'alert', 'annotate']

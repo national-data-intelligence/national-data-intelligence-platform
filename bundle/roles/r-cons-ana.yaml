@@ -16,6 +16,11 @@ role:
     M&E + policy analysts. Full Internal-BI build access; ad-hoc SQL on
     pre-authorised marts. Sensitive sub-classes (HIV/mental/GBV) blocked
     unless explicitly granted at the widget-filter level.
+  # Column-grain reveal: analysts see restricted columns (facility GPS,
+  # contact) unmasked — their Resource/CT maps legitimately plot exact
+  # coordinates. privileged (patient-identifying) stays masked.
+  column_access:
+    reveal: [restricted]
   permissions:
 
     - subject: PRG

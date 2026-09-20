@@ -7,6 +7,8 @@ import rego.v1
 role_id := "R-PROD-SUBMIT"
 phase   := 1
 
+reveal_sensitivity := set()
+
 default allow := false
 
 # permission[0]: FAC / members=scoped / gran=raw / verbs=['read', 'submit', 'annotate']
