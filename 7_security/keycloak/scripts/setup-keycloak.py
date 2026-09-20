@@ -188,7 +188,8 @@ OPENMETADATA_OIDC_SECRET = os.environ.get("OPENMETADATA_OIDC_SECRET", "").strip(
 MLFLOW_GATE_OIDC_SECRET       = os.environ.get("MLFLOW_GATE_OIDC_SECRET", "").strip()
 PROMETHEUS_GATE_OIDC_SECRET   = os.environ.get("PROMETHEUS_GATE_OIDC_SECRET", "").strip()
 ALERTMANAGER_GATE_OIDC_SECRET = os.environ.get("ALERTMANAGER_GATE_OIDC_SECRET", "").strip()
-HEADLAMP_GATE_OIDC_SECRET     = os.environ.get("HEADLAMP_GATE_OIDC_SECRET", "").strip()
+HEADLAMP_GATE_OIDC_SECRET     = os.environ.get("HEADLAMP_GATE_OIDC_SECRET", "")
+SEAWEEDFS_GATE_OIDC_SECRET = os.environ.get("SEAWEEDFS_GATE_OIDC_SECRET", "").strip()
 
 
 def _google_configured() -> bool:
@@ -273,16 +274,18 @@ _GATE_BASES = {
     # Headlamp's gate lives at /oauth2gate + /k8s on the ADMIN host (path-routed
     # beside the admin SPA), so its redirect base is the admin host.
     "headlamp":     f"https://admin.{_HOST_BASE}",
+    "seaweedfs":    f"https://seaweedfs.{_HOST_BASE}",
 }
 _GATE_SECRETS = {
     "mlflow":       MLFLOW_GATE_OIDC_SECRET,
     "prometheus":   PROMETHEUS_GATE_OIDC_SECRET,
     "alertmanager": ALERTMANAGER_GATE_OIDC_SECRET,
     "headlamp":     HEADLAMP_GATE_OIDC_SECRET,
+    "seaweedfs":    SEAWEEDFS_GATE_OIDC_SECRET,
 }
 GATE_CLIENTS = [
     {"realm": realm, "client_id": cid, "base": _GATE_BASES[cid], "secret": _GATE_SECRETS[cid]}
-    for cid in ("mlflow", "prometheus", "alertmanager", "headlamp")
+    for cid in ("mlflow", "prometheus", "alertmanager", "headlamp", "seaweedfs")
     for realm in ("moh-staff", "privileged-ops")
 ]
 
