@@ -85,9 +85,10 @@ BEGIN
         GRANT SELECT, INSERT ON ops_governance.dq_flag_event TO ops_gateway;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ops_reader') THEN
-        GRANT SELECT ON ops_governance.dq_threshold TO ops_reader;
+        GRANT SELECT ON ops_governance.dq_threshold, ops_governance.dq_flag_event TO ops_reader;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ops_writer') THEN
         GRANT SELECT, INSERT, UPDATE, DELETE ON ops_governance.dq_threshold TO ops_writer;
+        GRANT SELECT ON ops_governance.dq_flag_event TO ops_writer;
     END IF;
 END$$;

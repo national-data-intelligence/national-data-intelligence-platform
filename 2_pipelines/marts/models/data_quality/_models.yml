@@ -16,6 +16,18 @@ models:
       record_source convention stays in the vault). Adapters must tolerate
       NULL dimensions. Consumed by /api/dq (source pulse + scorecard).
     columns:
+      - name: deadline_cadence
+        description: >
+          Governed reporting cadence from the reporting_deadlines seed
+          (source-key joined; EWARS/Climate folds to Climate). 'none' means the
+          source has no arrival deadline (e.g. an immutable archive).
+        tests:
+          - accepted_values:
+              values: ['daily', 'weekly', 'monthly', 'quarterly', 'none']
+      - name: deadline_offset_days
+        description: Days after period end when the source's report is due (reporting_deadlines seed).
+      - name: deadline_grace_hours
+        description: Grace window after the deadline before lateness counts (reporting_deadlines seed).
       - name: source
         tests:
           - not_null
