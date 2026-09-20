@@ -74,6 +74,8 @@ spec:
               valueFrom: { secretKeyRef: { name: superset-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             - name: JUPYTERHUB_OIDC_SECRET
               valueFrom: { secretKeyRef: { name: jupyterhub-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: OPENMETADATA_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             # Browser-facing base URLs (OIDC single-host convention). WITHOUT these the
             # script falls back to compose-era localhost defaults and a rerun of this
             # Job rewrites every client's redirect URIs to them (2026-09-20 incident).

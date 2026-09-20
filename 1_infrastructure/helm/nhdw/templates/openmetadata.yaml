@@ -45,6 +45,8 @@ spec:
           env:
             - name: DB_USER_PASSWORD
               valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: DB_PASSWORD } }
+            - name: OIDC_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
           resources:
             requests: { memory: "2Gi", cpu: "500m" }
             limits:   { memory: "3Gi" }
@@ -96,16 +98,21 @@ data:
 # on first boot and prefers the DB copy afterwards. Changing the OIDC env here
 # requires clearing the stored rows (openmetadata_settings) + a restart.
   # ── native Keycloak OIDC (moh-staff), PUBLIC client + PKCE: the OM 2.x SPA
-  #    runs the code flow itself (oidc-client-ts, callback /auth/callback),
-  #    like the internal-bi/admin SPAs. Server validates bearers via the
-  #    internal JWKS URL below. The public host literals follow the OIDC
+  #    the OM SERVER exchanges the code at /callback (split-URL: discovery/JWKS
+  #    internal http, browser redirects public) and forwards the browser to the
+  #    UI with a session cookie. OIDC_SERVER_URL is the trusted-redirect base —
+  #    without it OM rejects the UI's redirect (defaults to localhost:8585). The public host literals follow the OIDC
   #    single-host convention (hostBase) — provisioning rewrites them per host.
   AUTHENTICATION_PROVIDER: "custom-oidc"
-  AUTHENTICATION_CLIENT_TYPE: "public"
+  AUTHENTICATION_CLIENT_TYPE: "confidential"
   AUTHENTICATION_RESPONSE_TYPE: "code"
   AUTHENTICATION_CLIENT_ID: "openmetadata"
   AUTHENTICATION_AUTHORITY: "https://keycloak.127.0.0.1.nip.io/realms/moh-staff"
-  AUTHENTICATION_CALLBACK_URL: "https://openmetadata.127.0.0.1.nip.io/auth/callback"
+  AUTHENTICATION_CALLBACK_URL: "https://openmetadata.127.0.0.1.nip.io/callback"
+  OIDC_CLIENT_ID: "openmetadata"
+  OIDC_DISCOVERY_URI: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080/realms/moh-staff/.well-known/openid-configuration"
+  OIDC_CALLBACK: "https://openmetadata.127.0.0.1.nip.io/callback"
+  OIDC_SERVER_URL: "https://openmetadata.127.0.0.1.nip.io"
   AUTHENTICATION_PUBLIC_KEYS: "[http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080/realms/moh-staff/protocol/openid-connect/certs, http://localhost:8585/api/v1/system/config/jwks]"
   # bootstrap admin principal (username part); real users arrive via SSO
   AUTHORIZER_ADMIN_PRINCIPALS: "[admin]"

@@ -172,6 +172,9 @@ JUPYTERHUB_OIDC_SECRET = os.environ.get("JUPYTERHUB_OIDC_SECRET", "").strip()
 # Confidential OIDC secret for Superset's native FAB Keycloak login (moh-staff —
 # the analyst audience; #81). Same split-URL/native-OIDC pattern as Airflow.
 SUPERSET_OIDC_SECRET = os.environ.get("SUPERSET_OIDC_SECRET", "").strip()
+# OpenMetadata server-side OIDC (moh-staff): the OM server exchanges the code
+# at /callback and hands the browser a session cookie.
+OPENMETADATA_OIDC_SECRET = os.environ.get("OPENMETADATA_OIDC_SECRET", "").strip()
 # Confidential OIDC secret for the MinIO console's native OIDC (privileged-ops).
 # The console runs AssumeRoleWithWebIdentity against this client → temporary MinIO
 # creds mapped to the consoleAdmin policy, so an authenticated operator SSOs in.
@@ -221,12 +224,6 @@ DASHBOARD_CLIENTS = [
     _client("moh-staff",      "internal-bi", _DASH_BASE["internal-bi"], True),
     _client("moh-staff",      "workshop",    _DASH_BASE["workshop"],    False),
     _client("privileged-ops", "admin",       _DASH_BASE["admin"],       False),
-    # OpenMetadata: its 2.x UI is an SPA running the code+PKCE flow itself
-    # (oidc-client-ts) against /auth/callback — a PUBLIC client like the other
-    # SPAs, NOT a confidential tool client (the server-side callback the
-    # confidential mode expects is never targeted by the 2.x UI — OM#26311).
-    # convert=True: an earlier seed created it confidential.
-    _client("moh-staff", "openmetadata", f"https://openmetadata.{_HOST_BASE}", True),
 ]
 
 # Confidential tool clients (dbt-docs, Airflow; Superset/Grafana deferred to v2) —
@@ -253,6 +250,14 @@ TOOL_CLIENTS = [
     # /oauth-authorized/keycloak (covered by base + /*). Same pattern as Airflow.
     {"realm": "moh-staff", "client_id": "superset",
      "base": f"https://superset.{_HOST_BASE}", "secret": SUPERSET_OIDC_SECRET},
+    # OpenMetadata (moh-staff): CONFIDENTIAL — the OM server runs the exchange at
+    # /callback, then forwards the browser to the UI's /auth/callback with a
+    # session cookie (both covered by base + /*). OM needs OIDC_SERVER_URL set to
+    # this same base or its login rejects the UI's redirect ("must exactly match
+    # a trusted redirect URI"). NO PKCE on this client: Keycloak enforces the
+    # attribute against the server-side flow, which does not send a challenge.
+    {"realm": "moh-staff", "client_id": "openmetadata",
+     "base": f"https://openmetadata.{_HOST_BASE}", "secret": OPENMETADATA_OIDC_SECRET},
 ]
 
 # tool-gate clients — the nhdw/tool-gate reverse proxies (main.py). Same
