@@ -104,11 +104,11 @@ data:
   AUTHENTICATION_CLIENT_TYPE: "confidential"
   AUTHENTICATION_CLIENT_ID: "openmetadata"
   AUTHENTICATION_AUTHORITY: "https://keycloak.127.0.0.1.nip.io/realms/moh-staff"
-  AUTHENTICATION_CALLBACK_URL: "https://openmetadata.127.0.0.1.nip.io/callback"
+  AUTHENTICATION_CALLBACK_URL: "https://openmetadata.127.0.0.1.nip.io/auth/callback"
   AUTHENTICATION_PUBLIC_KEYS: "[http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080/realms/moh-staff/protocol/openid-connect/certs, http://localhost:8585/api/v1/system/config/jwks]"
   OIDC_CLIENT_ID: "openmetadata"
   OIDC_DISCOVERY_URI: "http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080/realms/moh-staff/.well-known/openid-configuration"
-  OIDC_CALLBACK: "https://openmetadata.127.0.0.1.nip.io/callback"
+  OIDC_CALLBACK: "https://openmetadata.127.0.0.1.nip.io/auth/callback"
   # bootstrap admin principal (username part); real users arrive via SSO
   AUTHORIZER_ADMIN_PRINCIPALS: "[admin]"
 ---
