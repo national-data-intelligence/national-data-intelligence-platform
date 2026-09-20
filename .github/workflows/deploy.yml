@@ -21,6 +21,8 @@ on:
       - 'bundle/roles/**'                         # role YAMLs → reseed + policy regen
       - '2_pipelines/ml/registry/validators.py'   # baked into nhdw/gateway
       - 'bundle/scripts/ci-redeploy.sh'
+      # k8s manifests — the overlay is applied (Secrets excluded, see ci-redeploy)
+      - '1_infrastructure/k8s/**'
       # data tier (pipeline images, init DDL, reference vocabulary, MDM)
       - '2_pipelines/staging/**'
       - '2_pipelines/vault/**'
@@ -48,6 +50,9 @@ jobs:
       # verify-system probes the live ingress — must match the deployed hostBase
       # (defaults to 127.0.0.1.nip.io otherwise and reports a false outage)
       NHDW_HOSTBASE: ${{ vars.NHDW_HOSTBASE || '20.84.70.78.nip.io' }}
+      # the deployment's own secrets.yaml (gitignored); used ONLY to render the
+      # overlay — Secrets themselves are never applied from CI
+      NHDW_SECRETS_FILE: ${{ vars.NHDW_SECRETS_FILE || '/home/biniyam/ethio-nhdw-demo/1_infrastructure/k8s/overlays/dev/secrets.yaml' }}
     steps:
       - uses: actions/checkout@v4
         with:
