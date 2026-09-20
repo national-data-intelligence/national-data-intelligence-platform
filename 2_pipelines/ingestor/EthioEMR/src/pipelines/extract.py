@@ -20,6 +20,7 @@ import dlt
 from ..config import Config
 from ..destination import build_destination
 from ..manifest import build_manifest, measure_partition, write_manifest
+from ..lineage import emit_source_lineage
 from ._mysql import OpenMRSReader
 
 log = logging.getLogger(__name__)
@@ -121,6 +122,7 @@ def run(cfg: Config) -> dict:
                 watermark_used=cfg.mysql_initial_cursor,
             ),
         ))
+        emit_source_lineage(source=placeholders["source"], table=table_name)   # best-effort catalog hop (no-op unless OM_LINEAGE_* set)
     return {
         "run_id": run_id,
         "tables": sorted(tables),

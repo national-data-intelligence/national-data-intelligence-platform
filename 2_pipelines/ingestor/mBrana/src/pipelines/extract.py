@@ -16,6 +16,7 @@ from dlt.sources.sql_database import sql_table
 from ..config import Config
 from ..destination import build_destination
 from ..manifest import build_manifest, measure_partition, write_manifest
+from ..lineage import emit_source_lineage
 from .tables import TABLES, TableSpec
 
 log = logging.getLogger(__name__)
@@ -83,6 +84,7 @@ def run(cfg: Config, *, only: list[str] | None = None) -> dict:
                 bytes_written=bytes_written,
             ),
         ))
+        emit_source_lineage(source=placeholders["source"], table=table_name)   # best-effort catalog hop (no-op unless OM_LINEAGE_* set)
     return {
         "run_id": run_id,
         "tables": sorted(tables),
