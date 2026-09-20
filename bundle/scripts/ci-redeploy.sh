@@ -45,6 +45,35 @@ fi
 log(){ echo "▸ $*"; }
 touched(){ echo "$CHANGED" | grep -q -- "$1"; }
 
+# ── DATA TIER, part 1: schema + vocabulary FIRST ─────────────────────────────
+# DDL and the vocabulary reload run BEFORE the app tier: the catalog/RBAC
+# reseed loads column_classification.yaml (and future seeds) into tables this
+# DDL may have just created — order is load-bearing.
+
+# 1. New/changed Postgres init DDL — the .sql files are idempotent by repo
+#    contract (IF NOT EXISTS everywhere), and Postgres only auto-runs init on a
+#    fresh volume, so the CI applies changed ones to the live DB. (.sh init
+#    files create databases/roles from env and stay boot-only — flagged, not run.)
+DDL_APPLIED=()
+for f in $(echo "$CHANGED" | grep -E '^3_storage/postgres/init/.*\.sql$' | sort); do
+  [ -f "$REPO/$f" ] || continue     # deleted file
+  log "apply init DDL $f (idempotent)"
+  if kubectl -n "$NS" exec -i postgres-vault-0 -- psql -q -U vault_admin -d nhdw_vault -v ON_ERROR_STOP=1 < "$REPO/$f" >/tmp/ci-ddl.log 2>&1; then
+    DDL_APPLIED+=("$f")
+  else
+    echo "  ✗ DDL apply failed for $f"; tail -10 /tmp/ci-ddl.log; exit 1
+  fi
+done
+echo "$CHANGED" | grep -qE '^3_storage/postgres/init/.*\.sh$' \
+  && log "NOTE: changed init .sh (db/role bootstrap) — boot-only, apply by hand if a new database is needed"
+
+# 2. Reference vocabulary reload when its seeds changed (idempotent upsert).
+if touched "bundle/seeds/ref-vocab/"; then
+  log "reload nhdw_ref vocabulary"
+  bash "$REPO/bundle/scripts/seed-ref-vocab.sh" --no-build 2>&1 | tail -3 || { echo "  ✗ vocab reload failed"; exit 1; }
+fi
+
+
 BUILT=(); RESTART=()
 for c in "${COMPONENTS[@]}"; do
   IFS='|' read -r prefix image dockerfile context deploy <<<"$c"
@@ -76,30 +105,7 @@ if [ "$changed_input" = "all" ] || [ "$RESEED" = 1 ]; then
   kubectl -n "$NS" rollout status deploy/nhdw-gateway --timeout=120s 2>&1 | tail -1
 fi
 
-# ── DATA TIER ────────────────────────────────────────────────────────────────
-
-# 1. New/changed Postgres init DDL — the .sql files are idempotent by repo
-#    contract (IF NOT EXISTS everywhere), and Postgres only auto-runs init on a
-#    fresh volume, so the CI applies changed ones to the live DB. (.sh init
-#    files create databases/roles from env and stay boot-only — flagged, not run.)
-DDL_APPLIED=()
-for f in $(echo "$CHANGED" | grep -E '^3_storage/postgres/init/.*\.sql$' | sort); do
-  [ -f "$REPO/$f" ] || continue     # deleted file
-  log "apply init DDL $f (idempotent)"
-  if kubectl -n "$NS" exec -i postgres-vault-0 -- psql -q -U vault_admin -d nhdw_vault -v ON_ERROR_STOP=1 < "$REPO/$f" >/tmp/ci-ddl.log 2>&1; then
-    DDL_APPLIED+=("$f")
-  else
-    echo "  ✗ DDL apply failed for $f"; tail -10 /tmp/ci-ddl.log; exit 1
-  fi
-done
-echo "$CHANGED" | grep -qE '^3_storage/postgres/init/.*\.sh$' \
-  && log "NOTE: changed init .sh (db/role bootstrap) — boot-only, apply by hand if a new database is needed"
-
-# 2. Reference vocabulary reload when its seeds changed (idempotent upsert).
-if touched "bundle/seeds/ref-vocab/"; then
-  log "reload nhdw_ref vocabulary"
-  bash "$REPO/bundle/scripts/seed-ref-vocab.sh" --no-build 2>&1 | tail -3 || { echo "  ✗ vocab reload failed"; exit 1; }
-fi
+# ── DATA TIER (images + job chain; DDL/vocab already applied above) ──────────
 
 # 3. Pipeline images + the dbt job chain. Map: <path-prefix>|<image>|<job>|<stage#>
 #    Stage order mirrors seed-realistic's PIPELINE; a change at stage N reruns
