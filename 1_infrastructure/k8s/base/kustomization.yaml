@@ -114,8 +114,16 @@ configMapGenerator:
       - ../../../3_storage/postgres/init/30_demo_patient_phi.sql
       - ../../../3_storage/postgres/init/31_superset_db.sh
       - ../../../3_storage/postgres/init/23_seaweedfs_filer_db.sh
+      # vocabulary + MDM (Track A). initdb runs the configmap in FILENAME
+      # order on a fresh volume, so these must be listed or a cold boot comes
+      # up without nhdw_ref / the MDM decision tier and the vocabulary seed
+      # fails on a missing schema.
+      - ../../../3_storage/postgres/init/34_ref_vocab.sql
+      - ../../../3_storage/postgres/init/35_mdm.sql
+      - ../../../3_storage/postgres/init/36_mdm_decisions_read.sql
       - ../../../3_storage/postgres/init/37_openmetadata_db.sh
       - ../../../3_storage/postgres/init/38_governance.sql
+      - ../../../3_storage/postgres/init/39_mdm_release.sql
 
 
   - name: keycloak-seed-script

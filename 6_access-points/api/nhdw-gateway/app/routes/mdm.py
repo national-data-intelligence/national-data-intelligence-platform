@@ -14,6 +14,7 @@ log_policy_decision for the audit trail.
 from __future__ import annotations
 
 import logging
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path as PathParam, Query
@@ -199,6 +200,121 @@ async def decide(
             # on the next read; only the insert-only hub/link history catches
             # up on the next vault build (verified live 2026-09-21)
             "note": "in effect on the next read; vault history catches up on the next build"}
+
+
+@router.get("/releases")
+async def list_releases(user: UserCtx = Depends(get_user),
+                        entity_class: str = Query(default="facility")) -> dict:
+    """Published master-data cuts, newest first, with the counts captured when
+    each was published."""
+    _require_steward(user)
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT r.*, COALESCE(jsonb_object_agg(s.stat_key, s.stat_value)
+                                 FILTER (WHERE s.stat_key IS NOT NULL), '{}'::jsonb) AS stats
+            FROM ops_governance.mdm_release r
+            LEFT JOIN ops_governance.mdm_release_stat s USING (release_id)
+            WHERE r.entity_class_code = $1
+            GROUP BY r.release_id
+            ORDER BY r.created_at DESC
+        """, entity_class)
+    return {"releases": [{
+        "release_id": r["release_id"], "status": r["status"],
+        "entity_class_code": r["entity_class_code"],
+        "deployment_context": r["deployment_context"],
+        "decisions_as_of": r["decisions_as_of"].isoformat(),
+        "source_watermark": r["source_watermark"].isoformat(),
+        "note": r["note"], "created_by": r["created_by"],
+        "created_at": r["created_at"].isoformat(),
+        "published_at": r["published_at"].isoformat() if r["published_at"] else None,
+        "superseded_by": r["superseded_by"],
+        "stats": r["stats"],
+    } for r in rows]}
+
+
+@router.post("/releases")
+async def publish_release(
+    user: UserCtx = Depends(get_user),
+    release_id: str = Body(..., embed=True),
+    note: str | None = Body(default=None, embed=True),
+    entity_class: str = Body(default="facility", embed=True),
+) -> dict:
+    """Publish a master-data release: pin the decision-log cut AND the source
+    watermark as of NOW, and record the master counts at that moment.
+
+    Both coordinates are required to reproduce a master set — a decision cut
+    alone does not freeze it, because a source record arriving later still
+    joins its cluster. Published releases are immutable; correcting one means
+    publishing a successor.
+    """
+    gate = _require_steward(user)
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{2,63}", release_id):
+        raise HTTPException(422, "release_id must be 3-64 chars of letters, "
+                                 "digits, dot, dash or underscore (it gets quoted "
+                                 "in reports — keep it readable)")
+
+    # the source watermark and the counts come from the warehouse itself
+    try:
+        wm = (await trino_client.query(
+            "SELECT CAST(max(load_ts) AS varchar) AS wm "
+            "FROM marts.nhdw_vault_business.hub_facility_conformed")).get("rows") or []
+        counts = (await trino_client.query("""
+            SELECT count(*) AS masters,
+                   count(*) FILTER (WHERE mdm_state = 'conformed')     AS conformed,
+                   count(*) FILTER (WHERE mdm_state = 'single_source') AS single_source
+            FROM marts.nhdw_vault_business.dim_facility
+        """)).get("rows") or []
+    except Exception as exc:                                      # noqa: BLE001
+        raise HTTPException(502, f"could not read the warehouse to pin a release: {exc}")
+    if not wm or not wm[0].get("wm"):
+        raise HTTPException(409, "the vault has no facility masters to pin yet")
+
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            try:
+                rel = await conn.fetchrow("""
+                    INSERT INTO ops_governance.mdm_release
+                        (release_id, entity_class_code, decisions_as_of,
+                         source_watermark, note, status, created_by, published_at)
+                    VALUES ($1, $2, now(), $3::timestamptz, $4, 'published', $5, now())
+                    RETURNING decisions_as_of, source_watermark
+                """, release_id, entity_class, wm[0]["wm"], note, user.username)
+            except Exception as exc:                              # noqa: BLE001
+                if "duplicate key" in str(exc):
+                    raise HTTPException(
+                        409, f"release {release_id} already exists — published "
+                             f"releases are immutable; publish a successor instead")
+                raise
+            n_dec = await conn.fetchval("""
+                SELECT count(*) FROM ops_governance.mdm_match_decision
+                WHERE entity_class_code = $1 AND recorded_to IS NULL
+                  AND decision IN ('accept', 'merge')
+            """, entity_class)
+            stats = {"masters": int(counts[0]["masters"]) if counts else 0,
+                     "conformed": int(counts[0]["conformed"]) if counts else 0,
+                     "single_source": int(counts[0]["single_source"]) if counts else 0,
+                     "decisions_applied": int(n_dec or 0)}
+            for k, v in stats.items():
+                await conn.execute("""
+                    INSERT INTO ops_governance.mdm_release_stat (release_id, stat_key, stat_value)
+                    VALUES ($1, $2, $3)
+                """, release_id, k, v)
+
+    await ops_db.log_policy_decision(
+        user=user, action="mdm.release.publish", resource=release_id,
+        decision="allow", rule_hits=gate.rule_hits,
+        explanation={"decisions_as_of": rel["decisions_as_of"].isoformat(),
+                     "source_watermark": rel["source_watermark"].isoformat(),
+                     **stats})
+    return {"release_id": release_id, "status": "published",
+            "decisions_as_of": rel["decisions_as_of"].isoformat(),
+            "source_watermark": rel["source_watermark"].isoformat(),
+            "stats": stats,
+            "reproduce_with": (
+                "dbt run -s v_facility_resolution_asof --vars "
+                f"'{{release_as_of: \"{rel['decisions_as_of'].isoformat()}\"}}'")}
 
 
 @router.get("/master/{entity_class}/{master_bk}")
