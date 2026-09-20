@@ -463,6 +463,25 @@ step "7.8 · OpenMetadata catalog seed (non-fatal)"
 bash "$SCRIPTS/seed-openmetadata.sh" \
   || echo "  ! OpenMetadata seed incomplete (catalog-only — the platform is unaffected); see above."
 
+# ─── 7.85 · DQ detection seed (governance plane, batch 2) ────────────────────
+# Runs the incident detector once so the Admin DQ queue and governance KPIs
+# have content on a cold boot. The incidents are REAL findings over the
+# just-built pipeline (stale sources, failed dbt tests, MDM backlog) — never
+# fixtures. NON-FATAL: the queue is derived state; a boot without it is fully
+# usable and the 06:15 DAG catches up.
+step "7.85 · DQ detection seed (non-fatal)"
+DQTOK=$(kubectl -n "$NS" get secret dq-detect-secrets -o jsonpath='{.data.TOKEN}' 2>/dev/null | base64 -d || true)
+if [ -n "$DQTOK" ]; then
+  kubectl -n "$NS" run dq-detect-seed --rm -i --restart=Never --quiet \
+    --image=curlimages/curl:8.10.1 -- -s -m 120 -X POST \
+    -H "X-Detect-Token: $DQTOK" \
+    "http://nhdw-gateway.$NS.svc.cluster.local:8000/api/dq/detect" \
+    && echo "  ✓ first detection ran" \
+    || echo "  ! DQ detection seed incomplete (queue-only — the platform is unaffected)"
+else
+  echo "  ! dq-detect-secrets absent — skipping (the 06:15 DAG will populate the queue)"
+fi
+
 # ─── 7.9 · verification gate ─────────────────────────────────────────────────
 # Fail LOUDLY, not silently. Every prior step exiting 0 does NOT prove the demo
 # is actually usable (a mart can be empty, a contract unmet) — so run the fast

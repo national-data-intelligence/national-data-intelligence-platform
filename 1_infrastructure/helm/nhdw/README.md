@@ -60,7 +60,7 @@ no configMap — it renders its config at runtime via an initContainer into an e
 **Secrets** stay external too — the deploy role creates them from `overlays/dev/secrets.yaml`
 (dev; `changeme-*` placeholders committed) or a real secret store (prod). Real material is never
 committed. Names the workloads expect: `keycloak-secrets`, `nhdw-gateway-secrets`, `minio-secrets`,
-`postgres-vault-secrets`, `smtp-secrets`, `alert-eval-secrets`, `jupyterhub-secrets`,
+`postgres-vault-secrets`, `smtp-secrets`, `alert-eval-secrets, dq-detect-secrets`, `jupyterhub-secrets`,
 `superset-secrets`, `mlflow-secrets`, `airflow-secrets` + `-oidc`, the four `*-gate-secrets`,
 `headlamp-token`, `source-creds`, `keycloak-idp-secrets`, and the rest listed in `secrets.yaml`.
 

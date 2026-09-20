@@ -55,9 +55,12 @@ def run_detection() -> dict:
 @dag(
     dag_id="dq_detection",
     description="Raise DQ incidents (dbt failures, stale sources, volume outliers, MDM backlog) into the governed queue.",
-    schedule="0 6 * * *",
+    schedule="15 6 * * *",  # daily 06:15 UTC — after the OM catalog ingest (05:00) and ml_drift_check (06:00), outside pipeline hours
     start_date=pendulum.datetime(2026, 9, 1, tz="UTC"),
     catchup=False,
+    max_active_runs=1,
+    default_args={"retries": 1},
+    doc_md=__doc__,
     tags=["dq", "governance"],
 )
 def dq_detection():

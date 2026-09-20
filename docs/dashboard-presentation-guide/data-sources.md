@@ -161,7 +161,7 @@ gateway endpoints / ops tables**, not `bi_*` marts:
 | Widget | Source |
 |--------|--------|
 | `adm-topology` | `topology_graph.py` (manifest-derived nodes + live scans); gateway edges from `ops_audit.gateway_log`; traffic via `traffic_providers.py` |
-| `adm-dq` | live `/gw/dq/*` endpoints (reads `bi_quality`/DQ marts + governance) |
+| `adm-dq` | live `/gw/dq/*` endpoints — `bi_quality` marts, dbt artifacts + lake sidecars, and the governance record `ops_governance.dq_flag` / `dq_flag_event` / `dq_threshold` (`38_governance.sql`) |
 | `adm-alerts-routing` | alert-routing config (`29_alert_routing.sql` store) + Prometheus alerts |
 | `adm-users-access` | `ops_perm.*` (users) via `routes/perm_admin.py` |
 | `adm-roles-permissions` | `ops_perm.permission` / `role_permission` (`32_permission_store.sql`) |

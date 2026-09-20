@@ -1,0 +1,22 @@
+# Decision record — data-quality plane (Track B, batch 2)
+
+Date: 2026-09-20 · Status: implemented on `feat/abeni-track-b-dq` · Owner: Track B
+Scope: the DQ detector, threshold store, durable incident history and governance KPIs.
+Reversals need a new entry here, not a silent edit.
+
+| # | Decision | Reason |
+|---|---|---|
+| 1 | Detection is **derived from signals that already exist** — dbt run_results in the lake, the `_manifest.json` sidecars, the MDM stewardship stores. The ~750 dbt tests are ingested, never re-implemented. | One definition of every check; the detector can never disagree with the pipeline about what failed. |
+| 2 | **No email path exists in the detector, by construction.** Incidents land in the in-app queue only; any future mailer integration must sit behind `DQ_EMAIL_ENABLED` (default false). | The SMTP relay reaches a real inbox; alerting a human's mailbox is an explicit product decision, not a side effect. |
+| 3 | The store lives in **`ops_governance`**, not a new schema. | The ops DB splits by concern, and `ops_governance`'s stated question includes "what data quality issues are open?" — `dq_flag`/`dq_ack` were born there. The schema comment now calls it a durable record, not an inbox. |
+| 4 | `dq_threshold` keeps the generic `(scope, key, value, unit)` shape **with** CHECK-constrained `scope`/`unit`, `managed_by` provenance and a seed `ON CONFLICT … DO UPDATE … WHERE managed_by='seed'`. | Two scopes with incompatible shapes fit one small table; the constraints stop silent typos, and the alert_routing reconciliation pattern lets changed defaults reach existing clusters without ever overwriting operator edits. |
+| 5 | **Incidents are a durable governance record.** `dq_flag` carries `updated_at`/`resolved_at` (touch-triggered); every first raise appends to append-only `dq_flag_event`; nothing is ever deleted. | The history is the raw material for the governance KPIs that steer which pipelines, rules and packages get the next round of work. |
+| 6 | Fingerprint dedupe: one OPEN flag per finding (partial-unique on `status <> 'resolved'`); a `resolved` flag may re-open as a new row; a **`wontfix`** flag deliberately keeps absorbing upserts and never re-surfaces. | Re-runs must not duplicate; operator judgments must stick. |
+| 7 | Detector dbt findings use `error_class='dbt_test'` — the same class as the operator ack path — with the finer class in `key->>'test_class'` and a shared fingerprint on `unique_id`. | Acknowledging a detector-raised test updates the same flag; two vocabularies for one thing was a defect (caught in review). |
+| 8 | New `error_class` values `stale_ingest` and `volume_outlier` join the legacy `timeliness`/`outlier` words; the authoritative vocabulary is the `COMMENT ON COLUMN` in init 38. | The new names are more precise; the comment prevents two undocumented competing vocabularies. |
+| 9 | `timeliness_pct` in `mart_data_quality` stays **NULL**; every source row now carries its governed deadline (cadence/offset/grace from the `reporting_deadlines` seed, `bi_quality`). | The loads are bulk snapshots with no per-report arrival timestamps — computing "% on time" would fabricate. Live ingest freshness is covered by `stale_ingest` incidents against the threshold SLAs. |
+| 10 | `DQ_DETECT_TOKEN` is `optional: true` on both gateway and Airflow (unlike the mandatory `ALERT_EVAL_TOKEN`). | An absent secret degrades to "service path off, admin bearer still works" — the queue is derived state and must never block a boot. Deliberate, not a copy-paste slip. |
+| 11 | The alert-routing seed gains `kind=dq.incident → inapp:dq-queue`. | The routing page must tell the truth: detector incidents go to the in-app queue; the old `ar-dq-tests` email row covers only the dbt roll-up promise. |
+| 12 | Warm clusters get init 38 through the `seed-app-security.sh` heal loop; cold boots run a **non-fatal** first detection (bootstrap 7.85) so the queue shows *real* findings on day one. | A hand-applied DDL is a boot-time landmine; an empty queue on a fresh demo undercuts the whole feature. |
+| 13 | Deferred, deliberately: pushing DQ results into OpenMetadata as test cases; a `bi_governance` KPI mart over the incident history (the gateway reads ops directly, like the MDM routes); steward-decision KPIs beyond backlog+count (Track A's stores, read-only). | Recorded here so they are choices, not gaps. |
+| 14 | The incidents/KPI panel is a **section inside `adm-dq`**, not a new widget id. | One organism = one grantable widget (catalog-collapse rule, 2026-07-07). |
