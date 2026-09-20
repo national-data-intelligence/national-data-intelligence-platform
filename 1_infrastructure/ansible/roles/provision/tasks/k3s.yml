@@ -12,6 +12,22 @@
   become: true
   ansible.builtin.file: { path: /etc/apt/keyrings, state: directory, mode: "0755" }
 
+# Clear any pre-existing Docker apt source BEFORE the first apt operation. A
+# host that already had Docker configured by hand carries an entry signed by
+# /etc/apt/keyrings/docker.gpg; the entry this role writes further down is
+# signed by docker.asc, and apt refuses to read ANY source while the two
+# disagree ("Conflicting values set for option Signed-By") — which makes even
+# `apt install curl` fail. Removing them here and writing exactly one owned
+# entry later converges either state. No-op on a genuinely bare host.
+- name: Clear pre-existing Docker apt sources (this role writes its own below)
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/sources.list.d/docker.list
+    - /etc/apt/sources.list.d/docker.sources
+
 - name: Install base OS packages
   become: true
   ansible.builtin.apt:
@@ -80,14 +96,6 @@
     mode: "0644"
     content: |
       deb [arch={{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
-
-# Debian/Ubuntu also read .sources files; a legacy deb822 entry for the same
-# repo would conflict with the line above just as a duplicate .list would.
-- name: Remove a conflicting deb822 Docker source, if any
-  become: true
-  ansible.builtin.file:
-    path: /etc/apt/sources.list.d/docker.sources
-    state: absent
 
 - name: Install Docker engine + compose plugin
   become: true
