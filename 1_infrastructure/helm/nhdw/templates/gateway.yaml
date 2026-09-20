@@ -37,6 +37,11 @@ spec:
             - { name: GATEWAY_PUBLIC_ANON,        value: "true" }
             - { name: GATEWAY_DEMO_IMPERSONATION, value: "true" }
             - { name: GATEWAY_IMPERSONATION_SECRET, valueFrom: { secretKeyRef: { name: nhdw-gateway-secrets, key: IMPERSONATION_SECRET, optional: true } } }
+            # column masking: hash/tokenize HMAC key — optional: absent ⇒ those
+            # mask classes degrade to drop (fail-closed), the gateway still boots.
+            # Byte-parity with base/nhdw-gateway.yaml: without it here, a Helm
+            # deploy would silently strip the key a kustomize deploy had set.
+            - { name: MASKING_HMAC_KEY, valueFrom: { secretKeyRef: { name: nhdw-gateway-secrets, key: MASKING_HMAC_KEY, optional: true } } }
             - { name: OPA_ENFORCE,   value: "true" }
             - { name: OPA_FAIL_OPEN, value: "false" }
             - { name: OPA_URL,    value: "http://opa.{{ $ns }}.svc.cluster.local:8181" }

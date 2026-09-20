@@ -82,6 +82,10 @@ spec:
             - name: SUPERSET_OIDC_SECRET
               valueFrom: { secretKeyRef: { name: superset-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             - name: JUPYTERHUB_OIDC_SECRET
+            # parity with base: without it the OpenMetadata OIDC client is never
+            # seeded, so OM SSO is dead on a Helm-provisioned cluster
+            - name: OPENMETADATA_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
               valueFrom: { secretKeyRef: { name: jupyterhub-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             # tool-gate confidential clients — one secret per gate, MUST match the
             # gate Deployment's OIDC_CLIENT_SECRET (tool-gates.yaml). optional:true
