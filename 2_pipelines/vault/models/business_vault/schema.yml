@@ -190,6 +190,29 @@ models:
           - relationships:
               to: ref('hub_facility_conformed')
               field: hk_facility_conformed
+  - name: v_facility_resolution_asof
+    description: >
+      The facility masters AS THEY WERE at `release_as_of` — the reproducible
+      counterpart to the live resolution view. Reads the decision log at a
+      knowledge-time cut, so a pinned report can be re-derived. Unparameterised
+      it is identical to v_facility_resolution (verified live, zero-row diff).
+      Pair it with the release's source_watermark: decisions are only one of
+      the two inputs that determine a master.
+    columns:
+      - name: hk_source_facility
+        description: 'The source record this row resolves.'
+        tests:
+          - not_null
+      - name: conformed_bk
+        description: 'The master key as of the pinned time.'
+        tests:
+          - not_null
+      - name: match_strategy
+        description: 'steward_decision | facility_id | norm_name — how it resolved then.'
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['steward_decision', 'facility_id', 'norm_name']
   - name: sat_facility_canonical
     description: >
       Facility golden record, versioned (insert-only): one row per conformed

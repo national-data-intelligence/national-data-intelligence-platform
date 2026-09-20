@@ -155,7 +155,9 @@ def render(path: Path, refs: dict[str, str]) -> str | None:
     body = expand_hash(body)
     # first-run shape: the incremental predicate references {{ this }}
     body = re.sub(r"\{%\s*if is_incremental\(\).*?\{%\s*endif\s*%\}", "", body, flags=re.S)
-    body = re.sub(r"\{\{\s*var\('([^']+)',\s*'([^']*)'\)\s*\}\}",
+    # var() appears with EITHER quote style in this repo — matching only one
+    # leaves the model unrendered and silently "skipped"
+    body = re.sub(r"""\{\{\s*var\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]\s*\)\s*\}\}""",
                   lambda m: m.group(2), body)
     if "{{" in body or "{%" in body:
         return None
