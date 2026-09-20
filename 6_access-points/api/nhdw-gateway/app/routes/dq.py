@@ -1043,10 +1043,19 @@ async def detect(request: Request,
     summary = await _run_detection()
     log.info("dq detection %s", summary)
     try:
-        await ops_db.log_data_event(
-            user=user, kind="dq.detect.run",
-            payload={**summary, "actor": "detector" if service else
-                     (user.username if user else "unknown")})
+        payload = {**summary, "actor": "detector" if service else
+                   (user.username if user else "unknown")}
+        if user is not None:
+            await ops_db.log_data_event(user=user, kind="dq.detect.run", payload=payload)
+        else:
+            # service-token runs have no UserCtx; write the audit row directly
+            # (kc_sub NULL), same shape as ops_db.log_data_event.
+            pool = await ops_db.ensure_pool()
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    "INSERT INTO ops_audit.data_event (kc_sub, kind, payload) "
+                    "VALUES (NULL, $1, $2::jsonb)",
+                    "dq.detect.run", json.dumps(payload))
     except Exception as exc:                                    # noqa: BLE001
         log.warning("dq detect audit event failed: %s", exc)
     return {**summary, "latency_ms": int((time.perf_counter() - t0) * 1000)}
