@@ -252,16 +252,31 @@ for d in yaml.safe_load_all(sys.stdin):
   log "rerun job $1"
   kubectl -n "$NS" delete job "$1" --ignore-not-found >/dev/null 2>&1
   kubectl -n "$NS" apply -f /tmp/ci-job-$1.yaml >/dev/null
-  if ! kubectl -n "$NS" wait --for=condition=complete "job/$1" --timeout="$2s"; then
-    echo "  ✗ job $1 did not complete"
-    if ! kubectl -n "$NS" get "job/$1" >/dev/null 2>&1; then
-      # deploy #16 post-mortem: the job VANISHED mid-wait (something outside
-      # this deploy deleted it — a concurrent seed, another operator). Name
-      # that plainly instead of a bare timeout.
-      echo "  ✗ job $1 no longer EXISTS — deleted outside this deploy while we waited"
-    else
-      kubectl -n "$NS" logs "job/$1" --tail=25
+  # Wait for EITHER terminal condition. `kubectl wait --for=condition=complete`
+  # ignores a Failed job and burns the whole timeout — deploy #19 sat 40
+  # minutes on a job that had failed in 4. Poll both, and surface the failure
+  # the moment it happens.
+  local waited=0 state=""
+  while [ "$waited" -lt "$2" ]; do
+    if ! kubectl -n "$NS" get "job/$1" >/dev/null 2>&1; then state="gone"; break; fi
+    if [ "$(kubectl -n "$NS" get "job/$1" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null)" = "True" ]; then
+      state="complete"; break
     fi
+    if [ "$(kubectl -n "$NS" get "job/$1" -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null)" = "True" ]; then
+      state="failed"; break
+    fi
+    sleep 10; waited=$((waited + 10))
+  done
+  if [ "$state" != "complete" ]; then
+    case "$state" in
+      failed) echo "  ✗ job $1 FAILED after ${waited}s" ;;
+      gone)   echo "  ✗ job $1 no longer EXISTS — deleted outside this deploy while we waited" ;;
+      *)      echo "  ✗ job $1 timed out after ${2}s (still running)" ;;
+    esac
+    # a job that still exists can still be asked for its logs (a vanished one
+    # was named above — deploy #16 post-mortem: something outside this deploy
+    # deleted it mid-wait)
+    [ "$state" != "gone" ] && kubectl -n "$NS" logs "job/$1" --tail=25
     exit 1
   fi
 }
