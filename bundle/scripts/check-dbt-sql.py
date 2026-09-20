@@ -141,10 +141,14 @@ def expand_hash(sql: str) -> str:
 
 def render(path: Path, refs: dict[str, str]) -> str | None:
     src = path.read_text()
+    # Blank out /* */ comment blocks FIRST (keeping offsets) — several models
+    # document themselves with an example query, and a SELECT inside a comment
+    # would otherwise be mistaken for the statement start.
+    masked = re.sub(r"/\*.*?\*/", lambda m: " " * len(m.group(0)), src, flags=re.S)
     # The statement starts at the first line that BEGINS with WITH/SELECT —
     # matching "SELECT " with a trailing space instead would slice from an
     # inner subquery whenever the outer SELECT sits alone on its line.
-    head = re.search(r"^[ \t]*(WITH|SELECT)\b", src, re.M)
+    head = re.search(r"^[ \t]*(WITH|SELECT)\b", masked, re.M)
     if not head:
         return None
     body = src[head.start():]

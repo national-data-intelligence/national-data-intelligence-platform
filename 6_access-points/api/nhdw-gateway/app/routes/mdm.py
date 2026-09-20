@@ -312,9 +312,14 @@ async def publish_release(
             "decisions_as_of": rel["decisions_as_of"].isoformat(),
             "source_watermark": rel["source_watermark"].isoformat(),
             "stats": stats,
+            # reproduction is a QUERY, not a deployment: the as-of view reads
+            # the pin from a session setting
             "reproduce_with": (
-                "dbt run -s v_facility_resolution_asof --vars "
-                f"'{{release_as_of: \"{rel['decisions_as_of'].isoformat()}\"}}'")}
+                f"SET nhdw.release_as_of = '{rel['decisions_as_of'].isoformat()}'; "
+                "SELECT * FROM nhdw_vault_business.v_facility_resolution_asof;"),
+            "source_watermark_note": (
+                "pair the decision pin with this watermark: source rows loaded "
+                "after it are not part of this release")}
 
 
 @router.get("/master/{entity_class}/{master_bk}")
