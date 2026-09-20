@@ -1025,3 +1025,97 @@ async def detect(request: Request,
     summary = await _run_detection()
     log.info("dq detection %s", summary)
     return {**summary, "latency_ms": int((time.perf_counter() - t0) * 1000)}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Governance history read: the incident queue + KPIs computed from it.
+# The durable record (dq_flag + dq_flag_event + dq_ack, and read-only views
+# over the MDM stewardship stores) is the point: failure/latency/recurrence
+# numbers per source and rule that steer pipeline and package work.
+# ═══════════════════════════════════════════════════════════════════════
+
+@router.get("/flags")
+async def flags(user: UserCtx = Depends(get_user),
+                status: str | None = Query(default="open"),
+                limit: int = Query(default=100, le=500)) -> dict[str, Any]:
+    """The incident queue (newest first). status=all lists every state."""
+    await _gate(user)
+    pool = await ops_db.ensure_pool()
+    where = "" if status in (None, "all") else "WHERE f.status = $2"
+    args = [limit] if not where else [limit, status]
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(f"""
+            SELECT f.id, f.raised_at, f.updated_at, f.resolved_at, f.raised_by,
+                   f.source, f.table_name, f.error_class, f.severity,
+                   f.description, f.status, f.fingerprint,
+                   (SELECT count(*) FROM ops_governance.dq_flag_event e
+                     WHERE e.flag_id = f.id)                       AS events,
+                   (SELECT count(*) FROM ops_governance.dq_ack a
+                     WHERE a.flag_id = f.id)                       AS acks
+            FROM ops_governance.dq_flag f
+            {where}
+            ORDER BY f.updated_at DESC
+            LIMIT $1
+        """, *args)
+    return {"flags": [{**dict(r),
+                       "id": str(r["id"]),
+                       "raised_at": r["raised_at"].isoformat(),
+                       "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+                       "resolved_at": r["resolved_at"].isoformat() if r["resolved_at"] else None,
+                       } for r in rows]}
+
+
+@router.get("/kpi")
+async def kpi(user: UserCtx = Depends(get_user),
+              weeks: int = Query(default=12, le=52)) -> dict[str, Any]:
+    """Governance KPIs from the durable incident/stewardship history."""
+    await _gate(user)
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        open_by = await conn.fetch("""
+            SELECT error_class, severity, source, count(*) AS n
+            FROM ops_governance.dq_flag WHERE status = 'open'
+            GROUP BY 1, 2, 3 ORDER BY n DESC
+        """)
+        raised_weekly = await conn.fetch("""
+            SELECT to_char(date_trunc('week', at), 'YYYY-MM-DD') AS week,
+                   count(*) AS raised
+            FROM ops_governance.dq_flag_event
+            WHERE to_status = 'open' AND at > now() - ($1::int * interval '1 week')
+            GROUP BY 1 ORDER BY 1
+        """, weeks)
+        latency = await conn.fetchrow("""
+            SELECT
+              round(avg(EXTRACT(epoch FROM a.first_ack - f.raised_at)) / 3600, 1) AS avg_hours_to_ack,
+              round(avg(EXTRACT(epoch FROM f.resolved_at - f.raised_at))
+                    FILTER (WHERE f.resolved_at IS NOT NULL) / 3600, 1)           AS avg_hours_to_resolve,
+              count(*) FILTER (WHERE f.resolved_at IS NOT NULL)                   AS resolved_total
+            FROM ops_governance.dq_flag f
+            LEFT JOIN (SELECT flag_id, min(acked_at) AS first_ack
+                       FROM ops_governance.dq_ack GROUP BY 1) a ON a.flag_id = f.id
+        """)
+        recurrence = await conn.fetchval("""
+            SELECT count(*) FROM (
+                SELECT fingerprint FROM ops_governance.dq_flag
+                WHERE fingerprint IS NOT NULL
+                GROUP BY fingerprint HAVING count(*) > 1) t
+        """)
+        steward = {}
+        try:
+            steward = dict(await conn.fetchrow("""
+                SELECT (SELECT count(*) FROM ops_governance.mdm_match_candidate c
+                        WHERE NOT EXISTS (SELECT 1 FROM ops_governance.mdm_match_decision d
+                                          WHERE d.candidate_id = c.candidate_id)) AS backlog,
+                       (SELECT count(*) FROM ops_governance.mdm_match_decision)   AS decisions
+            """))
+        except Exception as exc:                                # noqa: BLE001
+            log.debug("kpi: mdm stores unreadable (%s)", exc)
+    return {
+        "open_by": [dict(r) for r in open_by],
+        "raised_weekly": [dict(r) for r in raised_weekly],
+        "avg_hours_to_ack": latency["avg_hours_to_ack"],
+        "avg_hours_to_resolve": latency["avg_hours_to_resolve"],
+        "resolved_total": latency["resolved_total"],
+        "reopened_fingerprints": int(recurrence or 0),
+        "steward": steward,
+    }
