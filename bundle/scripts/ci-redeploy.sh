@@ -244,8 +244,18 @@ for d in yaml.safe_load_all(sys.stdin):
   log "rerun job $1"
   kubectl -n "$NS" delete job "$1" --ignore-not-found >/dev/null 2>&1
   kubectl -n "$NS" apply -f /tmp/ci-job-$1.yaml >/dev/null
-  kubectl -n "$NS" wait --for=condition=complete "job/$1" --timeout="$2s" \
-    || { echo "  ✗ job $1 did not complete"; kubectl -n "$NS" logs "job/$1" --tail=25; exit 1; }
+  if ! kubectl -n "$NS" wait --for=condition=complete "job/$1" --timeout="$2s"; then
+    echo "  ✗ job $1 did not complete"
+    if ! kubectl -n "$NS" get "job/$1" >/dev/null 2>&1; then
+      # deploy #16 post-mortem: the job VANISHED mid-wait (something outside
+      # this deploy deleted it — a concurrent seed, another operator). Name
+      # that plainly instead of a bare timeout.
+      echo "  ✗ job $1 no longer EXISTS — deleted outside this deploy while we waited"
+    else
+      kubectl -n "$NS" logs "job/$1" --tail=25
+    fi
+    exit 1
+  fi
 }
 
 if [ "$first_stage" -le 4 ]; then
