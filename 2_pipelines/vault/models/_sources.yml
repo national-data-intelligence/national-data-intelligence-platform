@@ -118,6 +118,11 @@ sources:
       - name: stg_elmis_hist__reference_product
       - name: stg_elmis_hist__reference_programme
       - name: stg_elmis_hist__reference_reporting_period
+      - name: stg_elmis_hist__reference_facility_type
+      - name: stg_elmis_hist__reference_product_group
+      - name: stg_elmis_hist__reference_product_category
+      - name: stg_elmis_hist__reference_programme_product
+      - name: stg_elmis_hist__reference_facility_programme_schedule
       - name: stg_elmis_hist__history_requisition
       - name: stg_elmis_hist__history_requisition_line
         description: "7.5M historical R&R lines (pattern-preserving Zambia dump)."

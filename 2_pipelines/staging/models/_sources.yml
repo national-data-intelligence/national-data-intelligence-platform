@@ -109,6 +109,16 @@ sources:
         identifier: raw_elmis_hist__reference_programme
       - name: elmis_hist__reference_reporting_period
         identifier: raw_elmis_hist__reference_reporting_period
+      - name: elmis_hist__reference_facility_type
+        identifier: raw_elmis_hist__reference_facility_type
+      - name: elmis_hist__reference_product_group
+        identifier: raw_elmis_hist__reference_product_group
+      - name: elmis_hist__reference_product_category
+        identifier: raw_elmis_hist__reference_product_category
+      - name: elmis_hist__reference_programme_product
+        identifier: raw_elmis_hist__reference_programme_product
+      - name: elmis_hist__reference_facility_programme_schedule
+        identifier: raw_elmis_hist__reference_facility_programme_schedule
       - name: elmis_hist__history_requisition
         identifier: raw_elmis_hist__history_requisition
       - name: elmis_hist__history_requisition_line
