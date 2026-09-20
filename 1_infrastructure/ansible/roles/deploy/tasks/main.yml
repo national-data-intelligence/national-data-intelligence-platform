@@ -49,6 +49,23 @@
 # NO --wait: the gateway (and any workload whose readiness depends on the seed) crash-loops until
 # the seed role runs, so waiting for the whole release here would always time out. The explicit
 # infra waits below gate the seed step instead; the seed role restarts the gateway once seeded.
+# A Job's spec is IMMUTABLE, so `helm upgrade` cannot patch one that already ran —
+# it aborts the whole release with `cannot patch "keycloak-seed" with kind Job`.
+# The chart's Jobs are run-to-completion seeds, so deleting the finished object
+# first is safe and lets Helm recreate it. Derived from the chart itself rather
+# than hardcoded, so a new Job in the chart is handled automatically.
+- name: Delete finished chart Jobs (immutable — helm cannot patch them)
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      {{ nhdw_helm }} template {{ nhdw_release | default('nhdw') }} {{ nhdw_chart_dir }}
+        -n {{ nhdw_namespace }} -f {{ nhdw_values_file }} --set hostBase={{ nhdw_host_base }}
+      | python3 -c 'import sys,yaml; [print(d["metadata"]["name"]) for d in yaml.safe_load_all(sys.stdin) if d and d.get("kind")=="Job"]'
+      | xargs -r -n1 kubectl -n {{ nhdw_namespace }} delete job --ignore-not-found
+    executable: /bin/bash
+  register: deploy_job_clear
+  changed_when: "'deleted' in deploy_job_clear.stdout"
+
 - name: Deploy / upgrade the NHDW Helm chart for topology {{ nhdw_topology }}
   ansible.builtin.command: >-
     {{ nhdw_helm }} upgrade --install nhdw {{ nhdw_chart_dir }}
