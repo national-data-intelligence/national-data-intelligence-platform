@@ -140,6 +140,37 @@ models:
           - relationships:
               to: ref('hub_commodity_conformed')
               field: hk_commodity_conformed
+  - name: lnk_facility_identifier
+    description: >
+      Every identifier a conformed facility is known by, namespaced
+      (NHDW.facility_id / DHIS2.uid / HCMIS.institution_id / MBRANA.id /
+      MFR.fhir_id). Resolves "who is this?" from any source identifier. The
+      namespace is part of the key because the HCMIS and mBrana integer id
+      spaces overlap.
+    columns:
+      - name: hk_facility_identifier
+        description: 'Link hash key (PK): hash(master, namespace, value).'
+        tests:
+          - not_null
+          - unique
+      - name: hk_facility_conformed
+        description: 'FK to hub_facility_conformed.hk_facility_conformed.'
+        tests:
+          - not_null
+          - relationships:
+              to: ref('hub_facility_conformed')
+              field: hk_facility_conformed
+      - name: identifier_namespace
+        description: 'Identifier system the value belongs to.'
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['NHDW.facility_id', 'DHIS2.uid', 'HCMIS.institution_id',
+                       'MBRANA.id', 'MFR.fhir_id']
+      - name: identifier_value
+        description: 'The identifier as the source system holds it.'
+        tests:
+          - not_null
   - name: lnk_same_as_facility
     description: 'Link relating 2 hub roles at the grain documented in the model SQL.'
     columns:
