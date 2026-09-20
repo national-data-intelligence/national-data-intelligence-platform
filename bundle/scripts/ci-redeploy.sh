@@ -24,6 +24,13 @@ NS="${NS:-nhdw}"
 DASH_CTX="$REPO/6_access-points/dashboards"
 export PATH="$HOME/.local/bin:$PATH"   # kustomize on the runner
 
+# Per-run PRIVATE scratch dir. Fixed /tmp names are owned by whoever ran first on
+# a shared machine, and a sticky /tmp then refuses the second user's write — that
+# is how six image builds were reported FAILED during provisioning while building
+# fine. $RUNTMP is cleaned up on exit.
+RUNTMP="$(mktemp -d "${TMPDIR:-/tmp}/nhdw-ci-XXXXXX")"
+trap 'rm -rf "$RUNTMP"' EXIT
+
 # component map:  <path-prefix> | <image> | <dockerfile (rel to context)> | <context> | <deploy>
 COMPONENTS=(
   "6_access-points/dashboards/internal-bi|nhdw/internal-bi:1.0.0|internal-bi/Dockerfile|$DASH_CTX|internal-bi"
@@ -64,13 +71,13 @@ DDL_APPLIED=(); DDL_VAULT=()
 for f in $(echo "$CHANGED" | grep -E '^3_storage/postgres/init/.*\.sql$' | sort); do
   [ -f "$REPO/$f" ] || continue     # deleted file
   log "apply init DDL $f (idempotent)"
-  if kubectl -n "$NS" exec -i postgres-vault-0 -- psql -q -U vault_admin -d nhdw_vault -v ON_ERROR_STOP=1 < "$REPO/$f" >/tmp/ci-ddl.log 2>&1; then
+  if kubectl -n "$NS" exec -i postgres-vault-0 -- psql -q -U vault_admin -d nhdw_vault -v ON_ERROR_STOP=1 < "$REPO/$f" >"$RUNTMP"/ci-ddl.log 2>&1; then
     DDL_APPLIED+=("$f")
     # ops-side files (\connect nhdw_ops) don't touch what dbt reads — only
     # vault-side DDL needs the vault→marts job cascade
     grep -q '^\\connect nhdw_ops' "$REPO/$f" || DDL_VAULT+=("$f")
   else
-    echo "  ✗ DDL apply failed for $f"; tail -10 /tmp/ci-ddl.log; exit 1
+    echo "  ✗ DDL apply failed for $f"; tail -10 "$RUNTMP"/ci-ddl.log; exit 1
   fi
 done
 echo "$CHANGED" | grep -qE '^3_storage/postgres/init/.*\.sh$' \
@@ -101,11 +108,11 @@ for c in "${COMPONENTS[@]}"; do
          "$REPO/6_access-points/api/nhdw-gateway/validators.py"
     fi
     log "build $image  (context $context)"
-    if docker build -t "$image" -f "$context/$dockerfile" "$context" >/tmp/ci-build-$deploy.log 2>&1; then
+    if docker build -t "$image" -f "$context/$dockerfile" "$context" >"$RUNTMP"/ci-build-$deploy.log 2>&1; then
       docker save "$image" | sudo k3s ctr images import - >/dev/null 2>&1 || docker save "$image" | k3s ctr images import - >/dev/null 2>&1
       BUILT+=("$image"); RESTART+=("$deploy")
     else
-      echo "  ✗ build failed for $image — see /tmp/ci-build-$deploy.log"; tail -20 /tmp/ci-build-$deploy.log; exit 1
+      echo "  ✗ build failed for $image — see "$RUNTMP"/ci-build-$deploy.log"; tail -20 "$RUNTMP"/ci-build-$deploy.log; exit 1
     fi
   fi
 done
@@ -129,7 +136,7 @@ if [ "$changed_input" = "all" ] || touched "1_infrastructure/k8s/"; then
   if [ -f "$SEC_SRC" ]; then
     cp "$SEC_SRC" "$REPO/1_infrastructure/k8s/overlays/dev/secrets.yaml"
     if kustomize build --load-restrictor=LoadRestrictionsNone \
-         "$REPO/1_infrastructure/k8s/overlays/dev" > /tmp/ci-overlay.yaml 2>/dev/null; then
+         "$REPO/1_infrastructure/k8s/overlays/dev" > "$RUNTMP"/ci-overlay.yaml 2>/dev/null; then
       MISSING=""
       while read -r kind name; do
         [ -z "$kind" ] && continue
@@ -139,7 +146,7 @@ import sys, yaml
 for d in yaml.safe_load_all(open(sys.argv[1])):
     if d and d.get("kind") in ("Deployment", "StatefulSet"):
         print(d["kind"].lower(), d["metadata"]["name"])
-' /tmp/ci-overlay.yaml)
+' "$RUNTMP"/ci-overlay.yaml)
       if [ -n "$MISSING" ]; then
         echo "  ✗ declared but NOT on this cluster:$MISSING"
         echo "    manifests are applied by provisioning (workflow provision.yml /"
@@ -167,10 +174,10 @@ for g in "${RESEED_GLOBS[@]}"; do touched "$g" && RESEED=1; done
 if [ "$changed_input" = "all" ] || [ "$RESEED" = 1 ]; then
   log "reseed catalog + app/security (idempotent)"
   # a failed seed must fail the deploy — never swallow the loader's exit code
-  if ! bash "$REPO/bundle/scripts/seed-app-security.sh" >/tmp/ci-reseed.log 2>&1; then
-    echo "  ✗ catalog/RBAC reseed FAILED"; tail -40 /tmp/ci-reseed.log; exit 1
+  if ! bash "$REPO/bundle/scripts/seed-app-security.sh" >"$RUNTMP"/ci-reseed.log 2>&1; then
+    echo "  ✗ catalog/RBAC reseed FAILED"; tail -40 "$RUNTMP"/ci-reseed.log; exit 1
   fi
-  tail -5 /tmp/ci-reseed.log
+  tail -5 "$RUNTMP"/ci-reseed.log
 fi
 
 # Keycloak users/clients: refresh the seed configmaps from the checkout, then
@@ -222,10 +229,10 @@ fi
 # changed.
 if [ "$changed_input" = "all" ] || touched "7_security/opa/" || touched "bundle/roles/"; then
   log "regen OPA policy (opa-test gated)"
-  if ! bash "$REPO/bundle/scripts/regen-opa-policy.sh" >/tmp/ci-opa.log 2>&1; then
-    echo "  ✗ OPA policy regen FAILED (running OPA left untouched)"; tail -25 /tmp/ci-opa.log; exit 1
+  if ! bash "$REPO/bundle/scripts/regen-opa-policy.sh" >"$RUNTMP"/ci-opa.log 2>&1; then
+    echo "  ✗ OPA policy regen FAILED (running OPA left untouched)"; tail -25 "$RUNTMP"/ci-opa.log; exit 1
   fi
-  grep -E "✓|PASS" /tmp/ci-opa.log | tail -4
+  grep -E "✓|PASS" "$RUNTMP"/ci-opa.log | tail -4
 fi
 
 # restart rebuilt workloads (+ the gateway on a reseed, so it reloads the
@@ -273,13 +280,13 @@ for p in "${PIPELINE[@]}"; do
      && ! echo "$CHANGED" | grep -E '^2_pipelines/vault' | grep -vq '^2_pipelines/vault/bridge'; then hit=0; fi
   if [ "$hit" = 1 ]; then
     log "build $image"
-    if docker build -t "$image" -f "$REPO/$prefix/Dockerfile" "$REPO/$prefix" >/tmp/ci-build-$job.log 2>&1; then
+    if docker build -t "$image" -f "$REPO/$prefix/Dockerfile" "$REPO/$prefix" >"$RUNTMP"/ci-build-$job.log 2>&1; then
       docker save "$image" | sudo k3s ctr images import - >/dev/null 2>&1 \
         || docker save "$image" | k3s ctr images import - >/dev/null 2>&1
       PIPE_BUILT+=("$image")
       [ "$stage" -lt "$first_stage" ] && first_stage=$stage
     else
-      echo "  ✗ build failed for $image — see /tmp/ci-build-$job.log"; tail -20 /tmp/ci-build-$job.log; exit 1
+      echo "  ✗ build failed for $image — see "$RUNTMP"/ci-build-$job.log"; tail -20 "$RUNTMP"/ci-build-$job.log; exit 1
     fi
   fi
 done
@@ -293,11 +300,11 @@ import sys, yaml
 for d in yaml.safe_load_all(sys.stdin):
     if d and d.get('kind')=='Job' and d['metadata']['name']=='$1':
         print(yaml.safe_dump(d)); break
-" > /tmp/ci-job-$1.yaml
-  [ -s /tmp/ci-job-$1.yaml ] || { echo "  ✗ job $1 not found in the jobs kustomization"; exit 1; }
+" > "$RUNTMP"/ci-job-$1.yaml
+  [ -s "$RUNTMP"/ci-job-$1.yaml ] || { echo "  ✗ job $1 not found in the jobs kustomization"; exit 1; }
   log "rerun job $1"
   kubectl -n "$NS" delete job "$1" --ignore-not-found >/dev/null 2>&1
-  kubectl -n "$NS" apply -f /tmp/ci-job-$1.yaml >/dev/null
+  kubectl -n "$NS" apply -f "$RUNTMP"/ci-job-$1.yaml >/dev/null
   # Wait for EITHER terminal condition. `kubectl wait --for=condition=complete`
   # ignores a Failed job and burns the whole timeout — deploy #19 sat 40
   # minutes on a job that had failed in 4. Poll both, and surface the failure
@@ -340,12 +347,12 @@ fi
 MDM_RUN=0
 if [ "$changed_input" = "all" ] || touched "2_pipelines/mdm/"; then
   log "build nhdw/mdm-matcher:1.0.0"
-  if docker build -t nhdw/mdm-matcher:1.0.0 -f "$REPO/2_pipelines/mdm/Dockerfile" "$REPO/2_pipelines/mdm" >/tmp/ci-build-mdm-matcher.log 2>&1; then
+  if docker build -t nhdw/mdm-matcher:1.0.0 -f "$REPO/2_pipelines/mdm/Dockerfile" "$REPO/2_pipelines/mdm" >"$RUNTMP"/ci-build-mdm-matcher.log 2>&1; then
     docker save nhdw/mdm-matcher:1.0.0 | sudo k3s ctr images import - >/dev/null 2>&1 \
       || docker save nhdw/mdm-matcher:1.0.0 | k3s ctr images import - >/dev/null 2>&1
     PIPE_BUILT+=("nhdw/mdm-matcher:1.0.0"); MDM_RUN=1
   else
-    echo "  ✗ build failed for nhdw/mdm-matcher:1.0.0"; tail -20 /tmp/ci-build-mdm-matcher.log; exit 1
+    echo "  ✗ build failed for nhdw/mdm-matcher:1.0.0"; tail -20 "$RUNTMP"/ci-build-mdm-matcher.log; exit 1
   fi
 fi
 [ "$first_stage" -le 3 ] && MDM_RUN=1

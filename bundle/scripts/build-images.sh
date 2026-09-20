@@ -13,6 +13,14 @@
 # used; the image->context->dockerfile mapping is encoded directly below so the
 # delivered artifact has zero docker-compose dependency in any path.
 set -euo pipefail
+
+# Build logs go in a PER-RUN PRIVATE directory. They used to be /tmp/build-<img>.log
+# — fixed names in a sticky /tmp, which on a shared machine are owned by whoever ran
+# the script first: a second user then cannot overwrite them and the build is
+# reported FAILED purely because its log could not be opened. That is exactly how
+# six images "failed" during the from-bare provision run while building fine.
+LOGDIR="$(mktemp -d "${TMPDIR:-/tmp}/nhdw-build-XXXXXX")"
+echo "==> build logs: $LOGDIR"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO"
 
@@ -90,7 +98,9 @@ BUILT=()
 FAILED=()
 for entry in "${IMAGES[@]}"; do
   IFS='|' read -r img ctx df <<< "$entry"
-  short="${img#nhdw/}"; short="${short%:dev}"
+  # log name: strip the registry prefix and make it filesystem-plain (the tag's
+  # colon stays out of filenames)
+  short="${img#nhdw/}"; short="${short%:dev}"; short="${short//[:\/]/-}"
   if [ -n "$ONLY" ] && [[ ",$ONLY," != *",$short,"* ]]; then continue; fi
   if [ ! -f "$REPO/$ctx/$df" ]; then
     echo "✗ $img — Dockerfile not found at $ctx/$df" >&2
@@ -105,12 +115,12 @@ for entry in "${IMAGES[@]}"; do
        "$REPO/6_access-points/api/nhdw-gateway/validators.py"
   fi
   echo "==> building $img  (ctx=$ctx df=$df)"
-  if docker build -t "$img" -f "$REPO/$ctx/$df" "$REPO/$ctx" >/tmp/build-"$short".log 2>&1; then
+  if docker build -t "$img" -f "$REPO/$ctx/$df" "$REPO/$ctx" >"$LOGDIR/build-$short.log" 2>&1; then
     BUILT+=("$img")
     echo "    ok"
   else
-    echo "✗ build failed: $img (see /tmp/build-$short.log)" >&2
-    tail -5 /tmp/build-"$short".log | sed 's/^/    /'
+    echo "✗ build failed: $img (see $LOGDIR/build-$short.log)" >&2
+    tail -5 "$LOGDIR/build-$short.log" | sed 's/^/    /'
     FAILED+=("$img(build)")
   fi
 done
