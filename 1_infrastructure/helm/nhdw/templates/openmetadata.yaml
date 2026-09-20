@@ -115,7 +115,9 @@ data:
   OIDC_SERVER_URL: "https://openmetadata.127.0.0.1.nip.io"
   AUTHENTICATION_PUBLIC_KEYS: "[http://keycloak.{{ .Values.namespace }}.svc.cluster.local:8080/realms/moh-staff/protocol/openid-connect/certs, http://localhost:8585/api/v1/system/config/jwks]"
   # bootstrap admin principal (username part); real users arrive via SSO
-  AUTHORIZER_ADMIN_PRINCIPALS: "[admin]"
+  # bootstrap basic admin + the platform superadmin (SSO) — connector bot
+  # tokens are issued by an admin through the UI/API.
+  AUTHORIZER_ADMIN_PRINCIPALS: "[admin, superadmin]"
 ---
 apiVersion: v1
 kind: Service
