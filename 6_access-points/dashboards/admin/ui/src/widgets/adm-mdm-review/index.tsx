@@ -338,8 +338,118 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
   );
 }
 
+
+/** Master-data releases: named, reproducible cuts of who the masters were.
+ *  A release pins BOTH coordinates that determine a master — the decision-log
+ *  timestamp and the source watermark — because either one moving changes the
+ *  answer. Published releases are immutable; correcting one means publishing a
+ *  successor. */
+function ReleasesTab() {
+  const [rows, setRows] = useState<mdm.Release[] | null>(null);
+  const [err, setErr] = useState('');
+  const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState('');
+
+  const load = useCallback(() => {
+    mdm.releases()
+      .then(r => { setRows(r.releases); setErr(''); })
+      .catch(e => setErr(String(e?.message || e)));
+  }, []);
+  useEffect(load, [load]);
+
+  async function publish() {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      const r = await mdm.publishRelease(name.trim(), note.trim() || undefined);
+      setFlash(`Published ${r.release_id} — ${r.stats.masters} masters pinned`);
+      setName(''); setNote(''); load();
+    } catch (e: any) { setErr(String(e?.message || e)); }
+    finally { setBusy(false); }
+  }
+
+  const kit = useTableKit(rows ?? [], {
+    pageSize: 10,
+    search: r => `${r.release_id} ${r.created_by} ${r.note ?? ''} ${r.status}`,
+    sortVals: { release: r => r.release_id, when: r => r.created_at, status: r => r.status },
+    initialSort: { key: 'when', dir: 'desc' },
+  });
+
+  return (
+    <>
+      <div className="section-hdr">
+        <div>
+          <input value={name} onChange={e => setName(e.target.value)}
+                 placeholder="release id (e.g. R-2026-09)" />{' '}
+          <input value={note} onChange={e => setNote(e.target.value)}
+                 placeholder="what it is for (optional)" />{' '}
+          <button className="btn btn-sm" disabled={busy || !name.trim()} onClick={publish}>
+            Publish release
+          </button>
+        </div>
+        {flash && <span className="muted text-xs">{flash}</span>}
+      </div>
+      <p className="muted text-xs">
+        A release pins the decision-log cut AND the source watermark, then records
+        the master counts — so a report quoting it can be re-derived exactly. It
+        stores the two coordinates, not a copy of the data.
+      </p>
+      {err && <p className="muted">Releases unavailable: {err}</p>}
+      {rows !== null && rows.length === 0 && !err &&
+        <p className="muted">No releases published yet.</p>}
+      {rows !== null && rows.length > 0 && (
+        <>
+          <TableToolbar kit={kit} placeholder="Search release, steward, note…" unit="releases" />
+          <div className="tk-scroll">
+            <table className="dash">
+              <thead>
+                <tr>
+                  <SortTh kit={kit} k="release">Release</SortTh>
+                  <SortTh kit={kit} k="status">Status</SortTh>
+                  <th>Pinned coordinates</th>
+                  <th>Masters</th>
+                  <SortTh kit={kit} k="when">Published</SortTh>
+                </tr>
+              </thead>
+              <tbody>
+                {kit.pageRows.map(r => (
+                  <tr key={r.release_id}>
+                    <td>
+                      <div className="v">{r.release_id}</div>
+                      <div className="muted text-xs">{r.note ?? ''}</div>
+                    </td>
+                    <td><span className={`pill ${r.status === 'published' ? 'good' : 'info'}`}>{r.status}</span>
+                        {r.superseded_by && <div className="muted text-xs">→ {r.superseded_by}</div>}</td>
+                    <td className="muted text-xs">
+                      decisions {new Date(r.decisions_as_of).toLocaleString()}<br />
+                      sources {new Date(r.source_watermark).toLocaleString()}
+                    </td>
+                    <td className="v">{r.stats?.masters ?? '—'}
+                      <div className="muted text-xs">
+                        {r.stats?.conformed ?? 0} conformed · {r.stats?.decisions_applied ?? 0} decisions
+                      </div>
+                    </td>
+                    <td className="text-sm">{r.created_by}<br />
+                      <span className="muted text-xs">
+                        {r.published_at ? new Date(r.published_at).toLocaleString() : '—'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <TablePager kit={kit} />
+        </>
+      )}
+    </>
+  );
+}
+
 function MdmReview() {
-  const [tab, setTab] = useState<'queue' | 'decisions'>('queue');
+  const [tab, setTab] = useState<'queue' | 'decisions' | 'releases'>('queue');
   const [decidedTick, setDecidedTick] = useState(0);
 
   return (
@@ -350,7 +460,9 @@ function MdmReview() {
           <button className={`btn btn-sm ${tab === 'queue' ? '' : 'btn-ghost'}`}
                   onClick={() => setTab('queue')}>Candidate queue</button>{' '}
           <button className={`btn btn-sm ${tab === 'decisions' ? '' : 'btn-ghost'}`}
-                  onClick={() => setTab('decisions')}>Decision log</button>
+                  onClick={() => setTab('decisions')}>Decision log</button>{' '}
+          <button className={`btn btn-sm ${tab === 'releases' ? '' : 'btn-ghost'}`}
+                  onClick={() => setTab('releases')}>Releases</button>
         </div>
       </div>
       <p className="muted text-xs">
@@ -360,9 +472,9 @@ function MdmReview() {
         next build. Nothing merges automatically: probabilistic matches always
         wait here, and a revert restores the previous keys exactly.
       </p>
-      {tab === 'queue'
-        ? <QueueTab onDecided={() => setDecidedTick(t => t + 1)} />
-        : <DecisionsTab refreshKey={decidedTick} />}
+      {tab === 'queue' && <QueueTab onDecided={() => setDecidedTick(t => t + 1)} />}
+      {tab === 'decisions' && <DecisionsTab refreshKey={decidedTick} />}
+      {tab === 'releases' && <ReleasesTab />}
     </div>
   );
 }

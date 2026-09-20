@@ -102,3 +102,36 @@ export type MasterDetail = {
 export function master(entityClass: string, masterBk: string): Promise<MasterDetail> {
   return _json(`master/${encodeURIComponent(entityClass)}/${encodeURIComponent(masterBk)}`);
 }
+
+export type Release = {
+  release_id: string;
+  status: string;
+  entity_class_code: string;
+  deployment_context: string;
+  decisions_as_of: string;
+  source_watermark: string;
+  note: string | null;
+  created_by: string;
+  created_at: string;
+  published_at: string | null;
+  superseded_by: string | null;
+  stats: Record<string, number>;
+};
+
+export function releases(entityClass = 'facility'): Promise<{ releases: Release[] }> {
+  return _json(`releases?entity_class=${encodeURIComponent(entityClass)}`);
+}
+
+export async function publishRelease(releaseId: string, note?: string, entityClass = 'facility'):
+    Promise<{ release_id: string; stats: Record<string, number>; reproduce_with: string }> {
+  const r = await authFetch(`${GW}/releases`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ release_id: releaseId, note: note ?? null, entity_class: entityClass }),
+  });
+  if (!r.ok) {
+    const b = await r.text().catch(() => '');
+    throw new Error(`${r.status} ${r.statusText}: ${b}`);
+  }
+  return r.json();
+}
