@@ -16,12 +16,18 @@
 \connect nhdw_ops
 
 CREATE TABLE IF NOT EXISTS ops_governance.dq_threshold (
-    scope       text        NOT NULL,   -- 'sla_hours' | 'ui_band' | 'deadline' | future scopes
-    key         text        NOT NULL,   -- e.g. source key 'DHIS2', band name 'scorecard_good'
+    scope       text        NOT NULL
+                  CONSTRAINT dq_threshold_scope_chk CHECK (scope IN ('sla_hours', 'ui_band')),
+    key         text        NOT NULL,   -- source key 'DHIS2' (sla_hours) | band name 'scorecard_good' (ui_band)
     value       numeric     NOT NULL,
-    unit        text        NOT NULL DEFAULT '',
+    unit        text        NOT NULL
+                  CONSTRAINT dq_threshold_unit_chk CHECK (unit IN ('hours', 'pct')),
     note        text,
+    managed_by  text        NOT NULL DEFAULT 'seed',   -- 'seed' | 'runtime' (reconciliation provenance, as alert_routing)
+    created_at  timestamptz NOT NULL DEFAULT now(),
     updated_at  timestamptz NOT NULL DEFAULT now(),
+    -- Composite natural PK: deliberate exception to the house id-PK rule —
+    -- eleven config rows addressed only by (scope, key), never referenced externally.
     PRIMARY KEY (scope, key)
 );
 
@@ -41,18 +47,29 @@ INSERT INTO ops_governance.dq_threshold (scope, key, value, unit, note) VALUES
     ('ui_band',   'scorecard_watch', 75, 'pct', 'admin DQ scorecard amber threshold (was pctTone default)'),
     ('ui_band',   'agreement_good',  85, 'pct', 'cross-source agreement green (was adm-dq literal)'),
     ('ui_band',   'agreement_watch', 60, 'pct', 'cross-source agreement amber (was adm-dq literal)')
-ON CONFLICT (scope, key) DO NOTHING;
+ON CONFLICT (scope, key) DO UPDATE
+    SET value = EXCLUDED.value, unit = EXCLUDED.unit, note = EXCLUDED.note, updated_at = now()
+  WHERE ops_governance.dq_threshold.managed_by = 'seed';
 
 -- Detector idempotency on the existing incident table.
 ALTER TABLE ops_governance.dq_flag
     ADD COLUMN IF NOT EXISTS fingerprint text;
 
 COMMENT ON COLUMN ops_governance.dq_flag.fingerprint IS
-    'Stable hash of (source, table, error_class, key): the detector upserts on it; unique while not resolved.';
+    $c$Stable detector dedupe hash. Schemes: dbt->("dbt", unique_id); stale->("stale", source); volume->("volume", source, table); mdm->("mdm","backlog"). Unique while status <> 'resolved' - a wontfix flag DELIBERATELY keeps absorbing upserts and never re-surfaces; only resolved may re-open as a new row.$c$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS dq_flag_fingerprint_open_uq
     ON ops_governance.dq_flag (fingerprint)
     WHERE fingerprint IS NOT NULL AND status <> 'resolved';
+
+COMMENT ON SCHEMA ops_governance IS
+    $c$Access requests + approvals, alert routing, MDM stewardship, and the DATA-QUALITY GOVERNANCE RECORD: thresholds, incident flags, acks and their durable transition history.$c$;
+COMMENT ON COLUMN ops_governance.dq_flag.raised_by IS
+    $c$'system' | 'detector' (POST /api/dq/detect) | <kc_sub::text> (operator ack path)$c$;
+COMMENT ON COLUMN ops_governance.dq_flag.source IS
+    $c$Gateway SOURCES registry key (DHIS2, EthioEMR, HCMIS, mBrana, eLMIS-hist, MFR, Climate) | 'dbt' | 'mdm' | 'cross'$c$;
+COMMENT ON COLUMN ops_governance.dq_flag.error_class IS
+    $c$'dbt_test' (dbt failures incl. fk_orphan/not_null - finer class in key->>'test_class') | 'stale_ingest' | 'volume_outlier' | 'mdm_backlog' | legacy 'null_in_required'/'outlier'/'fk_orphan'/'timeliness'$c$;
 
 -- Governance HISTORY substrate (Abenezer 2026-09-20): incidents are a durable
 -- record, not a queue that forgets. Every status transition is appended to
@@ -64,18 +81,25 @@ ALTER TABLE ops_governance.dq_flag
     ADD COLUMN IF NOT EXISTS resolved_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS ops_governance.dq_flag_event (
-    id          bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id          bigserial   PRIMARY KEY,       -- internal log fodder -> bigserial (house rule, 05_ops_schemas)
     flag_id     uuid        NOT NULL,
-    at          timestamptz NOT NULL DEFAULT now(),
+    ts          timestamptz NOT NULL DEFAULT now(),
     actor       text        NOT NULL,          -- 'detector' | kc_sub | 'system'
     from_status text,
     to_status   text        NOT NULL,
     note        text
 );
-CREATE INDEX IF NOT EXISTS dq_flag_event_flag_idx ON ops_governance.dq_flag_event (flag_id, at);
+CREATE INDEX IF NOT EXISTS dq_flag_event_flag_idx ON ops_governance.dq_flag_event (flag_id, ts);
 
 COMMENT ON TABLE ops_governance.dq_flag_event IS
     'Append-only status-transition history of dq_flag — never deleted; the source for governance KPIs.';
+
+DROP TRIGGER IF EXISTS trg_dq_flag_touch ON ops_governance.dq_flag;
+CREATE TRIGGER trg_dq_flag_touch BEFORE UPDATE ON ops_governance.dq_flag
+    FOR EACH ROW EXECUTE FUNCTION ops_touch_updated_at();
+DROP TRIGGER IF EXISTS trg_dq_threshold_touch ON ops_governance.dq_threshold;
+CREATE TRIGGER trg_dq_threshold_touch BEFORE UPDATE ON ops_governance.dq_threshold
+    FOR EACH ROW EXECUTE FUNCTION ops_touch_updated_at();
 
 DO $$
 BEGIN

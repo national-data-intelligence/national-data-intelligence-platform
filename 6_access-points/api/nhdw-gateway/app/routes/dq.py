@@ -24,9 +24,14 @@ fallback for non-k8s setups (docker-compose dev).
                               vault same-as links (facility + commodity master).
   GET  /api/dq/compliance     k-anonymity compliance for bi_public marts.
   POST /api/dq/ack            acknowledge a failing/warning dbt test —
+POST /api/dq/detect        run the incident detector (service token or admin) →
+                           upserts ops_governance.dq_flag (+ dq_flag_event history)
+GET  /api/dq/flags         the incident queue (paged; ?status=open|all)
+GET  /api/dq/kpi           governance KPIs over the durable incident history
                               persists to ops_governance.dq_flag + dq_ack.
 
-Admin OPA-gated. Reads are read-only; /ack writes an operator ack.
+Admin OPA-gated (plus a service-token path on /detect for the Airflow DAG).
+Reads are read-only; /ack writes an operator ack; /detect writes flags+history.
 
 dbt artifacts are cached in-process for ARTIFACT_CACHE_TTL_S (default 30s);
 raw-lake ingestion manifests get their own short cache so the freshness
@@ -39,12 +44,14 @@ import json
 import logging
 import os
 import re
+import hashlib
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import (APIRouter, Depends, Header, HTTPException, Query,
+                     Request)
 from pydantic import BaseModel, Field
 
 from ..auth import UserCtx, get_user
@@ -707,6 +714,13 @@ class AckBody(BaseModel):
 _SEV_MAP = {"fail": "error", "error": "error", "warn": "warn"}
 
 
+def _fingerprint(*parts: str) -> str:
+    """Detector/ack shared dedupe hash — schemes documented on
+    ops_governance.dq_flag.fingerprint (init 38)."""
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:32]
+
+
+
 async def _acked_dbt_tests(unique_ids: set[str]) -> dict[str, dict[str, Any]]:
     """Which of these dbt test unique_ids already carry an operator ack."""
     if not unique_ids:
@@ -764,11 +778,12 @@ async def ack(body: AckBody, user: UserCtx = Depends(get_user)) -> dict[str, Any
                 flag_id = await conn.fetchval("""
                     INSERT INTO ops_governance.dq_flag
                         (raised_by, source, table_name, key, error_class,
-                         severity, description, status)
+                         severity, description, status, fingerprint)
                     VALUES ('system', 'dbt', $1, $2::jsonb, 'dbt_test',
-                            $3, $4, 'acked')
+                            $3, $4, 'acked', $5)
                     RETURNING id
-                """, model, json.dumps({"unique_id": body.unique_id}), sev, desc)
+                """, model, json.dumps({"unique_id": body.unique_id}), sev, desc,
+                     _fingerprint("dbt", body.unique_id))
             else:
                 await conn.execute(
                     "UPDATE ops_governance.dq_flag SET status = 'acked' WHERE id = $1",
@@ -811,16 +826,40 @@ async def ack(body: AckBody, user: UserCtx = Depends(get_user)) -> dict[str, Any
 # real inbox.)
 # ═══════════════════════════════════════════════════════════════════════
 
-import hashlib as _hashlib
-from fastapi import Header, Request
+def _service_authorized(x_detect_token: str | None) -> bool:
+    tok = settings.DQ_DETECT_TOKEN
+    return bool(tok) and x_detect_token == tok
 
-_DQ_DETECT_TOKEN = os.environ.get("DQ_DETECT_TOKEN", "")
 _DBT_PROJECTS = ("staging", "vault", "marts")
 _TEST_CLASS = {"relationships": "fk_orphan", "not_null": "null_in_required"}
 
+_thr_cache: tuple[float, dict[str, float], dict[str, float]] | None = None
 
-def _fingerprint(*parts: str) -> str:
-    return _hashlib.sha256("|".join(parts).encode()).hexdigest()[:32]
+
+async def _thresholds() -> tuple[dict[str, float], dict[str, float]]:
+    """(sla_hours by source, ui bands) from ops_governance.dq_threshold —
+    60s cache; any failure falls back to the coded defaults so this table
+    can never take the DQ surface down."""
+    global _thr_cache
+    now = time.time()
+    if _thr_cache and now - _thr_cache[0] < 60:
+        return _thr_cache[1], _thr_cache[2]
+    slas = {s_["key"]: float(s_["sla_hours"]) for s_ in SOURCES}
+    bands = {"scorecard_good": 90.0, "scorecard_watch": 75.0,
+             "agreement_good": 85.0, "agreement_watch": 60.0}
+    try:
+        pool = await ops_db.ensure_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT scope, key, value FROM ops_governance.dq_threshold "
+                "WHERE scope IN ('sla_hours', 'ui_band')")
+        for r in rows:
+            (slas if r["scope"] == "sla_hours" else bands)[r["key"]] = float(r["value"])
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("dq_threshold unreadable (%s) — coded defaults", exc)
+    _thr_cache = (now, slas, bands)
+    return slas, bands
+
 
 
 def _load_project_artifact(project: str, name: str) -> dict[str, Any]:
@@ -850,13 +889,16 @@ def _detect_dbt_failures() -> list[dict[str, Any]]:
             models = [d.split(".")[-1] for d in (node.get("depends_on") or {}).get("nodes", [])
                       if d.startswith(("model.", "seed."))]
             out.append({
+                # 'dbt_test' matches the /ack path and the pre-detector rows;
+                # the finer class rides in key->>'test_class' (38's vocab comment).
                 "source": "dbt", "table_name": (models[0] if models else proj),
-                "error_class": _TEST_CLASS.get((node.get("test_metadata") or {}).get("name", ""),
-                                               "dbt_test_failure"),
+                "error_class": "dbt_test",
                 "severity": "error" if status in ("fail", "error") else "warn",
                 "description": f"[{proj}] {test_name} {status}: {str(r.get('message') or '')[:300]}",
-                "key": {"unique_id": uid, "project": proj},
-                "fingerprint": _fingerprint("dbt", proj, uid),
+                "key": {"unique_id": uid, "project": proj,
+                        "test_class": _TEST_CLASS.get((node.get("test_metadata") or {}).get("name", ""),
+                                                      "dbt_test_failure")},
+                "fingerprint": _fingerprint("dbt", uid),
             })
     return out
 
@@ -976,32 +1018,6 @@ async def _run_detection() -> dict[str, Any]:
     return {"findings": len(findings), "by_class": counts, "open_flags": int(open_total)}
 
 
-_thr_cache: tuple[float, dict[str, float], dict[str, float]] | None = None
-
-
-async def _thresholds() -> tuple[dict[str, float], dict[str, float]]:
-    """(sla_hours by source, ui bands) from ops_governance.dq_threshold —
-    60s cache; any failure falls back to the coded defaults so this table
-    can never take the DQ surface down."""
-    global _thr_cache
-    now = time.time()
-    if _thr_cache and now - _thr_cache[0] < 60:
-        return _thr_cache[1], _thr_cache[2]
-    slas = {s_["key"]: float(s_["sla_hours"]) for s_ in SOURCES}
-    bands = {"scorecard_good": 90.0, "scorecard_watch": 75.0,
-             "agreement_good": 85.0, "agreement_watch": 60.0}
-    try:
-        pool = await ops_db.ensure_pool()
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT scope, key, value FROM ops_governance.dq_threshold "
-                "WHERE scope IN ('sla_hours', 'ui_band')")
-        for r in rows:
-            (slas if r["scope"] == "sla_hours" else bands)[r["key"]] = float(r["value"])
-    except Exception as exc:                                    # noqa: BLE001
-        log.warning("dq_threshold unreadable (%s) — coded defaults", exc)
-    _thr_cache = (now, slas, bands)
-    return slas, bands
 
 
 @router.post("/detect")
@@ -1011,7 +1027,9 @@ async def detect(request: Request,
     """Run every detection and upsert incidents. Authorized by the service
     token (Airflow dq_detection DAG) or an admin bearer — same posture as the
     alert evaluator. Idempotent per fingerprint; never sends email."""
-    if not (_DQ_DETECT_TOKEN and x_detect_token == _DQ_DETECT_TOKEN):
+    service = _service_authorized(x_detect_token)
+    user = None
+    if not service:
         try:
             user = await get_user(
                 request,
@@ -1024,6 +1042,13 @@ async def detect(request: Request,
     t0 = time.perf_counter()
     summary = await _run_detection()
     log.info("dq detection %s", summary)
+    try:
+        await ops_db.log_data_event(
+            user=user, kind="dq.detect.run",
+            payload={**summary, "actor": "detector" if service else
+                     (user.username if user else "unknown")})
+    except Exception as exc:                                    # noqa: BLE001
+        log.warning("dq detect audit event failed: %s", exc)
     return {**summary, "latency_ms": int((time.perf_counter() - t0) * 1000)}
 
 
@@ -1034,20 +1059,40 @@ async def detect(request: Request,
 # numbers per source and rule that steer pipeline and package work.
 # ═══════════════════════════════════════════════════════════════════════
 
+def _flag_out(r: Any) -> dict[str, Any]:
+    """Explicit row shape for the SPA (mdm.py's _cand_out pattern)."""
+    return {
+        "id":          str(r["id"]),
+        "raised_at":   r["raised_at"].isoformat(),
+        "updated_at":  r["updated_at"].isoformat() if r["updated_at"] else None,
+        "resolved_at": r["resolved_at"].isoformat() if r["resolved_at"] else None,
+        "raised_by":   r["raised_by"],
+        "source":      r["source"],
+        "table_name":  r["table_name"],
+        "error_class": r["error_class"],
+        "severity":    r["severity"],
+        "description": r["description"],
+        "status":      r["status"],
+        "events":      int(r["events"]),
+        "acks":        int(r["acks"]),
+    }
+
+
 @router.get("/flags")
 async def flags(user: UserCtx = Depends(get_user),
                 status: str | None = Query(default="open"),
-                limit: int = Query(default=100, le=500)) -> dict[str, Any]:
+                limit: int = Query(default=50, ge=1, le=500),
+                offset: int = Query(default=0, ge=0)) -> dict[str, Any]:
     """The incident queue (newest first). status=all lists every state."""
     await _gate(user)
     pool = await ops_db.ensure_pool()
-    where = "" if status in (None, "all") else "WHERE f.status = $2"
-    args = [limit] if not where else [limit, status]
+    where = "" if status in (None, "all") else "WHERE f.status = $3"
+    args: list[Any] = [limit, offset] if not where else [limit, offset, status]
     async with pool.acquire() as conn:
         rows = await conn.fetch(f"""
             SELECT f.id, f.raised_at, f.updated_at, f.resolved_at, f.raised_by,
                    f.source, f.table_name, f.error_class, f.severity,
-                   f.description, f.status, f.fingerprint,
+                   f.description, f.status,
                    (SELECT count(*) FROM ops_governance.dq_flag_event e
                      WHERE e.flag_id = f.id)                       AS events,
                    (SELECT count(*) FROM ops_governance.dq_ack a
@@ -1055,14 +1100,13 @@ async def flags(user: UserCtx = Depends(get_user),
             FROM ops_governance.dq_flag f
             {where}
             ORDER BY f.updated_at DESC
-            LIMIT $1
+            LIMIT $1 OFFSET $2
         """, *args)
-    return {"flags": [{**dict(r),
-                       "id": str(r["id"]),
-                       "raised_at": r["raised_at"].isoformat(),
-                       "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
-                       "resolved_at": r["resolved_at"].isoformat() if r["resolved_at"] else None,
-                       } for r in rows]}
+        counts = await conn.fetch(
+            "SELECT status, count(*) AS n FROM ops_governance.dq_flag GROUP BY 1")
+    return {"flags": [_flag_out(r) for r in rows],
+            "counts": {r["status"]: int(r["n"]) for r in counts},
+            "limit": limit, "offset": offset}
 
 
 @router.get("/kpi")
@@ -1078,10 +1122,10 @@ async def kpi(user: UserCtx = Depends(get_user),
             GROUP BY 1, 2, 3 ORDER BY n DESC
         """)
         raised_weekly = await conn.fetch("""
-            SELECT to_char(date_trunc('week', at), 'YYYY-MM-DD') AS week,
+            SELECT to_char(date_trunc('week', ts), 'YYYY-MM-DD') AS week,
                    count(*) AS raised
             FROM ops_governance.dq_flag_event
-            WHERE to_status = 'open' AND at > now() - ($1::int * interval '1 week')
+            WHERE to_status = 'open' AND ts > now() - ($1::int * interval '1 week')
             GROUP BY 1 ORDER BY 1
         """, weeks)
         latency = await conn.fetchrow("""
@@ -1111,11 +1155,13 @@ async def kpi(user: UserCtx = Depends(get_user),
         except Exception as exc:                                # noqa: BLE001
             log.debug("kpi: mdm stores unreadable (%s)", exc)
     return {
-        "open_by": [dict(r) for r in open_by],
-        "raised_weekly": [dict(r) for r in raised_weekly],
-        "avg_hours_to_ack": latency["avg_hours_to_ack"],
-        "avg_hours_to_resolve": latency["avg_hours_to_resolve"],
-        "resolved_total": latency["resolved_total"],
+        "open_by": [{"error_class": r["error_class"], "severity": r["severity"],
+                     "source": r["source"], "n": int(r["n"])} for r in open_by],
+        "raised_weekly": [{"week": r["week"], "raised": int(r["raised"])}
+                          for r in raised_weekly],
+        "avg_hours_to_ack": float(latency["avg_hours_to_ack"]) if latency["avg_hours_to_ack"] is not None else None,
+        "avg_hours_to_resolve": float(latency["avg_hours_to_resolve"]) if latency["avg_hours_to_resolve"] is not None else None,
+        "resolved_total": int(latency["resolved_total"] or 0),
         "reopened_fingerprints": int(recurrence or 0),
-        "steward": steward,
+        "steward": {k: int(v) for k, v in steward.items()} if steward else {},
     }

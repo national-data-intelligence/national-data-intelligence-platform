@@ -108,6 +108,7 @@ class Settings(BaseSettings):
     SMTP_PASS: str = ""
     ALERT_EVAL_MODEL: str = "ears"       # DZ forecast model whose alarm_prob drives alerts
     ALERT_EVAL_TOKEN: str = ""           # shared secret for the Airflow → POST /evaluate call
+    DQ_DETECT_TOKEN: str = ""   # shared secret for the Airflow → POST /api/dq/detect call
 
 
 settings = Settings()
