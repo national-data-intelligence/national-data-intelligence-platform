@@ -39,7 +39,10 @@ changed_input="${1:-all}"
 if [ "$changed_input" = "all" ]; then
   CHANGED="$(git -C "$REPO" ls-files)"
 else
-  CHANGED="$changed_input"   # newline/space separated list of paths
+  # One path per line, whatever the caller sent (deploy.yml passes a space-
+  # separated string) — the DDL loop and the bridge/vault disambiguation use
+  # line-anchored greps, which silently match NOTHING against a single line.
+  CHANGED="$(printf '%s\n' $changed_input)"
 fi
 
 log(){ echo "▸ $*"; }
@@ -54,12 +57,15 @@ touched(){ echo "$CHANGED" | grep -q -- "$1"; }
 #    contract (IF NOT EXISTS everywhere), and Postgres only auto-runs init on a
 #    fresh volume, so the CI applies changed ones to the live DB. (.sh init
 #    files create databases/roles from env and stay boot-only — flagged, not run.)
-DDL_APPLIED=()
+DDL_APPLIED=(); DDL_VAULT=()
 for f in $(echo "$CHANGED" | grep -E '^3_storage/postgres/init/.*\.sql$' | sort); do
   [ -f "$REPO/$f" ] || continue     # deleted file
   log "apply init DDL $f (idempotent)"
   if kubectl -n "$NS" exec -i postgres-vault-0 -- psql -q -U vault_admin -d nhdw_vault -v ON_ERROR_STOP=1 < "$REPO/$f" >/tmp/ci-ddl.log 2>&1; then
     DDL_APPLIED+=("$f")
+    # ops-side files (\connect nhdw_ops) don't touch what dbt reads — only
+    # vault-side DDL needs the vault→marts job cascade
+    grep -q '^\\connect nhdw_ops' "$REPO/$f" || DDL_VAULT+=("$f")
   else
     echo "  ✗ DDL apply failed for $f"; tail -10 /tmp/ci-ddl.log; exit 1
   fi
@@ -100,7 +106,11 @@ RESEED=0
 for g in "${RESEED_GLOBS[@]}"; do touched "$g" && RESEED=1; done
 if [ "$changed_input" = "all" ] || [ "$RESEED" = 1 ]; then
   log "reseed catalog + app/security (idempotent)"
-  bash "$REPO/bundle/scripts/seed-app-security.sh" 2>&1 | tail -5
+  # a failed seed must fail the deploy — never swallow the loader's exit code
+  if ! bash "$REPO/bundle/scripts/seed-app-security.sh" >/tmp/ci-reseed.log 2>&1; then
+    echo "  ✗ catalog/RBAC reseed FAILED"; tail -40 /tmp/ci-reseed.log; exit 1
+  fi
+  tail -5 /tmp/ci-reseed.log
   kubectl -n "$NS" rollout restart deploy/nhdw-gateway >/dev/null 2>&1 || true
   kubectl -n "$NS" rollout status deploy/nhdw-gateway --timeout=120s 2>&1 | tail -1
 fi
@@ -138,8 +148,8 @@ for p in "${PIPELINE[@]}"; do
     fi
   fi
 done
-# vocab/DDL changes re-derive the vault even with no image rebuilt
-{ touched "bundle/seeds/ref-vocab/" || [ ${#DDL_APPLIED[@]} -gt 0 ]; } && [ "$first_stage" -gt 3 ] && first_stage=3
+# vocab/vault-side-DDL changes re-derive the vault even with no image rebuilt
+{ touched "bundle/seeds/ref-vocab/" || [ ${#DDL_VAULT[@]} -gt 0 ]; } && [ "$first_stage" -gt 3 ] && first_stage=3
 
 if [ "$first_stage" -le 4 ]; then
   run_job(){ # $1=job name  $2=timeout
