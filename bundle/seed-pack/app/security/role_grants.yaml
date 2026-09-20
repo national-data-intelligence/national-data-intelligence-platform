@@ -360,7 +360,14 @@
   - public
   - internal-bi
   - workshop
+  # admin: ONLY the MDM stewardship page (governance/ops-plane — no mart
+  # reads, so the data-plane SoD carve-out below is untouched). This is the
+  # steward's decision console: the matcher's candidate queue + the
+  # append-only decision log the vault build replays.
+  - admin
   widgets:
+    admin:
+    - adm-mdm-review
     public:
     - pub-hero
     - pub-insights
@@ -428,6 +435,7 @@
     - adm-dashboard-control
     - adm-documentation
     - adm-dq
+    - adm-mdm-review
     - adm-models-datasets
     - adm-roles-permissions
     - adm-sso-cards

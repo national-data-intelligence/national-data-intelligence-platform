@@ -77,6 +77,15 @@ export default function Sidebar() {
           title: specPageTitle(spec, 'admin/models-datasets', 'Models and datasets'),
         });
       }
+      // MDM stewardship — catalog-gated (stewards + ops admins). Inserted
+      // after 'dq' LAST so the final order matches the catalog:
+      // dq (40) → mdm (41) → models-datasets (42).
+      if (specAllowsWidget(spec, 'admin/mdm', 'adm-mdm-review')) {
+        items = insertAfter(items, 'dq', {
+          id: 'mdm', ico: 'i-check-circle',
+          title: specPageTitle(spec, 'admin/mdm', 'MDM Stewardship'),
+        });
+      }
     }
     return { group: g.group, items };
   });
