@@ -149,3 +149,4 @@ client_secret_*.json
 # Local data landmines / raw import artifacts — never commit
 *.bak.bloated-orig
 supply-control-tower.zip
+*.apps.googleusercontent.com.json

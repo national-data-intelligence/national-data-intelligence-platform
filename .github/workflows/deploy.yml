@@ -1,14 +1,16 @@
 name: Deploy to k3s (push → redeploy)
 
-# Push-to-main continuous deployment. Runs on a SELF-HOSTED runner that lives on
-# the k3s host (so it has docker + kubectl + repo, no SSH-key dance). It rebuilds
-# only the images whose source changed, imports them into k3s, restarts the
-# affected workloads, reseeds catalog/RBAC when those seeds changed, and verifies.
+# Continuous deployment on pushes to main and develop ONLY. Runs on a SELF-HOSTED
+# runner that lives on the k3s host (so it has docker + kubectl + repo, no SSH-key
+# dance). It rebuilds only the images whose source changed, imports them into k3s,
+# restarts the affected workloads, reseeds catalog/RBAC when those seeds changed,
+# and verifies. develop = the integration branch (feature work merges there and is
+# deployed + tested on the cluster before it ever reaches main).
 # The heavier from-bare install (provision k3s + full seed) is `provision.yml`.
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - '6_access-points/**'
       - 'bundle/seed-pack/app/security/**'
