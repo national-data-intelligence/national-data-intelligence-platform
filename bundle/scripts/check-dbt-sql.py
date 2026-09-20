@@ -88,6 +88,18 @@ def marts_schema_map() -> dict[str, str]:
     return out
 
 
+def seeds_schema_map() -> tuple[str, dict[str, str]]:
+    """(default seed schema, per-seed `+schema:` overrides) from
+    marts/dbt_project.yml `seeds:` — same no-drift principle as the models."""
+    import yaml
+    cfg = yaml.safe_load((REPO / "2_pipelines/marts/dbt_project.yml").read_text())
+    tree = (cfg.get("seeds") or {}).get("nhdw_marts") or {}
+    default = tree.get("+schema", "bi_public")
+    overrides = {k: v.get("+schema", default) for k, v in tree.items()
+                 if not k.startswith("+") and isinstance(v, dict)}
+    return default, overrides
+
+
 def build_ref_map() -> dict[str, str]:
     """model name → live relation, derived from the projects' own config."""
     out: dict[str, str] = {}
@@ -116,11 +128,14 @@ def build_ref_map() -> dict[str, str]:
                 break
         out[f.stem] = f"{schema}.{f.stem}" if schema else f.stem
 
-    # dbt SEEDS materialize as tables too (marts seeds land in bi_public)
+    # dbt SEEDS materialize as tables too; the schema comes from the project
+    # config (default bi_public, per-seed `+schema:` overrides honoured —
+    # e.g. reporting_deadlines lands in bi_quality with its consumer)
     seeds_root = REPO / "2_pipelines/marts/seeds"
     if seeds_root.is_dir():
+        seed_default, seed_overrides = seeds_schema_map()
         for f in seeds_root.rglob("*.csv"):
-            out[f.stem] = f"bi_public.{f.stem}"
+            out[f.stem] = f"{seed_overrides.get(f.stem, seed_default)}.{f.stem}"
     return out
 
 

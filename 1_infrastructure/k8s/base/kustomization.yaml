@@ -124,6 +124,7 @@ configMapGenerator:
       - ../../../3_storage/postgres/init/37_openmetadata_db.sh
       - ../../../3_storage/postgres/init/38_governance.sql
       - ../../../3_storage/postgres/init/39_mdm_release.sql
+      - ../../../3_storage/postgres/init/40_dq_read.sql
 
 
   - name: keycloak-seed-script

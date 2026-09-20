@@ -82,6 +82,12 @@ table.dash td.num.dq-over { color: var(--alert); font-weight: 600; }
   white-space: nowrap;
 }
 .dq-chip-changed { background: var(--info-50); color: var(--info); }
+.dq-chip-alert { background: var(--alert-50); color: var(--alert); }
+.dq-chip-watch { background: var(--watch-50); color: var(--watch); }
+.dq-chip-flat  { background: var(--paper-2, #f4f4f2); color: var(--ink-3, #6b7280); }
+/* the incidents queue shows no row-count label (owner request 2026-09-20) —
+   the pager already communicates size; scoped to this card only */
+.dq-card .tk-count { display: none; }
 .dq-chip-changed::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .dq-src-table td .dq-chip { margin-top: 0.3rem; }
 

@@ -18,6 +18,7 @@ with 0 replicas).
 | Lineage emitters | `2_pipelines/ingestor/*/src/lineage.py` | source-system → raw-view hop; silent no-op unless `OM_LINEAGE_API`/`OM_LINEAGE_JWT` are set; never touches the `_manifest.json` sidecars |
 | dbt exposures | `bundle/scripts/gen-exposures.py` → `2_pipelines/marts/models/_exposures.yml` | the marts→widget hop, derived from the gateway's `fetchers.py` registry (parsed read-only); rerun after widget changes, then rebuild the marts image |
 | Classification sync | `bundle/scripts/sync-om-classification.py` | one-way OM tags → `ops_perm.column_classification` + a committed seed file; `managed_by='openmetadata'` rows only, can never overwrite `seed`/`steward` rows; dry-run by default, writing needs `--apply` **and** `OM_CLASS_SYNC_ENABLED=true`; skips cleanly while the governance table does not exist yet |
+| Dashboard connector | `bundle/scripts/sync-om-dashboards.py` | the access-point emission standard (below): pages → OM dashboards, widgets → OM charts, mart→widget lineage edges; runs at seed time (step 4 of `seed-openmetadata.sh`) and after widget/page changes |
 
 Access: `https://openmetadata.<hostBase>` (ingress + Helm list entry), Keycloak
 SSO (`moh-staff`); admin tile on the admin dashboard's Documentation page
@@ -65,14 +66,43 @@ default pool of 100 exhausted Postgres `max_connections` and took Airflow down.
    '{"stringData":{"INGESTION_BOT_TOKEN":"<token>"}}'`
 4. `bundle/scripts/seed-openmetadata.sh` (validates, triggers the DAG).
 
-## Known limits / deferred (deliberate, with cause)
+## The access-point emission standard
 
-- **Airflow lineage backend**: the OM provider is not in the shared Airflow
-  image (heavy dependency surface); the Airflow *connector* already catalogs
-  the DAGs. Revisit with the image owner.
-- **Widget hop inside OM**: OM links dbt exposures only to entities from a
-  dashboard connector; none exists yet. The exposures ship in the dbt manifest
-  and render in dbt-docs. Option: a minimal dashboard-service registration.
+Every access point (dashboard SPA, report surface, future BI tool) publishes
+its structure to OM as **metadata only**, via its own sync script following
+`bundle/scripts/sync-om-dashboards.py` (the reference implementation for
+Internal BI). The standard, binding for any future access point:
+
+1. **One OM `dashboardService` per access point** (`CustomDashboard` type;
+   name = the access point, e.g. `internal-bi`).
+2. **Pages become OM dashboards, widgets become OM charts** (charts attached
+   to their page via the dashboard's `charts` list), read from the access
+   point's *own* catalog/config files — never a parallel hand-kept list.
+3. **Lineage edges from the serving registry**: mart table → widget chart
+   *and* mart table → page dashboard, derived from the same source of truth
+   the access point serves from (for Internal BI: the gateway's `fetchers.py`,
+   parsed statically by `gen-exposures.py`'s AST walk — reused, not copied).
+   This closes the graph: source system → lake → staging → vault → mart →
+   page and individual widget, all visible from either end in OM.
+4. **Zero serving impact**: the sync only reads repo files and writes OM
+   metadata. It never touches the access point's runtime, the gateway, OPA,
+   or `ops_perm` — access control is completely out of its reach.
+5. **Fail-safe**: silent no-op when `OM_API`/`OM_JWT` are unset; any API
+   failure is a warning and the sync continues; always exits 0. OM stays
+   catalog-only — an access point must work identically with OM at 0 replicas.
+6. **Idempotent** (createOrUpdate PUTs) with a `--dry-run` flag, and wired
+   into `seed-openmetadata.sh` so a reseed converges the catalog.
+
+Run it after adding/moving widgets or pages, together with
+`gen-exposures.py`: the exposures keep the hop in the *dbt manifest*
+(dbt-docs), the sync keeps it in *OM* — same registry, two catalogs, no drift.
+
+## Known limits / declined (deliberate, with cause)
+
+- **Airflow lineage backend**: **declined by the team (2026-09-20)** — adding
+  the OM provider to the shared Airflow image is too costly right now (heavy
+  dependency surface, shared-image rebuild risk). The Airflow *connector*
+  already catalogs the DAGs; task-level lineage stays out.
 - **dbt-docs stays** alongside OM on the Documentation page (product decision).
 - Connector configs use `awsRegion: us-east-1`: OM validates against real AWS
   regions and rejects custom names; SeaweedFS ignores the value.
