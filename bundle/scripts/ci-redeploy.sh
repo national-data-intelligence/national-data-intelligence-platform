@@ -110,6 +110,52 @@ for c in "${COMPONENTS[@]}"; do
   fi
 done
 
+# ── MANIFEST TIER: DETECT undeployed manifest changes (never blind-apply) ────
+# This pipeline deliberately does NOT apply the k8s overlay. The committed
+# overlay carries the DEV convention and this deployment is re-homed: the
+# rendered ingresses say *.127.0.0.1.nip.io against a cluster serving
+# *.20.84.70.78.nip.io, and the gateway's issuer list renders as
+# http://127.0.0.1:8090/realms/... against a live https://keycloak.<host>/...
+# Applying it would take every dashboard offline and break JWT validation. The
+# host base is supplied by provisioning, not inherited from the repo.
+#
+# What CI CAN do honestly is notice that a manifest change has not reached the
+# cluster — the failure mode that put OpenMetadata there by hand. A declared
+# workload that does not exist is reported as a hard failure, because it means
+# the change did not deploy at all.
+if [ "$changed_input" = "all" ] || touched "1_infrastructure/k8s/"; then
+  log "check declared workloads against the cluster (manifests are applied by provisioning)"
+  SEC_SRC="${NHDW_SECRETS_FILE:-$HOME/ethio-nhdw-demo/1_infrastructure/k8s/overlays/dev/secrets.yaml}"
+  if [ -f "$SEC_SRC" ]; then
+    cp "$SEC_SRC" "$REPO/1_infrastructure/k8s/overlays/dev/secrets.yaml"
+    if kustomize build --load-restrictor=LoadRestrictionsNone \
+         "$REPO/1_infrastructure/k8s/overlays/dev" > /tmp/ci-overlay.yaml 2>/dev/null; then
+      MISSING=""
+      while read -r kind name; do
+        [ -z "$kind" ] && continue
+        kubectl -n "$NS" get "$kind" "$name" >/dev/null 2>&1 || MISSING="$MISSING $kind/$name"
+      done < <(python3 -c '
+import sys, yaml
+for d in yaml.safe_load_all(open(sys.argv[1])):
+    if d and d.get("kind") in ("Deployment", "StatefulSet"):
+        print(d["kind"].lower(), d["metadata"]["name"])
+' /tmp/ci-overlay.yaml)
+      if [ -n "$MISSING" ]; then
+        echo "  ✗ declared but NOT on this cluster:$MISSING"
+        echo "    manifests are applied by provisioning (workflow provision.yml /"
+        echo "    ansible site.yml), which supplies the host base this overlay does"
+        echo "    not carry. Run it, or the change is not deployed."
+        exit 1
+      fi
+      log "  ✓ every declared workload exists on the cluster"
+    else
+      log "  ! overlay render failed — skipping the workload check"
+    fi
+  else
+    log "  ! no secrets.yaml at $SEC_SRC — skipping the workload check"
+  fi
+fi
+
 # Order below is LOAD-BEARING: reseed (fills ops_perm) → OPA policy regen →
 # THEN workload restarts. The gateway's startup self-tests interrogate the
 # LIVE OPA (allow/deny matrix + masking reveal sets) and refuse to boot on

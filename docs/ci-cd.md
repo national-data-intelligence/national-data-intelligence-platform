@@ -60,10 +60,19 @@ are not retried automatically. Re-apply them with a targeted dispatch:
 `gh workflow run deploy.yml -f scope="<space-separated paths>"` (or the Actions UI); `scope=all`
 redeploys everything.
 
+**k8s manifests are DETECTED, never applied.** The committed overlay carries the dev convention
+and a re-homed deployment diverges from it in ways a host substitution cannot repair: the rendered
+ingresses say `*.127.0.0.1.nip.io` against a cluster serving `*.20.84.70.78.nip.io`, and the
+gateway's issuer list renders as `http://127.0.0.1:8090/realms/...` against a live
+`https://keycloak.<host>/realms/...`. Applying it would take every dashboard offline and break JWT
+validation on every request. The host base is supplied by provisioning, not inherited from the repo.
+What CI does instead is check that every Deployment/StatefulSet the manifests declare actually
+EXISTS on the cluster, and fail the run naming any that do not — the failure mode that once put
+OpenMetadata on the cluster by hand. Apply manifest changes with `provision.yml` (ansible
+`site.yml`).
+
 Still **not** covered: source-dump reloads, ingestor reruns, new-database `.sh` init files
-(boot-only), **k8s manifest changes** (`1_infrastructure/k8s/**` — the overlay render needs the
-server-side `secrets.yaml`, so those land through `provision.yml` or a deliberate manual apply),
-and secret material (e.g. a new key in `secrets.yaml.template` reaches a live cluster only at
+(boot-only), and secret material (e.g. a new key in `secrets.yaml.template` reaches a live cluster only at
 provision/rotation — consumers must degrade safely without it, like `MASKING_HMAC_KEY`).
 A push touching only docs/infra outside the path filter deploys nothing.
 
