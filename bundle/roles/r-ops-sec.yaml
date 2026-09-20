@@ -21,6 +21,10 @@ role:
 
     All subjects below grant METADATA ONLY (the audit trail about subject
     access — not the subject data itself).
+  # Column-grain reveal: the security officer investigates incidents across
+  # every sensitivity tier — restricted AND privileged columns unmasked.
+  column_access:
+    reveal: [restricted, privileged]
   permissions:
     - subject: PT
       data_class: []

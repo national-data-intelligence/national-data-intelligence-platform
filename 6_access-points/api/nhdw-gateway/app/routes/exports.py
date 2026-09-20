@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..auth import UserCtx, get_user
-from .. import minio_client, ops_db, opa, trino_client, mart_attrs, permissions
+from .. import mart_attrs, masking, minio_client, ops_db, opa, permissions, trino_client
 from ..mart_attrs import MartAttrsMissing
 from ..dimensions import columns_for
 from ..settings import settings
@@ -65,8 +65,10 @@ async def export_mart(schema: str, table: str, request: Request,
     _pool = await ops_db.ensure_pool()
     async with _pool.acquire() as _c:
         _scope = await permissions.effective_user_scope(_c, user)
+    colclass = await mart_attrs.columns_for_mart(schema, table)
     decision = await opa.decide(user, action="export", resource=attrs.subject,
-                                attributes=attrs.opa_attributes, scope=_scope)
+                                attributes=attrs.opa_attributes, scope=_scope,
+                                columns={n: c.sensitivity for n, c in colclass.items()})
     if not decision.allow:
         await ops_db.log_policy_decision(
             user=user, action="export.mart", resource=mart, decision="deny",
@@ -106,7 +108,11 @@ async def export_mart(schema: str, table: str, request: Request,
             _col = next((c for c in columns_for(_dim) if c in _mcols), None)
             if _col:
                 where[_col] = list(_vals)
-        _masked = set(decision.masked_columns or [])
+        # Pre-drop ONLY the drop-class masked columns (cheap: never fetched);
+        # transform classes (generalize/partial/hash/tokenize) stay in the
+        # SELECT and are transformed post-fetch by apply_masking below.
+        _masked = {c for c in (decision.masked_columns or [])
+                   if colclass.get(c) is None or colclass[c].mask_class == "drop"}
         if _masked:
             columns = [c for c in (columns or sorted(_mcols)) if c not in _masked]
 
@@ -133,6 +139,16 @@ async def export_mart(schema: str, table: str, request: Request,
         result = await trino_client.fetch_mart(
             schema=schema, table=table, columns=columns,
             where=where or None, order_by=order_by, limit=limit)
+        # masking obligation on the exported rows: transform classes
+        # (generalize/partial/…) mask in place; drop classes were already
+        # removed from the SELECT list above — this catches SELECT-* exports
+        # and applies the transforms the pre-drop can't express.
+        if decision.masked_columns:
+            result["rows"], _dropped = masking.apply_masking(
+                result["rows"], colclass, decision.masked_columns)
+            if _dropped:
+                result["columns"] = [c for c in result.get("columns", [])
+                                     if c not in set(_dropped)]
         body, content_type = _render(result, format)
         etag, sha256, byte_count = await minio_client.write_export(
             key=minio_key, body=body, content_type=content_type)

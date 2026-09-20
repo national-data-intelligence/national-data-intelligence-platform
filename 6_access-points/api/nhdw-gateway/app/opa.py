@@ -29,7 +29,8 @@ class Decision:
 
 async def decide(user: UserCtx, *, action: str, resource: str,
                  attributes: dict[str, Any] | None = None,
-                 scope: dict[str, list[str]] | None = None) -> Decision:
+                 scope: dict[str, list[str]] | None = None,
+                 columns: dict[str, str] | None = None) -> Decision:
     """Ask OPA for an authorization decision.
 
     `scope` = the caller's granted data scope from ops_identity.user_scope,
@@ -37,6 +38,14 @@ async def decide(user: UserCtx, *, action: str, resource: str,
     OPA context so policies emit a `row_filter` obligation the PEP AND-applies to
     the actual query — this is how granted_scope becomes ROW-level enforcement,
     not just UI filtering.
+
+    `columns` = the queried relation's CLASSIFIED columns as {name: sensitivity}
+    (from mart_attrs.columns_for_mart — the denylist store, so unclassified
+    columns are never sent and never masked). The policy returns the subset the
+    caller may NOT see unmasked in `masked_columns`; the PEP then transforms
+    each one per its mask_class (app/masking.py). Omitted ⇒ no column identity
+    reaches OPA and nothing is masked — callers reading classified marts MUST
+    pass it.
     """
     sc = scope or {}
     # user_scope loads values as sets; OPA input is JSON, and a set is not
@@ -54,7 +63,9 @@ async def decide(user: UserCtx, *, action: str, resource: str,
                        # actions for low-trust federated identities.
                        "idp": user.idp, "idp_trust": user.idp_trust},
             "action": {"verb": action},
-            "resource": {"subject": resource, **(attributes or {})},
+            "resource": {"subject": resource, **(attributes or {}),
+                         "columns": [{"name": n, "sensitivity": s}
+                                     for n, s in sorted((columns or {}).items())]},
             "context": {
                 "purpose_of_use": user.purpose_of_use,
                 "geographies":    _lst(sc.get("geography")) or _lst(user.geographies),

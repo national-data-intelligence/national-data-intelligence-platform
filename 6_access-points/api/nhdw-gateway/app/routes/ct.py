@@ -25,7 +25,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..auth import UserCtx, get_user
-from .. import opa, ops_db, permissions, trino_client
+from .. import mart_attrs, masking, opa, ops_db, permissions, trino_client
 
 router = APIRouter(prefix="/api/ct", tags=["ct"])
 
@@ -138,10 +138,15 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
     pool = await ops_db.ensure_pool()
 
     # OPA mart-level gate (subject=PRD / DC.STK / aggregate) + role scope → row_filter.
+    # The nodes feed carries facility GPS (mart_ct_nodes.lat/lng, classified
+    # restricted/generalize) — push the classification so OPA decides whether
+    # THIS caller sees exact coordinates; masking applied to the node rows below.
     async with pool.acquire() as _c:
         scope = await permissions.effective_user_scope(_c, user)
+    node_colclass = await mart_attrs.columns_for_mart(_SCHEMA, "mart_ct_nodes")
     decision = await opa.decide(user, action="read", resource="PRD",
-                                attributes=_OPA_ATTRS, scope=scope)
+                                attributes=_OPA_ATTRS, scope=scope,
+                                columns={n: c.sensitivity for n, c in node_colclass.items()})
     if not decision.allow:
         await ops_db.log_gateway_query(
             user=user, method="GET", path="/api/ct/plan",
@@ -158,6 +163,9 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
             f"SELECT * FROM {_SCHEMA}.mart_ct_plan_stats ORDER BY sort_order")).get("rows") or []
         node_rows = (await trino_client.query(
             f"SELECT * FROM {_SCHEMA}.mart_ct_nodes")).get("rows") or []
+        if decision.masked_columns:
+            node_rows, _ = masking.apply_masking(
+                node_rows, node_colclass, decision.masked_columns)
         mv_rows = (await trino_client.query(
             f"SELECT * FROM {_SCHEMA}.mart_ct_movements{geo_clause}")).get("rows") or []
         # Runs: scope-follow the movements (a run referenced by an in-scope

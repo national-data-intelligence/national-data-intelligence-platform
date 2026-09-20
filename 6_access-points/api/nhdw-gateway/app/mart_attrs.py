@@ -41,6 +41,17 @@ class MartAttrs:
         }
 
 
+@dataclass(frozen=True)
+class ColumnClass:
+    """One classified column (ops_perm.column_classification). The store is a
+    DENYLIST: a column with no row is 'default' (visible); rows exist only for
+    columns needing protection, keyed on the REAL dbt relation names."""
+    column: str
+    sensitivity: str           # default | restricted | privileged
+    mask_class: str            # none | drop | hash | partial | generalize | tokenize
+    pii: bool
+
+
 class MartAttrsMissing(Exception):
     """Raised when a mart isn't cataloged. Means we cannot enforce OPA on it."""
     def __init__(self, schema: str, table: str):
@@ -94,12 +105,45 @@ async def catalog_keys() -> set[tuple[str, str]]:
     return set(_cache.keys())
 
 
+_col_cache: dict[tuple[str, str], dict[str, ColumnClass]] | None = None
+
+
+async def _load_col_cache() -> dict[tuple[str, str], dict[str, ColumnClass]]:
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT schema_name, table_name, column_name, sensitivity, mask_class, pii
+            FROM ops_perm.column_classification
+        """)
+    out: dict[tuple[str, str], dict[str, ColumnClass]] = {}
+    for r in rows:
+        out.setdefault((r["schema_name"], r["table_name"]), {})[r["column_name"]] = \
+            ColumnClass(column=r["column_name"], sensitivity=r["sensitivity"],
+                        mask_class=r["mask_class"], pii=r["pii"])
+    return out
+
+
+async def columns_for_mart(schema: str, table: str) -> dict[str, ColumnClass]:
+    """The CLASSIFIED columns of one relation ({} when none are classified —
+    denylist semantics). The caller pushes {name: sensitivity} into OPA input
+    so the policy decides which land in masked_columns, then applies each
+    masked column's mask_class via app/masking.py."""
+    global _col_cache
+    if _col_cache is None:
+        _col_cache = await _load_col_cache()
+        log.info("column_classification cache loaded · %d relations · %d columns",
+                 len(_col_cache), sum(len(v) for v in _col_cache.values()))
+    return _col_cache.get((schema, table), {})
+
+
 async def invalidate() -> None:
-    """Force the next lookup to re-read the catalog. Called by the admin
-    UI after a mart_attrs CRUD operation."""
-    global _cache
+    """Force the next lookup to re-read the catalogs (mart attrs AND column
+    classification). Called by the admin UI after a CRUD operation and by the
+    seed reload path."""
+    global _cache, _col_cache
     _cache = None
-    log.info("mart_attrs cache invalidated")
+    _col_cache = None
+    log.info("mart_attrs + column_classification caches invalidated")
 
 
 # ── startup self-test ────────────────────────────────────────────────
@@ -196,4 +240,64 @@ async def run_self_test(opa_module) -> list[tuple[SelfTestCase, bool, str]]:
         if "[enforce-off]" in (d.reason or "") or "[advisory]" in (d.reason or ""):
             observed = False
         results.append((case, observed, d.reason or ""))
+    return results
+
+
+# ── startup MASKING self-test ────────────────────────────────────────
+@dataclass
+class MaskSelfTestCase:
+    """A (role, classified-columns) pair with the EXPECTED masked set from the
+    live OPA. Protects against reveal-set ↔ rego drift the same way the
+    allow/deny matrix above protects the table-level policy."""
+    role: str
+    idp_trust: str
+    columns: dict[str, str]            # {column: sensitivity} as the PEP sends it
+    expect_masked: list[str]           # sorted
+    note: str = ""
+
+
+_MASK_FIXTURE = {"lat": "restricted", "lng": "restricted", "patient_id": "privileged"}
+
+MASK_SELF_TESTS: list[MaskSelfTestCase] = [
+    MaskSelfTestCase("R-CONS-ANA", "high", _MASK_FIXTURE, ["patient_id"],
+                     "analyst reveals restricted (maps plot GPS); privileged masked"),
+    MaskSelfTestCase("R-PD-HIV", "high", _MASK_FIXTURE, ["patient_id"],
+                     "R-DEC alias inherits the r-dec reveal set"),
+    MaskSelfTestCase("R-PUB-ANON", "high", _MASK_FIXTURE,
+                     ["lat", "lng", "patient_id"],
+                     "no reveal grant — every classified column masked"),
+    MaskSelfTestCase("R-OPS-SEC", "high", _MASK_FIXTURE, [],
+                     "security officer reveals restricted AND privileged"),
+    MaskSelfTestCase("R-SUPER", "high", _MASK_FIXTURE, [],
+                     "wildcard reveals everything"),
+    MaskSelfTestCase("R-CONS-ANA", "low", _MASK_FIXTURE,
+                     ["lat", "lng", "patient_id"],
+                     "low-trust identity never sees a classified column clear"),
+]
+
+
+async def run_mask_self_test(opa_module) -> list[tuple[MaskSelfTestCase, list[str], str]]:
+    """Returns [(case, observed_masked_sorted, reason)]. Uses a fixture mart the
+    analyst role can read (the verdict is irrelevant — masked_columns is
+    emitted on any non-trust-denied decision)."""
+    from .auth import UserCtx
+    results: list[tuple[MaskSelfTestCase, list[str], str]] = []
+    for case in MASK_SELF_TESTS:
+        u = UserCtx(
+            kc_sub="00000000-0000-0000-0000-000000000000",
+            username="mask-self-test", realm="test",
+            roles=[case.role], primary_role=case.role,
+            geographies=[], programs=[], purpose_of_use="public-health",
+            email="", full_name="", idp_trust=case.idp_trust,
+        )
+        d = await opa_module.decide(
+            u, action="read", resource="PRD",
+            attributes={"data_class": "DC.STK", "granularity": "aggregate",
+                        "sensitivity": "default"},
+            columns=case.columns,
+        )
+        if d.degraded:
+            results.append((case, ["<opa-degraded>"], d.reason or ""))
+            continue
+        results.append((case, sorted(d.masked_columns), d.reason or ""))
     return results

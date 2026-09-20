@@ -72,3 +72,73 @@ test_scope_row_filter if {
 	}
 	d.obligations.row_filter.geography == ["OR"]
 }
+
+# ── column masking (masked_columns obligation) ─────────────────────────────
+# The PEP sends the relation's CLASSIFIED columns; the policy returns the
+# subset the caller may not see clear. bi_supply.mart_ct_nodes fixture:
+# lat/lng restricted (generalize), plus a privileged patient column.
+_read_cols(role, trust, cols) := {
+	"user": {"role": role, "idp_trust": trust},
+	"action": {"verb": "read"},
+	"resource": {
+		"subject": "PRD", "granularity": "aggregate",
+		"data_class": "DC.STK", "sensitivity": "default",
+		"columns": cols,
+	},
+	"context": {"purpose_of_use": "public-health"},
+}
+
+_gps := [
+	{"name": "lat", "sensitivity": "restricted"},
+	{"name": "lng", "sensitivity": "restricted"},
+	{"name": "patient_id", "sensitivity": "privileged"},
+]
+
+# analyst reveals restricted (their maps plot GPS) — privileged stays masked
+test_mask_cons_ana_reveals_restricted_not_privileged if {
+	d := decide with input as _read_cols("R-CONS-ANA", "high", _gps)
+	d.masked_columns == ["patient_id"]
+}
+
+# decision maker (and its R-PD/R-RHB aliases route here) — same reveal
+test_mask_pd_hiv_alias_reveals_restricted if {
+	d := decide with input as _read_cols("R-PD-HIV", "high", _gps)
+	d.masked_columns == ["patient_id"]
+}
+
+# a role with NO reveal grant masks every classified column
+test_mask_pub_anon_masks_all_classified if {
+	d := decide with input as _read_cols("R-PUB-ANON", "high", _gps)
+	d.masked_columns == ["lat", "lng", "patient_id"]
+}
+
+# security officer reveals both tiers — nothing masked
+test_mask_ops_sec_reveals_everything if {
+	d := decide with input as _read_cols("R-OPS-SEC", "high", _gps)
+	d.masked_columns == []
+}
+
+# R-SUPER wildcard — nothing masked
+test_mask_super_reveals_everything if {
+	d := decide with input as _read_cols("R-SUPER", "high", _gps)
+	d.masked_columns == []
+}
+
+# a LOW-TRUST identity never sees a classified column clear, whatever the role
+test_mask_low_trust_masks_despite_reveal if {
+	d := decide with input as _read_cols("R-CONS-ANA", "low", _gps)
+	d.masked_columns == ["lat", "lng", "patient_id"]
+}
+
+# unclassified relation (no columns sent) ⇒ nothing masked
+test_mask_no_columns_no_masking if {
+	d := decide with input as _read_cols("R-PUB-ANON", "high", [])
+	d.masked_columns == []
+}
+
+# unknown role ⇒ the default deny fires — no data flows, so no masking
+# obligation exists (nothing to mask on a hard deny)
+test_mask_unknown_role_denied_outright if {
+	d := decide with input as _read_cols("R-NOPE", "high", _gps)
+	not d.allow
+}

@@ -72,6 +72,23 @@ async def lifespan(app: FastAPI):
             raise RuntimeError(
                 f"OPA self-test failed for {len(failures)} case(s) under OPA_ENFORCE=true; "
                 f"refusing to start. Check mart_attrs catalog + role policies.")
+
+        # ── Masking self-test: assert the live OPA's masked_columns matches
+        # the per-role reveal sets (reveal-grant ↔ rego drift protection).
+        mask_results = await mart_attrs.run_mask_self_test(opa)
+        mask_failures = [(c, obs) for c, obs, _r in mask_results
+                         if obs != sorted(c.expect_masked)]
+        for case, observed, reason in mask_results:
+            ok = (observed == sorted(case.expect_masked))
+            log.log(logging.INFO if ok else logging.WARNING,
+                    "mask self-test %s: role=%s trust=%s expect=%s observed=%s · %s",
+                    "PASS" if ok else "FAIL", case.role, case.idp_trust,
+                    sorted(case.expect_masked), observed, case.note)
+        if mask_failures and settings.OPA_ENFORCE:
+            raise RuntimeError(
+                f"masking self-test failed for {len(mask_failures)} case(s) under "
+                f"OPA_ENFORCE=true; refusing to start. Check role reveal sets + "
+                f"the deployed common.rego.")
     except Exception as e:                                       # noqa: BLE001
         if settings.OPA_ENFORCE:
             raise

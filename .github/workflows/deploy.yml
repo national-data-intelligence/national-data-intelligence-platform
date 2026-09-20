@@ -16,6 +16,8 @@ on:
       - '6_access-points/**'
       - 'bundle/seed-pack/app/security/**'
       - '7_security/scripts/**'
+      - '7_security/opa/**'                       # policy source → regen + reload
+      - 'bundle/roles/**'                         # role YAMLs → reseed + policy regen
       - '2_pipelines/ml/registry/validators.py'   # baked into nhdw/gateway
       - 'bundle/scripts/ci-redeploy.sh'
       # data tier (pipeline images, init DDL, reference vocabulary, MDM)

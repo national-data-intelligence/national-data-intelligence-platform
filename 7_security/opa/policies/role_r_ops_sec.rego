@@ -7,6 +7,8 @@ import rego.v1
 role_id := "R-OPS-SEC"
 phase   := 1
 
+reveal_sensitivity := {"privileged", "restricted"}
+
 default allow := false
 
 # permission[0]: PT / members=all / gran=metadata / verbs=['read', 'annotate', 'approve']

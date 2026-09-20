@@ -36,7 +36,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import UserCtx, get_user
-from .. import mart_attrs, ops_db, opa, permissions
+from .. import mart_attrs, masking, ops_db, opa, permissions
 from ..mart_attrs import MartAttrsMissing
 from ..settings import settings
 
@@ -113,9 +113,11 @@ async def execute(body: ExecuteRequest = Body(...),
     # catalog — so we skip per-table OPA for those (still gated by the
     # coarse ask.sql above).
     referenced: list[tuple[str, str]] = []
+    masked_classes: dict[str, Any] = {}    # masked column name → ColumnClass
     if re.match(r"^(select|with)\b", q, re.I):
         try:
             referenced = _extract_tables(q)
+            parsed = sqlglot.parse_one(q, read="trino")
         except (sqlglot.ParseError, ValueError) as exc:
             raise HTTPException(400, f"sql parse error: {exc}")
         if not referenced:
@@ -126,13 +128,30 @@ async def execute(body: ExecuteRequest = Body(...),
             except MartAttrsMissing as miss:
                 raise HTTPException(
                     403, f"mart not cataloged: {schema}.{table} — {miss}")
+            colclass = await mart_attrs.columns_for_mart(schema, table)
             decision = await opa.decide(
                 user, action="read", resource=attrs.subject,
-                attributes=attrs.opa_attributes)
+                attributes=attrs.opa_attributes,
+                columns={n: c.sensitivity for n, c in colclass.items()})
             if not decision.allow:
                 raise HTTPException(
                     403, f"OPA denied {schema}.{table}: "
                          + (decision.reason or "no reason"))
+            for n in decision.masked_columns:
+                masked_classes[n] = colclass[n] if n in colclass else None
+        # Ad-hoc SQL can alias/derive a masked column (SELECT lat AS y,
+        # round(lat, 6), …) and defeat name-based result masking — so any
+        # EXPLICIT reference to a masked column is refused outright
+        # (fail-closed); columns arriving via SELECT * are masked post-hoc
+        # on the result below.
+        if masked_classes:
+            explicit = sorted({c.name for c in parsed.find_all(exp.Column)
+                               if c.name in masked_classes})
+            if explicit:
+                raise HTTPException(
+                    403, "query references masked column(s) for your role: "
+                         + ", ".join(explicit)
+                         + " — remove them (SELECT * returns them masked)")
 
     # 3. Execute
     t0 = time.perf_counter()
@@ -145,6 +164,14 @@ async def execute(body: ExecuteRequest = Body(...),
         result = await trino_client.query(q)
         columns = result.get("columns") or []
         rows    = (result.get("rows") or [])[:body.limit]
+        # masked columns arriving via SELECT * — transform per mask_class
+        if masked_classes:
+            present = [n for n in masked_classes if n in columns]
+            if present:
+                rows, _dropped = masking.apply_masking(
+                    rows, {n: cc for n, cc in masked_classes.items() if cc},
+                    present)
+                columns = [c for c in columns if c not in set(_dropped)]
     except Exception as exc:                                # noqa: BLE001
         http_status = 400
         err = str(exc)[:600]
