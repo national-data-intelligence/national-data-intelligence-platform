@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""Regression tests for the MDM matcher (run against a throwaway Postgres).
+
+Builds fixture twins of the vault surfaces the matcher reads
+(v_facility_resolution / the two coordinate sats — as TABLES, same columns)
+plus the real ops_governance DDL, then asserts the matcher contract:
+
+  1. unambiguous exact name        → one name_exact candidate, score 1.0
+  2. name shared by 2 masters      → one name_ambiguous candidate per master,
+                                     with distance_km tie-break features
+  3. near-name (no exact twin)     → name_probabilistic with the similarity,
+                                     below-threshold pairs absent
+  4. master with no twin           → no candidate at all
+  5. steward-decided candidates    → NEVER touched by a rerun (status guard)
+  6. rerun                         → idempotent (same rows, refreshed run uid)
+
+Usage:  TEST_DSN=postgresql://... python3 test_matcher.py
+"""
+from __future__ import annotations
+
+import os
+import sys
+import uuid
+
+import psycopg
+
+import matcher
+
+FIXTURE = """
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+DROP SCHEMA IF EXISTS nhdw_vault_business CASCADE;
+DROP SCHEMA IF EXISTS ops_governance CASCADE;
+CREATE SCHEMA nhdw_vault_business;
+CREATE SCHEMA ops_governance;
+
+CREATE TABLE nhdw_vault_business.v_facility_resolution (
+    hk_source_facility bytea,
+    source_system      text,
+    source_name        text,
+    norm_name          text,
+    conformed_bk       text,
+    match_strategy     text
+);
+-- coordinate types mirror the live sats (MFR double precision, mBrana numeric)
+CREATE TABLE nhdw_vault_business.v_sat_mfr_facility_current (
+    hk_mfr_facility bytea, latitude double precision, longitude double precision
+);
+CREATE TABLE nhdw_vault_business.v_sat_mbrana_facility_current (
+    hk_mbrana_facility bytea, latitude numeric, longitude numeric,
+    woreda text, zone text, town text
+);
+
+-- conformed masters (FAC side, via MFR)
+INSERT INTO nhdw_vault_business.v_facility_resolution VALUES
+  (decode(md5('mfr-1'),'hex'),'MFR.location','Adama Health Center','adama health center','FAC-OR-HC-a1','facility_id'),
+  (decode(md5('mfr-2'),'hex'),'MFR.location','Bishoftu Clinic','bishoftu clinic','FAC-OR-CL-b1','facility_id'),
+  (decode(md5('mfr-3'),'hex'),'MFR.location','Bishoftu Clinic','bishoftu clinic','FAC-OR-CL-b2','facility_id'),
+  (decode(md5('mfr-4'),'hex'),'MFR.location','Nejashi II','nejashi ii','FAC-TI-HP-n2','facility_id'),
+  (decode(md5('mfr-5'),'hex'),'MFR.location','Lonely Hospital','lonely hospital','FAC-AA-HO-l1','facility_id');
+
+-- un-conformed records (mBrana, norm_name strategy)
+INSERT INTO nhdw_vault_business.v_facility_resolution VALUES
+  (decode(md5('mb-1'),'hex'),'mBrana.dbo','Adama Health Center','adama health center','adama health center','norm_name'),
+  (decode(md5('mb-2'),'hex'),'mBrana.dbo','Bishoftu Clinic','bishoftu clinic','bishoftu clinic','norm_name'),
+  (decode(md5('mb-3'),'hex'),'mBrana.dbo','Nejashi','nejashi','nejashi','norm_name'),
+  (decode(md5('mb-4'),'hex'),'mBrana.dbo','Totally Different','totally different','totally different','norm_name');
+
+-- coordinates: masters b1 (8.75,38.98) and b2 (9.60,41.85); mb-2 sits near b1
+INSERT INTO nhdw_vault_business.v_sat_mfr_facility_current VALUES
+  (decode(md5('mfr-2'),'hex'),8.75,38.98),
+  (decode(md5('mfr-3'),'hex'),9.60,41.85);
+INSERT INTO nhdw_vault_business.v_sat_mbrana_facility_current VALUES
+  (decode(md5('mb-2'),'hex'),8.76,38.99,'Ada''a','East Shewa','Bishoftu'),
+  (decode(md5('mb-9'),'hex'),NULL,NULL,NULL,NULL,NULL);  -- attribute-less record must not crash
+"""
+
+
+def apply_ops_ddl(conn, repo_root: str) -> None:
+    """The REAL candidate-table DDL (35_mdm.sql) minus psql meta/grants."""
+    src = open(os.path.join(repo_root, "3_storage/postgres/init/35_mdm.sql")).read()
+    stmts, keep, buf = [], False, []
+    for line in src.splitlines():
+        if line.startswith("\\connect"):
+            continue
+        buf.append(line)
+    body = "\n".join(buf)
+    body = body[: body.index("DO $$")]        # grants need the real roles — skip
+    conn.execute(body)
+    conn.commit()
+
+
+def q(conn, sql, *args):
+    with conn.cursor() as cur:
+        cur.execute(sql, args or None)
+        return cur.fetchall()
+
+
+def main() -> int:
+    dsn = os.environ["TEST_DSN"]
+    fails = []
+
+    def check(name, ok, detail=""):
+        print(("  ✓ " if ok else "  ✗ ") + name + (f"  [{detail}]" if detail and not ok else ""))
+        if not ok:
+            fails.append(name)
+
+    conn = psycopg.connect(dsn)
+    conn.execute(FIXTURE)
+    conn.commit()
+    apply_ops_ddl(conn, os.environ.get("REPO_ROOT", "/repo"))
+
+    pairs = matcher.generate_candidates(conn, threshold=0.5)
+    by_rule = {}
+    for p in pairs:
+        by_rule.setdefault(p["match_rule"], []).append(p)
+
+    # 1. unambiguous exact
+    ex = by_rule.get("name_exact", [])
+    check("one name_exact candidate", len(ex) == 1, str(len(ex)))
+    check("name_exact targets the master", ex and ex[0]["master_bk"] == "FAC-OR-HC-a1")
+    check("name_exact score 1.0", ex and float(ex[0]["score"]) == 1.0)
+
+    # 2. ambiguous: one candidate per possible master + geo tie-break
+    am = by_rule.get("name_ambiguous", [])
+    check("two name_ambiguous candidates", len(am) == 2, str(len(am)))
+    dists = {p["master_bk"]: p["match_features"].get("distance_km") for p in am}
+    check("ambiguous rows carry n_targets=2", all(p["match_features"]["n_targets"] == 2 for p in am))
+    both = dists.get("FAC-OR-CL-b1") is not None and dists.get("FAC-OR-CL-b2") is not None
+    check("distance_km computed for both masters", both, str(dists))
+    check("near master closer than far master",
+          both and float(dists["FAC-OR-CL-b1"]) < 5 < float(dists["FAC-OR-CL-b2"]), str(dists))
+    check("ambiguous rows carry the admin-area tie-break",
+          all(p["match_features"].get("left_woreda") == "Ada'a" for p in am))
+
+    # 3. probabilistic only where no exact twin
+    pr = by_rule.get("name_probabilistic", [])
+    check("nejashi→nejashi ii probabilistic candidate",
+          any(p["master_bk"] == "FAC-TI-HP-n2" for p in pr), str(pr))
+    check("probabilistic similarity < 1.0", all(0 < float(p["score"]) < 1 for p in pr))
+    check("no probabilistic row for exact-twin names",
+          not any(p["match_features"].get("norm_name") in ("adama health center", "bishoftu clinic") for p in pr))
+
+    # 4. unmatched stays unmatched
+    check("'totally different' produced no exact/ambiguous candidate",
+          not any(p["match_features"].get("norm_name") == "totally different"
+                  for p in ex + am))
+    check("'lonely hospital' master attracted no candidate",
+          not any(p["master_bk"] == "FAC-AA-HO-l1" for p in pairs))
+
+    # store + idempotency
+    run1 = matcher.store_candidates(conn, pairs, context="ET", run_uid=str(uuid.uuid4()))
+    n1 = q(conn, "SELECT count(*) FROM ops_governance.mdm_match_candidate")[0][0]
+    check("stored rows == generated pairs", n1 == len(pairs), f"{n1} vs {len(pairs)}")
+
+    # 5. steward protection: decide one, rerun, assert untouched
+    conn.execute("""UPDATE ops_governance.mdm_match_candidate
+                       SET status='decided', score=0.123
+                     WHERE match_rule='name_exact'""")
+    conn.commit()
+    matcher.store_candidates(conn, pairs, context="ET", run_uid=str(uuid.uuid4()))
+    kept = q(conn, "SELECT score FROM ops_governance.mdm_match_candidate WHERE status='decided'")
+    check("decided candidate untouched by rerun", kept and float(kept[0][0]) == 0.123, str(kept))
+
+    # 6. rerun adds nothing
+    n2 = q(conn, "SELECT count(*) FROM ops_governance.mdm_match_candidate")[0][0]
+    check("rerun is idempotent", n2 == n1, f"{n2} vs {n1}")
+
+    print(("PASS" if not fails else f"FAIL: {fails}"))
+    return 0 if not fails else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
