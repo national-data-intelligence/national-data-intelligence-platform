@@ -25,6 +25,7 @@ import dlt
 from ..config import Config
 from ..destination import build_destination
 from ..manifest import build_manifest, measure_partition, write_manifest
+from ..lineage import emit_source_lineage
 from ._client import DHIS2Client
 
 log = logging.getLogger(__name__)
@@ -156,6 +157,7 @@ def run(cfg: Config) -> dict:
             watermark_advanced_to=watermark_advanced_to,
         )
         manifest_paths.append(write_manifest(cfg, table_name=table_name, placeholders=placeholders, payload=payload))
+        emit_source_lineage(source=placeholders["source"], table=table_name)   # best-effort catalog hop (no-op unless OM_LINEAGE_* set)
 
     return {
         "run_id": run_id,

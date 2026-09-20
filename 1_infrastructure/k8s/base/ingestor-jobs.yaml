@@ -33,6 +33,10 @@ spec:
             - { name: DHIS2_PAGE_SIZE, value: "200" }
             - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
             - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
+            # best-effort catalog lineage (src/lineage.py): both optional — absent
+            # secret/key ⇒ empty ⇒ the emitter is a silent no-op
+            - { name: OM_LINEAGE_API, value: "http://openmetadata.nhdw.svc.cluster.local:8585/api" }
+            - { name: OM_LINEAGE_JWT, valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: INGESTION_BOT_TOKEN, optional: true } } }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -64,6 +68,10 @@ spec:
             - { name: DHIS2_INITIAL_LAST_UPDATED, value: "2020-01-01" }
             - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
             - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
+            # best-effort catalog lineage (src/lineage.py): both optional — absent
+            # secret/key ⇒ empty ⇒ the emitter is a silent no-op
+            - { name: OM_LINEAGE_API, value: "http://openmetadata.nhdw.svc.cluster.local:8585/api" }
+            - { name: OM_LINEAGE_JWT, valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: INGESTION_BOT_TOKEN, optional: true } } }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -88,6 +96,10 @@ spec:
             - { name: CLIMATE_API_BASE_URL, value: "http://host.k3d.internal:8095" }
             - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
             - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
+            # best-effort catalog lineage (src/lineage.py): both optional — absent
+            # secret/key ⇒ empty ⇒ the emitter is a silent no-op
+            - { name: OM_LINEAGE_API, value: "http://openmetadata.nhdw.svc.cluster.local:8585/api" }
+            - { name: OM_LINEAGE_JWT, valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: INGESTION_BOT_TOKEN, optional: true } } }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -116,6 +128,10 @@ spec:
             - { name: ETHIOEMR_MYSQL_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: ETHIOEMR_READER_PASSWORD } } }
             - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
             - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
+            # best-effort catalog lineage (src/lineage.py): both optional — absent
+            # secret/key ⇒ empty ⇒ the emitter is a silent no-op
+            - { name: OM_LINEAGE_API, value: "http://openmetadata.nhdw.svc.cluster.local:8585/api" }
+            - { name: OM_LINEAGE_JWT, valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: INGESTION_BOT_TOKEN, optional: true } } }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -145,6 +161,10 @@ spec:
             - { name: HCMISWDM_TRUST_SERVER_CERTIFICATE, value: "yes" }
             - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
             - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
+            # best-effort catalog lineage (src/lineage.py): both optional — absent
+            # secret/key ⇒ empty ⇒ the emitter is a silent no-op
+            - { name: OM_LINEAGE_API, value: "http://openmetadata.nhdw.svc.cluster.local:8585/api" }
+            - { name: OM_LINEAGE_JWT, valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: INGESTION_BOT_TOKEN, optional: true } } }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -175,6 +195,10 @@ spec:
             - { name: MBRANA_TRUST_SERVER_CERTIFICATE, value: "yes" }
             - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
             - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
+            # best-effort catalog lineage (src/lineage.py): both optional — absent
+            # secret/key ⇒ empty ⇒ the emitter is a silent no-op
+            - { name: OM_LINEAGE_API, value: "http://openmetadata.nhdw.svc.cluster.local:8585/api" }
+            - { name: OM_LINEAGE_JWT, valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: INGESTION_BOT_TOKEN, optional: true } } }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -199,6 +223,10 @@ spec:
             - { name: MFR_FHIR_BASE_URL, value: "http://host.k3d.internal:8093/fhir" }
             - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }   # Phase 6 G3
             - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
+            # best-effort catalog lineage (src/lineage.py): both optional — absent
+            # secret/key ⇒ empty ⇒ the emitter is a silent no-op
+            - { name: OM_LINEAGE_API, value: "http://openmetadata.nhdw.svc.cluster.local:8585/api" }
+            - { name: OM_LINEAGE_JWT, valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: INGESTION_BOT_TOKEN, optional: true } } }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }
@@ -265,6 +293,10 @@ spec:
             - { name: OPENLMIS_PASSWORD, valueFrom: { secretKeyRef: { name: source-creds, key: OPENLMIS_PASSWORD, optional: true } } }
             - { name: MINIO_ENDPOINT,   value: "http://seaweedfs-s3.nhdw.svc.cluster.local:8333" }
             - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
+            # best-effort catalog lineage (src/lineage.py): both optional — absent
+            # secret/key ⇒ empty ⇒ the emitter is a silent no-op
+            - { name: OM_LINEAGE_API, value: "http://openmetadata.nhdw.svc.cluster.local:8585/api" }
+            - { name: OM_LINEAGE_JWT, valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: INGESTION_BOT_TOKEN, optional: true } } }
             - { name: MINIO_ACCESS_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_USER } } }
             - { name: MINIO_SECRET_KEY, valueFrom: { secretKeyRef: { name: minio-secrets, key: ROOT_PASSWORD } } }
             - { name: MINIO_RAW_BUCKET, value: "nhdw-raw" }

@@ -81,6 +81,17 @@ def main() -> int:
                 if src.exists():
                     shutil.copy2(src, dest / fn)
             print(f"[entrypoint] ✓ dbt docs generated → {dest}")
+            # catalog.json is born HERE (docs generate), i.e. after the artifact
+            # upload above ran on a `build` — push it to the lake now so the
+            # OpenMetadata dbt connector gets column types (needs manifest+catalog).
+            cat = target / "catalog.json"
+            if cat.exists():
+                key = f"dbt/{project}/catalog.json"
+                try:
+                    s3.upload_file(str(cat), bucket, key)
+                    print(f"[entrypoint] ✓ uploaded s3://{bucket}/{key} (docs pass)")
+                except Exception as exc:                        # noqa: BLE001
+                    print(f"[entrypoint] ✗ {key}: {exc}", file=sys.stderr)
         except Exception as exc:                                # noqa: BLE001
             print(f"[entrypoint] ✗ dbt docs generate: {exc}", file=sys.stderr)
     return rc

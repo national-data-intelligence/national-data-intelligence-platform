@@ -1,0 +1,23 @@
+# Decision record — metadata plane (Track B, batch 1)
+
+Date: 2026-09-20 · Status: implemented on `feat/abeni-track-b-metadata` · Owner: Track B
+Scope: the catalog/lineage layer (OpenMetadata, ingestion, lineage emission, classification sync).
+Each decision lists its reason; reversals need a new entry here, not a silent edit.
+
+| # | Decision | Reason |
+|---|---|---|
+| 1 | **OpenMetadata is never in the enforcement or query path.** OPA reads the committed `ops_perm` seed; classification flows one-way OM → seed. | Governance must hold with the catalog down — proven: full regression green with OM at 0 replicas. |
+| 2 | OM + OpenSearch run **on by default on this host**, gated by `values.openmetadata.enabled` for constrained fleet hosts. | Headroom measured (~80 GiB free); the gate keeps the fleet profile lean. |
+| 3 | OM's DB pool capped (`DB_CONNECTION_POOL_MAX_SIZE=10`, min/idle 2). | OM's default pool of 100 exhausted Postgres `max_connections` and took Airflow down on first deploy. |
+| 4 | SSO uses the **confidential server-side code flow** (`/callback`, `OIDC_SERVER_URL` set, split-URL, **no PKCE attribute** on the Keycloak client). Public/PKCE is rejected. | OM 2.0.2's SPA initiates code+PKCE but never completes the exchange (open-metadata/OpenMetadata#26311); the server-side flow was validated end to end in a scripted browser. Keycloak enforces a PKCE attribute against server flows that send no challenge. |
+| 5 | Connector ingestion runs as **our own Airflow DAG** (KubernetesPodOperator, pinned ingestion image); OM's built-in pipeline client stays disabled. | One orchestrator on the platform; the DAG's tasks are best-effort so a catalog failure can never block anything. |
+| 6 | Every connector task and lineage emitter is **best-effort / fail-safe** (no-op without config, one warning line on failure). | The catalog is derived state; ingest and pipeline runs must never depend on it. |
+| 7 | dbt artifacts are the lineage source of truth; the dbt entrypoints upload `catalog.json` after docs-generate. | Column-level lineage needs manifest + catalog; catalog.json is only created by the docs pass. |
+| 8 | The marts→widget hop ships as **generated dbt exposures** (`gen-exposures.py` reads the gateway registry statically). | `fetchers.py` is the authoritative widget→mart binding and is owned by the gateway; generation keeps it single-source without imports. |
+| 9 | The ingestors' source-lineage hop targets the **ClickHouse raw views**, with source systems registered under a logical `nhdw-sources` service. | The datalake connector models individual files; the raw views are the stable per-table representation of the lake landing. |
+| 10 | Connector configs use `awsRegion: us-east-1`. | OM validates against real AWS region names and rejects custom ones; SeaweedFS ignores the value. |
+| 11 | Classification sync writes `managed_by='openmetadata'` rows only and can never overwrite `seed`/`steward` rows; dry-run by default behind a feature flag; it never creates the governance table. | The table and its authority model belong to the governance workstream; the sync is an exporter, not an owner. |
+| 12 | **dbt-docs stays** on the admin Documentation page beside OpenMetadata. | Product decision (2026-09-20): both surfaces are useful; retiring dbt-docs is not wanted. |
+| 13 | Deferred: the Airflow **lineage backend** (OM provider not in the shared Airflow image; connector-based DAG cataloging covers the need) and OM's rendering of the widget hop (needs a dashboard connector). | Recorded here so they are choices, not gaps. |
+| 14 | The Keycloak seed Job pins `PUBLIC_HOST_BASE` / `DASH_BASE_*` defaults in the base manifest. | A rerun without them rewrote every client's redirect URIs to compose-era localhost values and broke all logins. |
+| 15 | The ingestion-bot token is issued by an OM admin once per install (documented in docs/metadata-plane.md). | With SSO there is no scriptable admin login; the step is explicit rather than automated around. |

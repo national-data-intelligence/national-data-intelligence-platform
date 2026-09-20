@@ -78,6 +78,9 @@ PUBLIC=(
   "quay.io/keycloak/keycloak:26.0.7"
   "ghcr.io/headlamp-k8s/headlamp:v0.31.1"   # ops console (Headlamp)
   "ollama/ollama:0.6.8"                      # LLM runtime for the chatbot
+  "opensearchproject/opensearch:2.19.6"      # OpenMetadata search backend (base/opensearch.yaml)
+  "docker.getcollate.io/openmetadata/server:2.0.2"     # catalog/lineage server (base/openmetadata.yaml)
+  "docker.getcollate.io/openmetadata/ingestion:2.0.2"  # connector runner (Airflow KubernetesPodOperator DAG)
   "registry.k8s.io/metrics-server/metrics-server:v0.7.2"  # HPA / kubectl top (scalability demo)
   # (oauth2-proxy image RETIRED 2026-07-11, #80 — replaced by nhdw/tool-gate.)
   # observability stack (#81) — Prometheus + Loki + Alertmanager + Promtail.
