@@ -38,13 +38,33 @@ reseeds the file-based catalog/RBAC (which ARE in the repo) — it does not re-i
 
 ## Scope of `deploy.yml` (push to main or develop)
 `deploy.yml` deploys **two tiers**:
-* **App tier** — rebuilds the affected SPA/gateway images and reseeds catalog/RBAC.
-* **Data tier** — applies new/changed Postgres init DDL (idempotent by contract), reloads the
-  `nhdw_ref` vocabulary when its seeds change, rebuilds the affected dbt/bridge images, and reruns
-  the dbt job chain from the earliest affected stage **through `dbt-marts`** (a vault run drops the
-  report views until marts rebuilds them, so the chain never stops early).
-Still **not** covered: source-dump reloads, ingestor reruns, and new-database `.sh` init files
-(boot-only — those land through the from-bare **`provision.yml`** or a deliberate manual step).
+* **App tier** — rebuilds the affected SPA/gateway images (the gateway build first stages
+  `2_pipelines/ml/registry/validators.py` into its context — the staged copy is gitignored, so a
+  fresh checkout doesn't carry it), reseeds catalog/RBAC when those seeds change, **regenerates the
+  OPA policy** (compile `--from-db` → in-cluster `opa test` gate → publish + reload) when
+  `7_security/opa/**` or `bundle/roles/**` change, and only THEN rolls the workloads — the
+  gateway's startup self-tests interrogate the live OPA (allow/deny matrix + masking reveal sets)
+  and fail-fast on drift, so it must never restart ahead of its policy.
+* **Data tier** — applies new/changed Postgres init DDL (idempotent by contract; files that
+  `\connect nhdw_ops` are ops-side and do NOT cascade a vault rerun), reloads the `nhdw_ref`
+  vocabulary when its seeds change, rebuilds the affected dbt/bridge images, reruns the dbt job
+  chain from the earliest affected stage **through `dbt-marts`** (a vault run drops the report
+  views until marts rebuilds them, so the chain never stops early), and reruns the **MDM matcher**
+  whenever its code changed or the vault content moved.
+The run FAILS on: a failed image build, a failed DDL apply, a failed reseed, a failed policy
+regen, a rollout that never becomes ready, or an incomplete pipeline Job — never "success" with
+a broken step (each of those was once swallowed and has a regression guard now).
+
+**Recovering a failed deploy**: the next push only diffs its OWN commits — a failed run's files
+are not retried automatically. Re-apply them with a targeted dispatch:
+`gh workflow run deploy.yml -f scope="<space-separated paths>"` (or the Actions UI); `scope=all`
+redeploys everything.
+
+Still **not** covered: source-dump reloads, ingestor reruns, new-database `.sh` init files
+(boot-only), **k8s manifest changes** (`1_infrastructure/k8s/**` — the overlay render needs the
+server-side `secrets.yaml`, so those land through `provision.yml` or a deliberate manual apply),
+and secret material (e.g. a new key in `secrets.yaml.template` reaches a live cluster only at
+provision/rotation — consumers must degrade safely without it, like `MASKING_HMAC_KEY`).
 A push touching only docs/infra outside the path filter deploys nothing.
 
 ## Still open (needs the owner)
