@@ -45,15 +45,16 @@ function QueueTab({ onDecided }: { onDecided: () => void }) {
   const [rows, setRows] = useState<mdm.Candidate[] | null>(null);
   const [counts, setCounts] = useState<mdm.RuleCount[]>([]);
   const [rule, setRule] = useState<string>('');
+  const [entity, setEntity] = useState<'facility' | 'commodity'>('facility');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState<string>('');   // candidate_id in flight
   const [flash, setFlash] = useState('');
 
   const load = useCallback(() => {
-    mdm.queue('pending', rule || undefined)
+    mdm.queue('pending', rule || undefined, 500, entity)
       .then(r => { setRows(r.candidates); setCounts(r.counts); setErr(''); })
       .catch(e => setErr(String(e?.message || e)));
-  }, [rule]);
+  }, [rule, entity]);
   useEffect(load, [load]);
 
   const pending = useMemo(
@@ -91,6 +92,14 @@ function QueueTab({ onDecided }: { onDecided: () => void }) {
     <>
       <div className="section-hdr">
         <div>
+          {(['facility', 'commodity'] as const).map(e => (
+            <button key={e}
+                    className={`btn btn-sm ${entity === e ? '' : 'btn-ghost'}`}
+                    onClick={() => { setEntity(e); setRule(''); }}>
+              {e === 'facility' ? 'Facilities' : 'Commodities'}
+            </button>
+          ))}
+          <span className="muted"> · </span>
           {Object.keys(RULE_LABEL).map(r => (
             <button key={r}
                     className={`btn btn-sm ${rule === r ? '' : 'btn-ghost'}`}

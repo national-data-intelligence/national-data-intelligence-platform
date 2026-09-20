@@ -86,6 +86,22 @@ mbrana AS (
         sat.load_ts
     FROM {{ ref('v_sat_mbrana_commodity_current') }} sat
 ),
+decisions AS (
+    -- CURRENT steward verdicts for commodities — same seam as
+    -- v_facility_resolution v3 (36_mdm_decisions_read.sql FDW; written only
+    -- via the steward console). A verdict maps ONE source record — keyed
+    -- (source_system, hex(source hub hash)) — onto a master concept_code.
+    -- Precedence: steward decision > vocabulary crosswalk > normalised name.
+    -- Empty log ⇒ byte-identical to the crosswalk-only derivation.
+    SELECT source_system_code, source_record_key, master_bk
+    FROM {{ source('vault_governance', 'mdm_match_decision') }}
+    WHERE recorded_to IS NULL
+      AND decision IN ('accept', 'merge')
+      AND master_bk IS NOT NULL
+      AND deployment_context = '{{ var("deployment_context", "ET") }}'
+      AND entity_class_code = 'commodity'
+      AND CURRENT_DATE >= valid_from AND CURRENT_DATE < valid_to
+),
 resolved AS (
     SELECT
         all_src.source_hk AS hk_source_commodity,
@@ -93,7 +109,10 @@ resolved AS (
         all_src.source_name,
         all_src.source_description,
         all_src.norm_name,
-        COALESCE(x.concept_code, all_src.norm_name) AS conformed_bk,
+        COALESCE(d.master_bk, x.concept_code, all_src.norm_name) AS conformed_bk,
+        CASE WHEN d.master_bk IS NOT NULL    THEN 'steward_decision'
+             WHEN x.concept_code IS NOT NULL THEN 'vocabulary'
+             ELSE 'norm_name' END AS match_strategy,
         all_src.load_ts
     FROM (
         SELECT * FROM hcmis UNION ALL SELECT * FROM mbrana
@@ -101,6 +120,9 @@ resolved AS (
     LEFT JOIN xwalk x
       ON x.source_vocabulary_id = all_src.native_vocabulary
      AND x.source_code = all_src.native_code
+    LEFT JOIN decisions d
+      ON  d.source_system_code = all_src.source_system
+      AND d.source_record_key  = encode(all_src.source_hk, 'hex')
     WHERE all_src.norm_name <> ''
 ),
 keyed AS (
