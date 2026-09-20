@@ -53,6 +53,7 @@ SEED_FILES_IN_ORDER = [
     "page_filter.yaml",
     "widget_filter.yaml",
     "mart_attrs.yaml",
+    "column_classification.yaml",
     "identity_sources.yaml",
     "roles.yaml",
     "role_grants.yaml",
@@ -222,6 +223,52 @@ def upsert_mart_attrs(cur, rows: list[dict]) -> int:
          "default_sensitivity": r.get("default_sensitivity", "default")}
         for r in rows
     ])
+    return len(rows)
+
+
+def upsert_column_classification(cur, rows: list[dict]) -> int:
+    """Per-column sensitivity/masking rows (ops_perm.column_classification).
+
+    Three authors write this table (managed_by = seed | steward | openmetadata),
+    so it is deliberately NOT in PROVENANCE_TABLES — the generic delete-sync
+    would wipe steward/OpenMetadata rows. Seed rows are reconciled HERE instead:
+    upsert everything in the YAML as managed_by='seed', then delete only
+    managed_by='seed' rows the YAML no longer contains."""
+    cur.executemany("""
+        INSERT INTO ops_perm.column_classification
+              (schema_name, table_name, column_name, sensitivity, mask_class,
+               data_class, pii, purpose_unmask, managed_by, note, updated_at)
+        VALUES (%(schema_name)s, %(table_name)s, %(column_name)s, %(sensitivity)s,
+                %(mask_class)s, %(data_class)s, %(pii)s, %(purpose_unmask)s,
+                'seed', %(note)s, now())
+        ON CONFLICT (schema_name, table_name, column_name) DO UPDATE
+          SET sensitivity    = EXCLUDED.sensitivity,
+              mask_class     = EXCLUDED.mask_class,
+              data_class     = EXCLUDED.data_class,
+              pii            = EXCLUDED.pii,
+              purpose_unmask = EXCLUDED.purpose_unmask,
+              note           = EXCLUDED.note,
+              updated_at     = now()
+          WHERE ops_perm.column_classification.managed_by = 'seed'
+    """, [
+        {"schema_name": r["schema_name"], "table_name": r["table_name"],
+         "column_name": r["column_name"],
+         "sensitivity": r.get("sensitivity", "restricted"),
+         "mask_class": r.get("mask_class", "drop"),
+         "data_class": r.get("data_class"), "pii": bool(r.get("pii", False)),
+         "purpose_unmask": r.get("purpose_unmask", []) or [],
+         "note": r.get("note")}
+        for r in rows
+    ] if rows else [])
+    keys = [(r["schema_name"], r["table_name"], r["column_name"]) for r in rows]
+    if keys:
+        cur.execute("""
+            DELETE FROM ops_perm.column_classification
+             WHERE managed_by = 'seed'
+               AND (schema_name, table_name, column_name) NOT IN %s
+        """, (tuple(keys),))
+    else:
+        cur.execute("DELETE FROM ops_perm.column_classification WHERE managed_by = 'seed'")
     return len(rows)
 
 
@@ -844,6 +891,8 @@ def main() -> int:
 
             n = upsert_mart_attrs(cur, data.get("mart_attrs.yaml", []))
             log.info("mart_attrs:           %d", n)
+            n = upsert_column_classification(cur, data.get("column_classification.yaml", []))
+            log.info("column_class:         %d", n)
 
             n = upsert_identity_sources(cur, data.get("identity_sources.yaml", []))
             log.info("identity_sources:     %d", n)
