@@ -1,0 +1,18 @@
+# Ansible collections the provisioning roles use.
+#
+# `ansible-core` ships ONLY ansible.builtin, so a control node that installed
+# ansible-core alone resolves nothing below and the playbook dies on its first
+# real task ("couldn't resolve module/action 'community.general.modprobe'") —
+# which is exactly how the first from-bare provision run failed. Install with:
+#
+#   ansible-galaxy collection install -r requirements.yml
+#
+# (The full `ansible` package bundles both, but pinning them here keeps the
+# control node's dependencies explicit and reproducible.)
+collections:
+  # community.general.modprobe — load the kernel modules k3s/Cilium need
+  - name: community.general
+    version: ">=8.0.0"
+  # ansible.posix.sysctl — the br_netfilter / ip_forward settings k3s requires
+  - name: ansible.posix
+    version: ">=1.5.0"

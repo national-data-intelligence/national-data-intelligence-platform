@@ -41,8 +41,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash bundle/scripts/hydrate-data.sh
 
-      - name: Install ansible-core
-        run: pip install --user --break-system-packages 'ansible-core>=2.16'
+      - name: Install ansible-core + the collections the roles use
+        run: |
+          pip install --user --break-system-packages 'ansible-core>=2.16'
+          # ansible-core ships only ansible.builtin; the provisioning roles use
+          # community.general (modprobe) and ansible.posix (sysctl). Without
+          # these the playbook dies on its first real task.
+          ansible-galaxy collection install -r 1_infrastructure/ansible/requirements.yml
 
       # Only the fleet path needs SSH to the agents; single-node runs on the runner host itself.
       - name: Load SSH key (fleet only)
