@@ -649,10 +649,11 @@ function IncidentsSection({ flagsResp, kpi, onDetect, detectBusy, detectMsg }: {
   const fmtH = (h: number | null) => (h === null || h === undefined ? '—' : `${h}h`);
   return (
     <div className="card dq-card">
-      <div className="dq-card-head">
-        <h3>Incidents &amp; governance KPIs</h3>
-        <span className="muted">the durable DQ record — every raise, ack and resolution is kept and measured</span>
-        <button className="btn btn-sm" onClick={onDetect} disabled={detectBusy}>
+      <div className="section-hdr" style={{ display: 'flex', alignItems: 'center' }}>
+        <h3 style={{ margin: 0 }}>Incidents &amp; governance KPIs</h3>
+        <button className="btn btn-sm" style={{ marginLeft: 'auto' }}
+                onClick={onDetect} disabled={detectBusy}>
+          <svg className="ico ico-sm"><use href="#i-refresh" /></svg>{' '}
           {detectBusy ? 'Running…' : 'Run detection now'}
         </button>
       </div>
@@ -686,33 +687,35 @@ function IncidentsSection({ flagsResp, kpi, onDetect, detectBusy, detectMsg }: {
         <p className="dq-note">No open incidents — the detector last found nothing above thresholds.</p>
       ) : (
         <>
-          <TableToolbar kit={kit} placeholder="filter incidents…" />
-          <table className="dq-src-table">
-            <thead>
-              <tr>
-                <SortTh kit={kit} k="raised_at">Raised</SortTh>
-                <SortTh kit={kit} k="source">Source</SortTh>
-                <th>Table</th>
-                <SortTh kit={kit} k="error_class">Class</SortTh>
-                <SortTh kit={kit} k="severity">Severity</SortTh>
-                <th>Description</th>
-                <th>History</th>
-              </tr>
-            </thead>
-            <tbody>
-              {kit.pageRows.map(r => (
-                <tr key={r.id}>
-                  <td title={r.raised_at}>{fmtAgo(r.raised_at)}</td>
-                  <td>{r.source}</td>
-                  <td className="mono">{r.table_name}</td>
-                  <td><span className="dq-chip">{r.error_class}</span></td>
-                  <td><span className={`dq-chip dq-chip-${r.severity === 'error' ? 'alert' : r.severity === 'warn' ? 'watch' : 'flat'}`}>{r.severity}</span></td>
-                  <td className="dq-desc">{r.description}</td>
-                  <td className="muted">{r.events} events · {r.acks} acks</td>
+          <TableToolbar kit={kit} placeholder="Filter incidents…" unit="incidents" />
+          <div className="tk-scroll">
+            <table className="dash">
+              <thead>
+                <tr>
+                  <SortTh kit={kit} k="raised_at">Raised</SortTh>
+                  <SortTh kit={kit} k="source">Source</SortTh>
+                  <th>Table</th>
+                  <SortTh kit={kit} k="error_class">Class</SortTh>
+                  <SortTh kit={kit} k="severity">Severity</SortTh>
+                  <th>Description</th>
+                  <th>History</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {kit.pageRows.map(r => (
+                  <tr key={r.id}>
+                    <td title={r.raised_at} style={{ whiteSpace: 'nowrap' }}>{fmtAgo(r.raised_at)}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{r.source}</td>
+                    <td><span className="mono text-xs">{r.table_name}</span></td>
+                    <td><span className="dq-chip">{r.error_class}</span></td>
+                    <td><span className={`dq-chip dq-chip-${r.severity === 'error' ? 'alert' : r.severity === 'warn' ? 'watch' : 'flat'}`}>{r.severity}</span></td>
+                    <td>{r.description}</td>
+                    <td className="muted" style={{ whiteSpace: 'nowrap' }}>{r.events} events · {r.acks} acks</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <TablePager kit={kit} />
         </>
       )}
