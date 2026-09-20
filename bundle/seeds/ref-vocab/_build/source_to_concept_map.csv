@@ -152,3 +152,37 @@ NUT-STUNT,DHIS2.dataElement,U5 stunting prevalence,2000000008,2026-01-01,2099-12
 NUT-RUTF,DHIS2.dataElement,RUTF dispensed,2000000008,2026-01-01,2099-12-31,,seed,build_vocab.py
 PHEM-TIMELY,DHIS2.dataElement,parity: deployed CASE maps to OTHER (entity model wrongly says HIV — data bug to correct),2000000010,2026-01-01,2099-12-31,,seed,supplement:dhis2_dataelement_programme_parity.csv
 PHEM-COMPL,DHIS2.dataElement,parity: deployed CASE maps to OTHER (entity model wrongly says HIV — data bug to correct),2000000010,2026-01-01,2099-12-31,,seed,supplement:dhis2_dataelement_programme_parity.csv
+EPI-001,MBRANA.commodityCode,live-derived: BCG vaccine,2000000061,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+EPI-002,MBRANA.commodityCode,live-derived: OPV trivalent,2000000062,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+EPI-003,MBRANA.commodityCode,live-derived: IPV (inactivated polio),2000000063,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+EPI-004,MBRANA.commodityCode,live-derived: Pentavalent DTwP-HepB-Hib,2000000064,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+EPI-005,MBRANA.commodityCode,live-derived: PCV-13,2000000065,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+EPI-006,MBRANA.commodityCode,live-derived: Rotavirus vaccine,2000000066,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+EPI-007,MBRANA.commodityCode,live-derived: Measles-Rubella,2000000067,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+EPI-008,MBRANA.commodityCode,live-derived: HPV vaccine,2000000068,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+EPI-009,MBRANA.commodityCode,live-derived: COVID-19 vaccine,2000000069,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+EPI-010,MBRANA.commodityCode,live-derived: Tetanus toxoid,2000000070,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+FP-023,MBRANA.commodityCode,live-derived: Implanon NXT,2000000083,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+FP-024,MBRANA.commodityCode,live-derived: Depo-Provera,2000000084,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+FP-025,MBRANA.commodityCode,live-derived: Combined oral contracept.,2000000085,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+GEN-033,MBRANA.commodityCode,live-derived: Amoxicillin 250 DT,2000000093,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+GEN-034,MBRANA.commodityCode,live-derived: Paracetamol 500mg,2000000094,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+HIV-014,MBRANA.commodityCode,live-derived: TLD · adult ART,2000000074,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+HIV-015,MBRANA.commodityCode,live-derived: Pediatric ART,2000000075,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+HIV-016,MBRANA.commodityCode,live-derived: HIV RDT kit,2000000076,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+MAL-020,MBRANA.commodityCode,live-derived: Artemether-Lumefantrine,2000000080,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+MAL-021,MBRANA.commodityCode,live-derived: Malaria RDT pf/pv,2000000081,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+MAL-022,MBRANA.commodityCode,live-derived: LLIN bed net,2000000082,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+MNC-011,MBRANA.commodityCode,live-derived: Oxytocin 10 IU/ml,2000000071,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+MNC-012,MBRANA.commodityCode,live-derived: Magnesium sulphate 50%,2000000072,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+MNC-013,MBRANA.commodityCode,live-derived: Iron-folate,2000000073,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+NCD-026,MBRANA.commodityCode,live-derived: Amlodipine 5mg,2000000086,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+NCD-027,MBRANA.commodityCode,live-derived: Insulin · regular 100 IU,2000000087,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+NCD-028,MBRANA.commodityCode,live-derived: Metformin 500mg,2000000088,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+NCD-029,MBRANA.commodityCode,live-derived: Losartan 50mg,2000000089,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+NUT-030,MBRANA.commodityCode,live-derived: RUTF (ready-to-use),2000000090,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+NUT-031,MBRANA.commodityCode,live-derived: Fortified blended food,2000000091,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+NUT-032,MBRANA.commodityCode,live-derived: ORS sachet,2000000092,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+TB-017,MBRANA.commodityCode,live-derived: RHZE fixed-dose combo,2000000077,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+TB-018,MBRANA.commodityCode,live-derived: GeneXpert cartridge,2000000078,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
+TB-019,MBRANA.commodityCode,live-derived: Isoniazid 300mg,2000000079,2026-01-01,2099-12-31,,seed,supplement:mbrana_commodity_codes.csv
