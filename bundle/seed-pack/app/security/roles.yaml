@@ -81,7 +81,7 @@
   description: >
     Catalog stewards. Metadata / lineage; artifact peer-review.
   combine_strategy: union
-  capabilities: [approve_grad, approve_artifact_promotion, assistant:read]
+  capabilities: [approve_grad, approve_artifact_promotion, assistant:read, manage_classification]
 
 - code: R-OPS-ENG
   name: Operations Engineer
@@ -97,7 +97,7 @@
     Full admin. Manage users, roles, identity sources. Edits the
     permission model itself via the admin UI.
   combine_strategy: union
-  capabilities: [edit_roles, manage_users, manage_identity_sources, approve_access_request, view_ops_console, manage_catalog]
+  capabilities: [edit_roles, manage_users, manage_identity_sources, approve_access_request, view_ops_console, manage_catalog, manage_classification]
 
 - code: R-OPS-SEC
   name: Security Officer
@@ -105,7 +105,7 @@
     Audit, policy review, key rotation. Read-only on everything;
     approves privileged actions.
   combine_strategy: union
-  capabilities: [approve_privileged_action, view_audit, view_ops_console]
+  capabilities: [approve_privileged_action, view_audit, view_ops_console, manage_classification]
 
 - code: R-PUB-ANON
   name: Anonymous Public

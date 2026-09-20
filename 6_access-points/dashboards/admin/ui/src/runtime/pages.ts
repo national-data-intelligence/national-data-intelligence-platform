@@ -22,6 +22,7 @@ export const FALLBACK_PAGE_WIDGETS: Record<string, string[]> = {
   alerts:              ['adm-alerts-routing'],
   dq:                  ['adm-dq'],
   mdm:                 ['adm-mdm-review'],
+  classification:      ['adm-classification'],
   'models-datasets':   ['adm-models-datasets'],
   'users-access':      ['adm-users-access'],
   'roles-permissions': ['adm-roles-permissions'],
