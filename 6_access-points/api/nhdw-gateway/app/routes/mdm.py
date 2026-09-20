@@ -256,8 +256,12 @@ async def publish_release(
 
     # the source watermark and the counts come from the warehouse itself
     try:
+        # epoch millis, not a formatted string: asyncpg type-checks a
+        # timestamptz parameter BEFORE any SQL cast, so a Trino-formatted
+        # string ('… UTC') is rejected outright, and parsing it here would
+        # couple us to Trino's rendering.
         wm = (await trino_client.query(
-            "SELECT CAST(max(load_ts) AS varchar) AS wm "
+            "SELECT CAST(to_unixtime(max(load_ts)) * 1000 AS bigint) AS wm_ms "
             "FROM marts.nhdw_vault_business.hub_facility_conformed")).get("rows") or []
         counts = (await trino_client.query("""
             SELECT count(*) AS masters,
@@ -267,7 +271,7 @@ async def publish_release(
         """)).get("rows") or []
     except Exception as exc:                                      # noqa: BLE001
         raise HTTPException(502, f"could not read the warehouse to pin a release: {exc}")
-    if not wm or not wm[0].get("wm"):
+    if not wm or wm[0].get("wm_ms") is None:
         raise HTTPException(409, "the vault has no facility masters to pin yet")
 
     pool = await ops_db.ensure_pool()
@@ -278,9 +282,10 @@ async def publish_release(
                     INSERT INTO ops_governance.mdm_release
                         (release_id, entity_class_code, decisions_as_of,
                          source_watermark, note, status, created_by, published_at)
-                    VALUES ($1, $2, now(), $3::timestamptz, $4, 'published', $5, now())
+                    VALUES ($1, $2, now(), to_timestamp($3::bigint / 1000.0),
+                            $4, 'published', $5, now())
                     RETURNING decisions_as_of, source_watermark
-                """, release_id, entity_class, wm[0]["wm"], note, user.username)
+                """, release_id, entity_class, int(wm[0]["wm_ms"]), note, user.username)
             except Exception as exc:                              # noqa: BLE001
                 if "duplicate key" in str(exc):
                     raise HTTPException(
