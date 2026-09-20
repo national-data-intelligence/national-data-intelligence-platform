@@ -3,10 +3,11 @@
  *
  * The matcher (2_pipelines/mdm) proposes same-entity candidates with scores
  * and evidence (names, admin area, distance); a steward accepts or rejects
- * here. Verdicts land in the APPEND-ONLY bitemporal decision log the vault
- * build reads — accepting re-keys the source record onto its master on the
- * NEXT pipeline run (the queue says so after every verdict, no false
- * immediacy). Reverting supersedes (recorded_to) and re-opens the candidate.
+ * here. Verdicts land in the APPEND-ONLY bitemporal decision log that the
+ * vault's resolution views read LIVE, so a verdict re-keys the source record
+ * on the next read; the insert-only hubs/links record it on the next build.
+ * Reverting supersedes (recorded_to) and re-opens the candidate — proven live
+ * to restore the previous conformed keys byte for byte.
  *
  * Two tabs: the work queue (pending candidates, best score first, rule
  * filter) and the decision log (current beliefs; full history on demand).
@@ -171,7 +172,7 @@ function QueueTab({ onDecided }: { onDecided: () => void }) {
     setBusy(c.candidate_id);
     try {
       await mdm.decide(c.candidate_id, d);
-      setFlash(`${d === 'accept' ? 'Accepted' : 'Rejected'} — conformance updates on the next pipeline run`);
+      setFlash(`${d === 'accept' ? 'Accepted' : 'Rejected'} — in effect on the next dashboard read`);
       load(); onDecided();
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -353,9 +354,11 @@ function MdmReview() {
         </div>
       </div>
       <p className="muted text-xs">
-        Accepting maps the source record onto its master in the append-only decision
-        log; the warehouse re-keys it on the next pipeline run. Nothing merges
-        automatically — probabilistic matches always wait here.
+        Accepting maps the source record onto its master in the append-only
+        decision log, which the warehouse reads live — dashboards reflect it on
+        the next read, and the vault's insert-only history records it on the
+        next build. Nothing merges automatically: probabilistic matches always
+        wait here, and a revert restores the previous keys exactly.
       </p>
       {tab === 'queue'
         ? <QueueTab onDecided={() => setDecidedTick(t => t + 1)} />

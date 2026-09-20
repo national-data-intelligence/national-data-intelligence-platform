@@ -112,9 +112,11 @@ async def decide(
 ) -> dict:
     """Record a steward verdict on one candidate.
 
-    accept → the left source record maps onto suggested_master_bk (the vault
-             build re-keys it on the next run); sibling pending candidates for
-             the same record become superseded (the record has its master).
+    accept → the left source record maps onto suggested_master_bk. The
+             resolution views read the decision log live, so dashboards
+             reflect it on the next read; the insert-only hubs/links record
+             it on the next vault build. Sibling pending candidates for the
+             same record become superseded (the record has its master).
     reject → recorded as a current 'reject' decision (the matcher will keep
              re-proposing the pair otherwise); conformance falls back to the
              deterministic derivation.
@@ -192,7 +194,11 @@ async def decide(
     return {"candidate_id": candidate_id, "decision": decision,
             "decision_id": str(dec["decision_id"]),
             "siblings_superseded": superseded,
-            "note": "conformance updates on the next vault build"}
+            # the resolution views, dims and marts are VIEWS that read the
+            # decision log live through the FDW seam, so a verdict is visible
+            # on the next read; only the insert-only hub/link history catches
+            # up on the next vault build (verified live 2026-09-21)
+            "note": "in effect on the next read; vault history catches up on the next build"}
 
 
 @router.get("/master/{entity_class}/{master_bk}")
