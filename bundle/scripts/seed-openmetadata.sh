@@ -7,7 +7,10 @@
 #      (INGESTION_BOT_TOKEN) and is accepted by the API;
 #   3. unpauses + triggers the `openmetadata_ingestion` Airflow DAG once, so
 #      the catalog fills (postgres, clickhouse, lake, dbt column lineage,
-#      airflow pipelines) without waiting for the 05:00 schedule.
+#      airflow pipelines) without waiting for the 05:00 schedule;
+#   4. publishes the access-point structure (sync-om-dashboards.py: pages,
+#      widgets, mart→widget lineage) so the catalog shows lineage end-to-end
+#      source → lake → staging → vault → mart → dashboard widget.
 #
 # The ONE manual step on a cold boot: the bot token. With SSO enabled OM has
 # no scriptable admin login, so an OM administrator (the `superadmin` SSO
@@ -68,5 +71,20 @@ if kubectl -n "$NS" get deploy airflow >/dev/null 2>&1; then
   kubectl -n "$NS" exec deploy/airflow -- airflow dags trigger openmetadata_ingestion >/dev/null 2>&1 \
     && echo "  ✓ openmetadata_ingestion triggered" \
     || echo "  … could not trigger the DAG (is it parsed yet?) — the 05:00 schedule will run it"
+fi
+
+# 4. access-point emission (best-effort; the sync itself is fail-safe and
+#    idempotent — see the standard in docs/metadata-plane.md). Runs from the
+#    host through a short-lived port-forward since OM has no NodePort.
+if command -v python3 >/dev/null 2>&1; then
+  kubectl -n "$NS" port-forward svc/openmetadata 18585:8585 >/dev/null 2>&1 &
+  pf=$!; sleep 3
+  OM_API="http://127.0.0.1:18585/api" OM_JWT="$tok" \
+    python3 "$(dirname "$0")/sync-om-dashboards.py" \
+    && echo "  ✓ dashboard metadata synced" \
+    || echo "  … dashboard sync skipped (non-fatal; rerun sync-om-dashboards.py later)"
+  kill "$pf" 2>/dev/null || true
+else
+  echo "  … python3 not on this host — run sync-om-dashboards.py manually"
 fi
 echo "== seed-openmetadata done =="
