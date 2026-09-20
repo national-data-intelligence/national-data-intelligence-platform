@@ -50,12 +50,14 @@ const SOURCE_META: Record<string, string> = {
 };
 
 const TOOLS = [
+  // Real product marks, same files the Documentation page tiles use
+  // (/static/assets/brand/ — local, nothing fetched at runtime).
   { label: 'dbt Docs', sub: 'Full interactive lineage DAG',
-    href: toolUrl('dbt-docs', '/'), ico: 'i-database' },
+    href: toolUrl('dbt-docs', '/'), brand: '/static/assets/brand/dbt.svg' },
   // (The MinIO console tile was removed with MinIO on 2026-09-09; SeaweedFS ships no console —
   //  the lake is browsed through dbt Docs, the DQ manifests and the gateway.)
   { label: 'Airflow', sub: 'Ingestion + build run history',
-    href: toolUrl('airflow', '/'), ico: 'i-refresh' },
+    href: toolUrl('airflow', '/'), brand: '/static/assets/brand/airflow.svg' },
 ];
 
 const DIM_ORDER: Array<{ key: keyof dq.Dimensions['dimensions']; label: string; hint: string }> = [
@@ -599,9 +601,6 @@ function DQ() {
             ))}
             {tierChips.length === 0 && <span className="muted">{lineage?.note ?? 'Lineage graph loading…'}</span>}
           </div>
-          <p className="dq-note-inline muted">
-            "Source tables" counts dbt <code>source()</code> table declarations across the DAG, not the six source systems above.
-          </p>
 
           <div className="dq-lineage-rollup">
             <span className="dq-lineage-lbl">Model test status</span>
@@ -617,7 +616,7 @@ function DQ() {
           <div className="dq-tools">
             {TOOLS.map(t => (
               <a className="dq-tool" href={t.href} target="_blank" rel="noreferrer" key={t.label}>
-                <span className="dq-tool-ico"><svg className="ico"><use href={`#${t.ico}`} /></svg></span>
+                <span className="dq-tool-ico"><img src={t.brand} alt="" style={{ width: 20, height: 20, objectFit: 'contain' }} /></span>
                 <span className="dq-tool-txt">
                   <span className="dq-tool-name">{t.label} <svg className="ico ico-sm"><use href="#i-external" /></svg></span>
                   <span className="dq-tool-sub">{t.sub}</span>
@@ -625,7 +624,6 @@ function DQ() {
               </a>
             ))}
           </div>
-          <p className="dq-note-inline muted">Authentication carries across · same Keycloak session</p>
         </div>
       </div>
     </section>
@@ -646,7 +644,7 @@ function IncidentsSection({ flagsResp, kpi, onDetect, detectBusy, detectMsg }: {
     },
     initialSort: { key: 'raised_at', dir: 'desc' },
   });
-  const fmtH = (h: number | null) => (h === null || h === undefined ? '—' : `${h}h`);
+  const fmtH = (h: number | null) => (h === null || h === undefined ? '·' : `${h}h`);
   return (
     <div className="card dq-card">
       <div className="section-hdr" style={{ display: 'flex', alignItems: 'center' }}>
@@ -662,22 +660,21 @@ function IncidentsSection({ flagsResp, kpi, onDetect, detectBusy, detectMsg }: {
       <div className="grid grid-4 dq-kpis">
         <div className={`kpi kpi-${(flagsResp?.counts?.open ?? 0) > 0 ? 'watch' : 'good'}`}>
           <div className="kpi-lbl">Open incidents</div>
-          <div className="kpi-val">{flagsResp ? (flagsResp.counts.open ?? 0) : '—'}</div>
+          <div className="kpi-val">{flagsResp ? (flagsResp.counts.open ?? 0) : '·'}</div>
           <div className="kpi-delta">{kpi ? `${kpi.reopened_fingerprints} re-opened all-time` : ''}</div>
         </div>
         <div className="kpi kpi-info">
           <div className="kpi-lbl">Time to acknowledge</div>
-          <div className="kpi-val">{kpi ? fmtH(kpi.avg_hours_to_ack) : '—'}</div>
-          <div className="kpi-delta">avg, raise → first ack</div>
+          <div className="kpi-val">{kpi ? fmtH(kpi.avg_hours_to_ack) : '·'}</div>
         </div>
         <div className="kpi kpi-info">
           <div className="kpi-lbl">Time to resolve</div>
-          <div className="kpi-val">{kpi ? fmtH(kpi.avg_hours_to_resolve) : '—'}</div>
+          <div className="kpi-val">{kpi ? fmtH(kpi.avg_hours_to_resolve) : '·'}</div>
           <div className="kpi-delta">{kpi ? `${kpi.resolved_total} resolved all-time` : ''}</div>
         </div>
         <div className={`kpi kpi-${(kpi?.steward?.backlog ?? 0) > 100 ? 'watch' : 'info'}`}>
           <div className="kpi-lbl">Steward backlog</div>
-          <div className="kpi-val">{kpi?.steward?.backlog ?? '—'}</div>
+          <div className="kpi-val">{kpi?.steward?.backlog ?? '·'}</div>
           <div className="kpi-delta">{kpi?.steward ? `${kpi.steward.decisions ?? 0} decisions made` : 'MDM stores unavailable'}</div>
         </div>
       </div>
@@ -687,7 +684,7 @@ function IncidentsSection({ flagsResp, kpi, onDetect, detectBusy, detectMsg }: {
         <p className="dq-note">No open incidents — the detector last found nothing above thresholds.</p>
       ) : (
         <>
-          <TableToolbar kit={kit} placeholder="Filter incidents…" unit="incidents" />
+          <TableToolbar kit={kit} placeholder="Filter incidents…" />
           <div className="tk-scroll">
             <table className="dash">
               <thead>
