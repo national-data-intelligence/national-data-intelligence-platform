@@ -107,6 +107,15 @@ class Registry:
                 indent=1) + "\n")
 
 
+def _read_csv_skipping_comments(path) -> list[dict]:
+    """DictReader over a CSV whose header is preceded by '#' comment lines —
+    the curated supplements document their curation rules inline, and a plain
+    DictReader would read those lines as data."""
+    with open(path, newline="") as fh:
+        lines = [ln for ln in fh if not ln.lstrip().startswith("#") and ln.strip()]
+    return list(csv.DictReader(lines))
+
+
 def build() -> dict[str, list[list]]:
     em = load_entity_model()
     tier_mfr, region_name_to_id, ownership_norm = load_build_sample_dicts()
@@ -131,8 +140,11 @@ def build() -> dict[str, list[list]]:
         ["NHDW.commodityId",  "Entity-model commodity ids",        "entity-model.yaml", "1", "true"],
         # standard vocabularies — registered now, curated subsets loaded by their own
         # supplements when the curation lands (see supplements/README.md)
-        ["ICD10", "WHO ICD-10 (curated NHDW subset)", "https://icd.who.int/browse10", "pending", "false"],
-        ["ATC",   "WHO ATC (curated NHDW subset)",    "https://atcddd.fhi.no/atc_ddd_index/", "pending", "false"],
+        # curated SUBSETS, not the full classifications: only the codes our own
+        # concepts publish to (supplements/who_codes.csv). The version marker
+        # says so rather than implying a WHO release was loaded.
+        ["ICD10", "WHO ICD-10 (curated NHDW subset)", "https://icd.who.int/browse10", "curated-subset", "false"],
+        ["ATC",   "WHO ATC (curated NHDW subset)",    "https://atcddd.fhi.no/atc_ddd_index/", "curated-subset", "false"],
     ]
 
     domains = [["programme", "Health programme"], ["indicator", "HMIS indicator"],
@@ -221,8 +233,41 @@ def build() -> dict[str, list[list]]:
     for ind in em["indicators"]:
         add_s2c(ind["id"], "DHIS2.dataElement", ind["name"], prog_ids[ind["programme"]])
 
-    # ── supplements (live-derived + future ICD10/ATC curated subsets) ─────────
+    # ── the curated WHO subset: NHDW concept → ICD-10 / ATC ──────────────────
+    # These are concept→concept edges, not source crosswalks: they publish what
+    # our concepts MEAN in the international vocabularies, so an external
+    # partner (or an exchange format) can read our data. Nothing here is on the
+    # conformed-key parity path — the s2c map remains the only thing the
+    # resolution views JOIN.
+    who_file = SUPPLEMENTS / "who_codes.csv"
+    if who_file.exists():
+        for row in _read_csv_skipping_comments(who_file):
+            src = (row["nhdw_vocabulary_id"], row["nhdw_concept_code"])
+            if src not in cid:
+                raise SystemExit(
+                    f"who_codes.csv: {src} is not a known NHDW concept — the "
+                    f"entity model must define it before it can be published "
+                    f"to an external vocabulary")
+            tgt = (row["target_vocabulary_id"], row["target_concept_code"])
+            if tgt not in cid:
+                # the external code becomes a concept in its own vocabulary the
+                # first time it is referenced; the registry keeps its id stable
+                # an ICD-10 code IS a disease concept and an ATC code IS a
+                # commodity concept — same declared domains/classes as ours,
+                # different vocabulary. Inventing OMOP-style domain names here
+                # would leave them undeclared (the integrity test catches it).
+                ext_domain = "disease" if row["target_vocabulary_id"] == "ICD10" else "commodity"
+                ext_class = "Disease" if row["target_vocabulary_id"] == "ICD10" else "Commodity"
+                add_concept(row["target_vocabulary_id"], row["target_concept_code"],
+                            row["target_concept_name"], ext_domain, ext_class,
+                            standard="S")
+            rels.append([cid[src], cid[tgt], row.get("relationship_id") or "Maps to",
+                         VALID_FROM, VALID_TO, ""])
+
+    # ── supplements (live-derived crosswalks into source_to_concept_map) ──────
     for f in sorted(SUPPLEMENTS.glob("*.csv")):
+        if f.name == "who_codes.csv":
+            continue                      # concept relationships, handled above
         with open(f, newline="") as fh:
             for row in csv.DictReader(fh):
                 key = (row["target_vocabulary_id"], row["target_concept_code"])

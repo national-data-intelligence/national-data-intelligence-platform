@@ -110,6 +110,52 @@ def test_registry_stable_and_in_local_range():
         assert after.get(k) == v, f"registry renumbered {k}: {v} -> {after.get(k)}"
 
 
+def test_who_codes_are_published_and_off_the_parity_path():
+    """The curated WHO subset must (a) exist, (b) map only NHDW concepts we
+    actually define, and (c) never enter source_to_concept_map — the s2c map is
+    what the resolution views JOIN, so an ICD-10/ATC row there would change a
+    conformed key."""
+    rel = _rows("concept_relationship.csv")
+    con = _rows("concept.csv")
+    s2c = _rows("source_to_concept_map.csv")
+
+    by_id = {c["concept_id"]: c for c in con}
+    maps_to = [r for r in rel if r["relationship_id"] == "Maps to"]
+    assert maps_to, "no WHO mappings emitted"
+
+    external = {"ICD10", "ATC"}
+    for r in maps_to:
+        left, right = by_id[r["concept_id_1"]], by_id[r["concept_id_2"]]
+        assert left["vocabulary_id"].startswith("NHDW-"), \
+            f"Maps to must originate at an NHDW concept, got {left['vocabulary_id']}"
+        assert right["vocabulary_id"] in external, \
+            f"Maps to must target ICD10/ATC, got {right['vocabulary_id']}"
+
+    # every disease carries an ICD-10 code (they all have one)
+    diseases = {c["concept_code"] for c in con if c["vocabulary_id"] == "NHDW-DISEASE"}
+    mapped_dis = {by_id[r["concept_id_1"]]["concept_code"] for r in maps_to
+                  if by_id[r["concept_id_2"]]["vocabulary_id"] == "ICD10"}
+    assert diseases <= mapped_dis, f"diseases without an ICD-10 code: {diseases - mapped_dis}"
+
+    # the parity path is untouched: no external vocabulary in the crosswalk
+    ext_ids = {c["concept_id"] for c in con if c["vocabulary_id"] in external}
+    assert not [m for m in s2c if m["target_concept_id"] in ext_ids], \
+        "an ICD-10/ATC concept is a source_to_concept_map target — that would " \
+        "re-key conformance; WHO codes belong in concept_relationship only"
+
+
+def test_who_codes_target_only_declared_domains():
+    """External concepts reuse the declared domains/classes (an ICD-10 code IS
+    a disease); an undeclared domain would break referential integrity."""
+    con = _rows("concept.csv")
+    domains = {d["domain_id"] for d in _rows("domain.csv")}
+    classes = {c["concept_class_id"] for c in _rows("concept_class.csv")}
+    for c in con:
+        if c["vocabulary_id"] in ("ICD10", "ATC"):
+            assert c["domain_id"] in domains, f"{c['concept_code']}: undeclared domain"
+            assert c["concept_class_id"] in classes, f"{c['concept_code']}: undeclared class"
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
     failed = 0

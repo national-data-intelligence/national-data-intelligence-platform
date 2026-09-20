@@ -13,5 +13,5 @@ MFR.ownership,MFR ownership display values,source: MFR,1,true
 HCMIS.commodityId,HCMIS native commodity ids,source: HCMIS,1,true
 MBRANA.commodityCode,mBrana native commodity codes,source: mBrana,1,true
 NHDW.commodityId,Entity-model commodity ids,entity-model.yaml,1,true
-ICD10,WHO ICD-10 (curated NHDW subset),https://icd.who.int/browse10,pending,false
-ATC,WHO ATC (curated NHDW subset),https://atcddd.fhi.no/atc_ddd_index/,pending,false
+ICD10,WHO ICD-10 (curated NHDW subset),https://icd.who.int/browse10,curated-subset,false
+ATC,WHO ATC (curated NHDW subset),https://atcddd.fhi.no/atc_ddd_index/,curated-subset,false
