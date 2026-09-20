@@ -15,11 +15,13 @@ on:
       # app tier
       - '6_access-points/**'
       - 'bundle/seed-pack/app/security/**'
+      - '7_security/scripts/**'
       - 'bundle/scripts/ci-redeploy.sh'
-      # data tier (pipeline images, init DDL, reference vocabulary)
+      # data tier (pipeline images, init DDL, reference vocabulary, MDM)
       - '2_pipelines/staging/**'
       - '2_pipelines/vault/**'
       - '2_pipelines/marts/**'
+      - '2_pipelines/mdm/**'
       - '3_storage/postgres/init/**'
       - 'bundle/seeds/ref-vocab/**'
   workflow_dispatch:

@@ -33,7 +33,7 @@ COMPONENTS=(
   "6_access-points/api/nhdw-gateway|nhdw/gateway:1.0.0|Dockerfile|$REPO/6_access-points/api/nhdw-gateway|nhdw-gateway"
 )
 # paths whose change triggers a catalog/RBAC reseed (no image rebuild)
-RESEED_GLOBS=("6_access-points/dashboards/internal-bi/catalog" "bundle/seed-pack/app/security" "6_access-points/dashboards/public/static/articles")
+RESEED_GLOBS=("6_access-points/dashboards/internal-bi/catalog" "bundle/seed-pack/app/security" "6_access-points/dashboards/public/static/articles" "7_security/scripts/")
 
 changed_input="${1:-all}"
 if [ "$changed_input" = "all" ]; then
@@ -151,27 +151,45 @@ done
 # vocab/vault-side-DDL changes re-derive the vault even with no image rebuilt
 { touched "bundle/seeds/ref-vocab/" || [ ${#DDL_VAULT[@]} -gt 0 ]; } && [ "$first_stage" -gt 3 ] && first_stage=3
 
-if [ "$first_stage" -le 4 ]; then
-  run_job(){ # $1=job name  $2=timeout
-    kustomize build --load-restrictor=LoadRestrictionsNone "$REPO/1_infrastructure/k8s/jobs" | \
-      python3 -c "
+run_job(){ # $1=job name  $2=timeout
+  kustomize build --load-restrictor=LoadRestrictionsNone "$REPO/1_infrastructure/k8s/jobs" | \
+    python3 -c "
 import sys, yaml
 for d in yaml.safe_load_all(sys.stdin):
     if d and d.get('kind')=='Job' and d['metadata']['name']=='$1':
         print(yaml.safe_dump(d)); break
 " > /tmp/ci-job-$1.yaml
-    [ -s /tmp/ci-job-$1.yaml ] || { echo "  ✗ job $1 not found in the jobs kustomization"; exit 1; }
-    log "rerun job $1"
-    kubectl -n "$NS" delete job "$1" --ignore-not-found >/dev/null 2>&1
-    kubectl -n "$NS" apply -f /tmp/ci-job-$1.yaml >/dev/null
-    kubectl -n "$NS" wait --for=condition=complete "job/$1" --timeout="$2s" \
-      || { echo "  ✗ job $1 did not complete"; kubectl -n "$NS" logs "job/$1" --tail=25; exit 1; }
-  }
+  [ -s /tmp/ci-job-$1.yaml ] || { echo "  ✗ job $1 not found in the jobs kustomization"; exit 1; }
+  log "rerun job $1"
+  kubectl -n "$NS" delete job "$1" --ignore-not-found >/dev/null 2>&1
+  kubectl -n "$NS" apply -f /tmp/ci-job-$1.yaml >/dev/null
+  kubectl -n "$NS" wait --for=condition=complete "job/$1" --timeout="$2s" \
+    || { echo "  ✗ job $1 did not complete"; kubectl -n "$NS" logs "job/$1" --tail=25; exit 1; }
+}
+
+if [ "$first_stage" -le 4 ]; then
   [ "$first_stage" -le 1 ] && run_job dbt-staging 1200
   [ "$first_stage" -le 2 ] && run_job bridge-sync 1800
   [ "$first_stage" -le 3 ] && run_job dbt-vault 2400
   run_job dbt-marts 2400
 fi
+
+# 4. MDM side-lane. Rebuild on its own change; rerun the candidate generation
+#    whenever its code changed OR the vault content moved (candidates derive
+#    from the resolution view). Idempotent — decided candidates never touched.
+MDM_RUN=0
+if [ "$changed_input" = "all" ] || touched "2_pipelines/mdm/"; then
+  log "build nhdw/mdm-matcher:1.0.0"
+  if docker build -t nhdw/mdm-matcher:1.0.0 -f "$REPO/2_pipelines/mdm/Dockerfile" "$REPO/2_pipelines/mdm" >/tmp/ci-build-mdm-matcher.log 2>&1; then
+    docker save nhdw/mdm-matcher:1.0.0 | sudo k3s ctr images import - >/dev/null 2>&1 \
+      || docker save nhdw/mdm-matcher:1.0.0 | k3s ctr images import - >/dev/null 2>&1
+    PIPE_BUILT+=("nhdw/mdm-matcher:1.0.0"); MDM_RUN=1
+  else
+    echo "  ✗ build failed for nhdw/mdm-matcher:1.0.0"; tail -20 /tmp/ci-build-mdm-matcher.log; exit 1
+  fi
+fi
+[ "$first_stage" -le 3 ] && MDM_RUN=1
+[ "$MDM_RUN" = 1 ] && run_job mdm-matcher 420
 
 log "verify"
 if [ -x "$REPO/bundle/scripts/verify-system.sh" ]; then

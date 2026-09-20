@@ -36,7 +36,9 @@ esac; done
 # Ingestors run in parallel (independent sources → disjoint lake prefixes; hcmiswdm
 # + mbrana share one SQL Server but are read-only). dbt stages are strictly ordered.
 INGEST_JOBS=(dhis2-ingest-metadata dhis2-ingest-dvs climate-ingest ethioemr-ingest hcmiswdm-ingest mbrana-ingest mfr-ingest elmis-hist-ingest)   # elmis-hist: OpenLMIS family lane 2 (openlmis-ingest = lane 1, suspended)
-PIPELINE=(ch-raw-views processed-zone dbt-staging bridge-sync dbt-vault dbt-marts publish-datasets)
+# mdm-matcher rides after dbt-marts: it reads the freshly built resolution view
+# and (re)fills the steward candidate queue — side-lane, never blocks the marts.
+PIPELINE=(ch-raw-views processed-zone dbt-staging bridge-sync dbt-vault dbt-marts mdm-matcher publish-datasets)
 
 # Registry→local image remap via kustomize's BUILT-IN images transform
 # (1_infrastructure/k8s/jobs/kustomization.yaml) — the system's own mechanism.

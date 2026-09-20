@@ -71,9 +71,26 @@ prov=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
 [ "${prov:-0}" -ge 1 ] && pass "provenance column live (managed_by classes: $prov)" \
                        || fail "provenance managed_by missing on ops_identity.user"
 
-# 5. gateway + fayda OIDC
-curl -sk --max-time 5 https://gateway.${NHDW_HOSTBASE}/health | grep -q '"ok"' \
-  && pass "gateway healthy" || fail "gateway health check failed"
+# MDM: the matcher must have filled the steward candidate queue (side-lane job
+# after dbt-marts; the live corpus yields ~990 facility candidates)
+ncand=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_ops -At -c \
+  "SELECT count(*) FROM ops_governance.mdm_match_candidate" 2>/dev/null)
+[ "${ncand:-0}" -gt 0 ] && pass "MDM candidate queue populated ($ncand)" \
+                        || fail "MDM candidate queue empty (matcher never ran?)"
+
+# 5. gateway + fayda OIDC. The gateway probe retries for up to a minute: a
+#    just-restarted gateway needs a few seconds before ingress endpoints
+#    repoint, and the CI verifies right after a rollout — fail only if it
+#    STAYS down.
+gw_ok=0
+for _ in $(seq 12); do
+  if curl -sk --max-time 5 "https://gateway.${NHDW_HOSTBASE}/health" | grep -q '"ok"'; then
+    gw_ok=1; break
+  fi
+  sleep 5
+done
+[ "$gw_ok" = 1 ] && pass "gateway healthy" || fail "gateway health check failed"
 curl -s --max-time 5 http://localhost:8096/.well-known/openid-configuration | grep -q issuer \
   && pass "fayda-replica OIDC discovery on :8096" || fail "fayda-replica OIDC discovery failed"
 

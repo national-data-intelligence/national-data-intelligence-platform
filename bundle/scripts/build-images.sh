@@ -74,6 +74,7 @@ IMAGES=(
   "nhdw/vault-dbt:1.0.0|2_pipelines/vault|Dockerfile"
   "nhdw/vault-bridge:1.0.0|2_pipelines/vault/bridge|Dockerfile"
   "nhdw/marts-dbt:1.0.0|2_pipelines/marts|Dockerfile"
+  "nhdw/mdm-matcher:1.0.0|2_pipelines/mdm|Dockerfile"
   "nhdw/ml-runner:1.0.0|2_pipelines/ml/runner|Dockerfile"
   # --- pipeline: source ingestors ---
   "nhdw/dhis2-ingestor:1.0.0|2_pipelines/ingestor/DHIS2|Dockerfile"
