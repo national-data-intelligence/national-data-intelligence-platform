@@ -191,7 +191,23 @@ cmodel=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
 # 7. pack/unpack surface
 bash -n "$REPO/bundle/scripts/pack.sh" && bash -n "$REPO/bundle/scripts/restore-state.sh" \
   && pass "pack.sh + restore-state.sh parse" || fail "pack/restore syntax error"
-[ -x "$REPO/bundle/bin/mc" ] && pass "bundled mc binary present" || fail "bundle/bin/mc missing"
+# mc is a DERIVED artifact, not a committed one: bundle/bin/ is gitignored and
+# lib/objstore.sh materialises mc on first use (bundled binary → extract from
+# the cached minio/mc image → network as the loud last resort). So asserting
+# the binary exists fails every fresh checkout while the system is healthy.
+# What actually matters is that an AIRGAPPED boot can still get it — i.e. at
+# least one OFFLINE source is present.
+MC_IMG="${OBJSTORE_MC_IMAGE:-minio/mc:RELEASE.2025-04-08T15-39-49Z}"
+MC_TAR="$REPO/bundle/images/$(echo "$MC_IMG" | tr '/:' '__').tar"
+if [ -x "$REPO/bundle/bin/mc" ]; then
+  pass "mc available offline (bundled binary)"
+elif [ -f "$MC_TAR" ]; then
+  pass "mc available offline (cached image tar)"
+elif command -v docker >/dev/null 2>&1 && docker image inspect "$MC_IMG" >/dev/null 2>&1; then
+  pass "mc available offline (image in the local store)"
+else
+  fail "mc has NO offline source — an airgapped boot would have to download it (cache-images.sh ships $MC_IMG)"
+fi
 
 # 8. replacement-means-removal guard
 stale=$(grep -rIl --exclude-dir='.*' "1_sources/\|nhdw/fake-fayda\|1_infrastructure/scripts/\|1_infrastructure/docker/" "$REPO" \
