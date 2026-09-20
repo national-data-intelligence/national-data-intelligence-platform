@@ -144,7 +144,11 @@ def build() -> dict[str, list[list]]:
                ["Ownership", "Ownership class"], ["Disease", "Disease"]]
 
     concepts: list[list] = []
-    s2c: list[list] = []
+    # Crosswalk rows keyed on the load PK so SUPPLEMENTS OVERRIDE derived rows —
+    # e.g. the parity supplement pins codes the deployed CASE sends to OTHER even
+    # where the entity model knows a richer programme (byte-identical keys first;
+    # richer mappings land later as stewarded vocabulary changes).
+    s2c_map: dict[tuple[str, str], list] = {}
     rels: list[list] = []
     cid: dict[tuple[str, str], int] = {}
 
@@ -154,8 +158,9 @@ def build() -> dict[str, list[list]]:
         concepts.append([i, name, domain, vocab, cls, standard, code, VALID_FROM, VALID_TO, ""])
         return i
 
-    def add_s2c(src_code: str, src_vocab: str, desc: str, target_id: int):
-        s2c.append([src_code, src_vocab, desc, target_id, VALID_FROM, VALID_TO, "", "seed", "build_vocab.py"])
+    def add_s2c(src_code: str, src_vocab: str, desc: str, target_id: int, loaded_by="build_vocab.py"):
+        s2c_map[(src_code, src_vocab)] = [src_code, src_vocab, desc, target_id,
+                                          VALID_FROM, VALID_TO, "", "seed", loaded_by]
 
     # ── canonical concepts ───────────────────────────────────────────────────
     # Programmes = the declared list + ids referenced by indicators/commodities but
@@ -226,7 +231,8 @@ def build() -> dict[str, list[list]]:
                         f"{f.name}: target {key} is not a known concept — add it to the "
                         f"entity model (or as a concept supplement) first")
                 add_s2c(row["source_code"], row["source_vocabulary_id"],
-                        row.get("source_code_description", ""), cid[key])
+                        row.get("source_code_description", ""), cid[key],
+                        loaded_by=f"supplement:{f.name}")
 
     reg.save()
     return {
@@ -242,7 +248,7 @@ def build() -> dict[str, list[list]]:
         "source_to_concept_map.csv": [["source_code", "source_vocabulary_id",
                                        "source_code_description", "target_concept_id",
                                        "valid_from", "valid_to", "invalid_reason",
-                                       "change_source", "loaded_by"]] + s2c,
+                                       "change_source", "loaded_by"]] + list(s2c_map.values()),
     }
 
 

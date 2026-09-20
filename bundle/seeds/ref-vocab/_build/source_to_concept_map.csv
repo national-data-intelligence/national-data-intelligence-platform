@@ -118,9 +118,9 @@ PENTA3,DHIS2.dataElement,Penta-3 dose given,2000000003,2026-01-01,2099-12-31,,se
 MR1,DHIS2.dataElement,Measles-Rubella 1st dose,2000000003,2026-01-01,2099-12-31,,seed,build_vocab.py
 MR2,DHIS2.dataElement,Measles-Rubella 2nd dose,2000000003,2026-01-01,2099-12-31,,seed,build_vocab.py
 PENTA3-COV,DHIS2.dataElement,Penta-3 coverage under 1y,2000000003,2026-01-01,2099-12-31,,seed,build_vocab.py
-CC-EXCURSION,DHIS2.dataElement,Cold-chain temperature excursions,2000000003,2026-01-01,2099-12-31,,seed,build_vocab.py
-AEFI-MILD,DHIS2.dataElement,AEFI · mild reactions,2000000003,2026-01-01,2099-12-31,,seed,build_vocab.py
-AEFI-SERIOUS,DHIS2.dataElement,AEFI · serious reactions,2000000003,2026-01-01,2099-12-31,,seed,build_vocab.py
+CC-EXCURSION,DHIS2.dataElement,parity: deployed CASE maps to OTHER (entity model says EPI — future stewarded change),2000000010,2026-01-01,2099-12-31,,seed,supplement:dhis2_dataelement_programme_parity.csv
+AEFI-MILD,DHIS2.dataElement,parity: deployed CASE maps to OTHER (entity model says EPI — future stewarded change),2000000010,2026-01-01,2099-12-31,,seed,supplement:dhis2_dataelement_programme_parity.csv
+AEFI-SERIOUS,DHIS2.dataElement,parity: deployed CASE maps to OTHER (entity model says EPI — future stewarded change),2000000010,2026-01-01,2099-12-31,,seed,supplement:dhis2_dataelement_programme_parity.csv
 ANC1,DHIS2.dataElement,ANC1 visits,2000000004,2026-01-01,2099-12-31,,seed,build_vocab.py
 ANC4,DHIS2.dataElement,ANC4 visits,2000000004,2026-01-01,2099-12-31,,seed,build_vocab.py
 SBA,DHIS2.dataElement,Skilled birth attendance,2000000004,2026-01-01,2099-12-31,,seed,build_vocab.py
@@ -150,5 +150,5 @@ NUT-SAM,DHIS2.dataElement,SAM admissions,2000000008,2026-01-01,2099-12-31,,seed,
 NUT-SAM-CURE,DHIS2.dataElement,SAM cure rate,2000000008,2026-01-01,2099-12-31,,seed,build_vocab.py
 NUT-STUNT,DHIS2.dataElement,U5 stunting prevalence,2000000008,2026-01-01,2099-12-31,,seed,build_vocab.py
 NUT-RUTF,DHIS2.dataElement,RUTF dispensed,2000000008,2026-01-01,2099-12-31,,seed,build_vocab.py
-PHEM-TIMELY,DHIS2.dataElement,IDSR timeliness,2000000001,2026-01-01,2099-12-31,,seed,build_vocab.py
-PHEM-COMPL,DHIS2.dataElement,Reporting completeness,2000000001,2026-01-01,2099-12-31,,seed,build_vocab.py
+PHEM-TIMELY,DHIS2.dataElement,parity: deployed CASE maps to OTHER (entity model wrongly says HIV — data bug to correct),2000000010,2026-01-01,2099-12-31,,seed,supplement:dhis2_dataelement_programme_parity.csv
+PHEM-COMPL,DHIS2.dataElement,parity: deployed CASE maps to OTHER (entity model wrongly says HIV — data bug to correct),2000000010,2026-01-01,2099-12-31,,seed,supplement:dhis2_dataelement_programme_parity.csv
