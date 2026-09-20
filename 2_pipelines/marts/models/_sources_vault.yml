@@ -101,3 +101,19 @@ sources:
       - name: v_sat_elmis_hist_period_current     # 173 monthly reporting periods (2013+)
       - name: v_sat_elmis_hist_requisition_current      # historical workflow status
       - name: v_sat_elmis_hist_requisition_line_current # historical R&R measures (7.5M)
+
+  # ── nhdw_vault_governance — the DQ governance record (read-only seam) ────
+  # postgres_fdw foreign tables over nhdw_ops ops_governance (DDL:
+  # 40_dq_read.sql, same seam as the steward decisions). Written only by the
+  # gateway detector/ack paths; the marts read, never write.
+  - name: vault_governance
+    schema: nhdw_vault_governance
+    tables:
+      - name: dq_flag
+        description: "Incident flags — one open row per distinct finding (fingerprint-deduped)."
+      - name: dq_flag_event
+        description: "Append-only status-transition history of dq_flag; never deleted."
+      - name: dq_ack
+        description: "Operator acknowledgements of flags."
+      - name: dq_threshold
+        description: "Central SLA/band thresholds (seed-reconciled, runtime-editable)."

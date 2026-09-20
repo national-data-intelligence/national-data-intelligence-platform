@@ -20,3 +20,38 @@ models:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
+
+  - name: mart_dq_incidents
+    description: >
+      The durable DQ incident record on the governed mart path — one row per
+      flag with events/acks counts and measured lifecycle latencies
+      (hours_to_first_ack / hours_to_resolve are NULL until measured, never
+      zero). Read-only reporting over the ops_governance FDW seam
+      (40_dq_read.sql); the gateway remains the only writer.
+    columns:
+      - name: flag_id
+        tests: [not_null, unique]
+      - name: error_class
+        tests: [not_null]
+      - name: severity
+        tests:
+          - accepted_values:
+              values: ['error', 'warn', 'info']
+      - name: status
+        tests: [not_null]
+
+  - name: mart_dq_governance_kpi
+    description: >
+      Governance KPIs distilled from the incident history, long format
+      (kpi_code, dim_a, dim_b, value_num), mirroring GET /api/dq/kpi so the
+      two surfaces cannot drift. Steward KPIs stay API-only (the MDM read
+      seam exposes just the decision log). Definitions:
+      docs/data-quality-plane.md.
+    columns:
+      - name: kpi_code
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['open_total', 'open_by_class', 'raised_weekly',
+                       'avg_hours_to_ack', 'avg_hours_to_resolve',
+                       'resolved_total', 'reopened_fingerprints']

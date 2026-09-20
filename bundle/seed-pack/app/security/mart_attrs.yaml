@@ -67,6 +67,22 @@
   default_sensitivity: restricted
   description: "Consent-activity KPIs (governance mirror) — restricted."
 
+- schema_name: bi_governance
+  table_name: mart_dq_incidents
+  subject: PRG
+  data_class: DC.PRF
+  granularity: aggregate
+  default_sensitivity: restricted
+  description: "DQ incident record (governance) — flags with lifecycle latencies; restricted."
+
+- schema_name: bi_governance
+  table_name: mart_dq_governance_kpi
+  subject: PRG
+  data_class: DC.PRF
+  granularity: aggregate
+  default_sensitivity: restricted
+  description: "DQ governance KPIs (long format, mirrors /api/dq/kpi) — restricted."
+
 # ── HMIS coverage + EPI safety (bi_hmis) ────────────────────────────────
 - schema_name: bi_hmis
   table_name: mart_hmis_indicator_coverage
