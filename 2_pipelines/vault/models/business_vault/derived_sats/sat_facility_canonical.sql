@@ -18,7 +18,8 @@
                  — MFR Location is EMPTY in the live corpus (recorded source
                  gap), so mBrana is the live coordinate provider until the
                  replica regenerates with Location.position.
-      admin area mBrana (the only source carrying woreda/zone text)
+      admin area mBrana woreda/zone — held there as bigint FKs, resolved
+                 to NAMES via the mBrana admin hubs/sats
 
     Downstream: dims/marts can join the CURRENT revision (max load_ts per
     hk) for golden attributes instead of re-deriving per-source precedence
@@ -79,13 +80,23 @@ mfr_org_attrs AS (
     ORDER BY m.hk_facility_conformed, m.hk_source_facility
 ),
 mbrana_attrs AS (
+    -- mBrana holds woreda/zone as FOREIGN KEYS (bigint) into its own admin
+    -- tables, not as names — resolve them to names here so the golden column
+    -- carries something a human can read.
     SELECT DISTINCT ON (m.hk_facility_conformed)
            m.hk_facility_conformed,
            s.operational_status, s.phone,
-           s.latitude, s.longitude, s.woreda, s.zone
+           s.latitude, s.longitude,
+           w.woreda_name, z.zone_name
     FROM members m
     JOIN {{ ref('v_sat_mbrana_facility_current') }} s
       ON s.hk_mbrana_facility = m.hk_source_facility
+    LEFT JOIN {{ ref('hub_mbrana_woreda') }} hw ON hw.id = s.woreda
+    LEFT JOIN {{ ref('v_sat_mbrana_woreda_current') }} w
+           ON w.hk_mbrana_woreda = hw.hk_mbrana_woreda
+    LEFT JOIN {{ ref('hub_mbrana_zone') }} hz   ON hz.id = s.zone
+    LEFT JOIN {{ ref('v_sat_mbrana_zone_current') }} z
+           ON z.hk_mbrana_zone = hz.hk_mbrana_zone
     WHERE m.source_system = 'mBrana.dbo'
     ORDER BY m.hk_facility_conformed, m.hk_source_facility
 ),
@@ -94,7 +105,13 @@ golden AS (
         gn.hk_facility_conformed,
         gn.canonical_name,
         gn.name_source,
-        COALESCE(ml.status,                mb.operational_status)  AS operational_status,
+        -- mBrana carries operational status as a BOOLEAN, MFR as FHIR text —
+        -- normalise mBrana onto the FHIR vocabulary so the golden column has
+        -- ONE meaning whichever source supplied it.
+        COALESCE(ml.status,
+                 CASE WHEN mb.operational_status THEN 'active'
+                      WHEN mb.operational_status IS NOT NULL THEN 'inactive'
+                 END)                                            AS operational_status,
         CASE WHEN ml.status IS NOT NULL              THEN 'MFR.location'
              WHEN mb.operational_status IS NOT NULL  THEN 'mBrana.dbo' END AS status_source,
         COALESCE(mo.telecom,               mb.phone)               AS telecom,
@@ -104,9 +121,9 @@ golden AS (
         COALESCE(ml.longitude::numeric,    mb.longitude)           AS longitude,
         CASE WHEN ml.latitude IS NOT NULL            THEN 'MFR.location'
              WHEN mb.latitude IS NOT NULL            THEN 'mBrana.dbo' END AS coord_source,
-        mb.woreda,
-        mb.zone,
-        CASE WHEN mb.woreda IS NOT NULL              THEN 'mBrana.dbo' END AS admin_source
+        mb.woreda_name,
+        mb.zone_name,
+        CASE WHEN mb.woreda_name IS NOT NULL         THEN 'mBrana.dbo' END AS admin_source
     FROM golden_name gn
     LEFT JOIN mfr_loc_attrs  ml USING (hk_facility_conformed)
     LEFT JOIN mfr_org_attrs  mo USING (hk_facility_conformed)
@@ -121,8 +138,8 @@ revisioned AS (
             COALESCE(telecom, '')                   || '|' ||
             COALESCE(latitude::text, '')            || '|' ||
             COALESCE(longitude::text, '')           || '|' ||
-            COALESCE(woreda, '')                    || '|' ||
-            COALESCE(zone, '')
+            COALESCE(woreda_name, '')               || '|' ||
+            COALESCE(zone_name, '')
         ) AS hashdiff,
         CURRENT_TIMESTAMP AS load_ts,
         'BV.facility_canonical' AS record_source
