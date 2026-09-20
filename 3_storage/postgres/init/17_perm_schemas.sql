@@ -243,6 +243,53 @@ COMMENT ON TABLE ops_perm.mart_attrs IS
     'enrich the OPA input with data_class + granularity + default sensitivity. '
     'Without this, OPA decisions silently fail-open.';
 
+-- column_classification — PER-COLUMN sensitivity + masking policy (the column-
+-- grain sibling of mart_attrs, which stays one-row-per-mart). Keyed on the REAL
+-- deployed dbt relation names (the namespace Trino/information_schema and the
+-- fetchers see) — NOT mart_attrs' on-the-wire aliases — because masking is
+-- applied against real result columns; a wrong namespace silently reveals.
+-- Absence of a row = sensitivity 'default' (visible): this is a denylist of
+-- columns needing protection, not an allowlist of viewable ones. Rows are
+-- written by three authors, disambiguated by managed_by:
+--   'seed'          — bundle/seed-pack/app/security/column_classification.yaml
+--   'steward'       — the admin stewardship console (future)
+--   'openmetadata'  — the OpenMetadata classification sync (Track B); the sync
+--                     must NEVER overwrite 'seed'/'steward' rows.
+CREATE TABLE IF NOT EXISTS ops_perm.column_classification (
+    schema_name    text    NOT NULL,
+    table_name     text    NOT NULL,
+    column_name    text    NOT NULL,
+    sensitivity    text    NOT NULL DEFAULT 'restricted'
+                     CHECK (sensitivity IN ('default','restricted','privileged')),
+    mask_class     text    NOT NULL DEFAULT 'drop'
+                     CHECK (mask_class IN ('none','drop','hash','partial','generalize','tokenize')),
+    data_class     text,                    -- optional finer DC.* tag (free-form; fetchers use classes mart_attrs does not enumerate)
+    pii            boolean NOT NULL DEFAULT false,
+    purpose_unmask text[]  NOT NULL DEFAULT '{}',   -- purposes that may reveal it (PBAC growth path)
+    managed_by     text    NOT NULL DEFAULT 'seed'
+                     CHECK (managed_by IN ('seed','steward','openmetadata')),
+    note           text,
+    updated_at     timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (schema_name, table_name, column_name)
+);
+CREATE INDEX IF NOT EXISTS ix_column_classification_table
+    ON ops_perm.column_classification (schema_name, table_name);
+COMMENT ON TABLE ops_perm.column_classification IS
+    'Per-column sensitivity + mask method on real dbt relation names. Feeds the '
+    'OPA masking obligation; consumed by the gateway masking layer on every read path.';
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ops_gateway') THEN
+        GRANT SELECT ON ops_perm.column_classification TO ops_gateway;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ops_reader') THEN
+        GRANT SELECT ON ops_perm.column_classification TO ops_reader;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ops_writer') THEN
+        -- the seed loader and the OpenMetadata classification sync write here
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ops_perm.column_classification TO ops_writer;
+    END IF;
+END $$;
+
 
 -- ─── Roles ──────────────────────────────────────────────────────────────
 
