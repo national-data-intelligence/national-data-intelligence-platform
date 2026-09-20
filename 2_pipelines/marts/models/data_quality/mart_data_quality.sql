@@ -184,10 +184,28 @@ ewars AS (
         NULL::bigint                            AS reports_expected
     FROM {{ ref('mart_idsr_disease_weekly') }}
     GROUP BY 1,2,3,4
+),
+unioned AS (
+    SELECT * FROM dhis2
+    UNION ALL SELECT * FROM hcmis
+    UNION ALL SELECT * FROM mbrana
+    UNION ALL SELECT * FROM ethioemr
+    UNION ALL SELECT * FROM mfr
+    UNION ALL SELECT * FROM ewars
 )
-SELECT * FROM dhis2
-UNION ALL SELECT * FROM hcmis
-UNION ALL SELECT * FROM mbrana
-UNION ALL SELECT * FROM ethioemr
-UNION ALL SELECT * FROM mfr
-UNION ALL SELECT * FROM ewars
+
+-- Timeliness wiring (DQ batch 2): each source's reporting deadline comes from
+-- the governed reporting_deadlines seed (cadence 'none' = no deadline, e.g.
+-- the immutable eLMIS archive). timeliness_pct itself stays NULL until a
+-- source carries PER-REPORT arrival timestamps — the current loads are bulk
+-- snapshots (one load_ts instant), and computing "% on time" from them would
+-- fabricate a number. Live ingest-freshness IS monitored: the DQ detector
+-- raises stale_ingest incidents against the dq_threshold SLAs.
+SELECT
+    u.*,
+    dl.cadence              AS deadline_cadence,
+    dl.deadline_offset_days AS deadline_offset_days,
+    dl.grace_hours          AS deadline_grace_hours
+FROM unioned u
+LEFT JOIN {{ ref('reporting_deadlines') }} dl
+       ON dl.source_key = CASE u.source WHEN 'EWARS/Climate' THEN 'Climate' ELSE u.source END

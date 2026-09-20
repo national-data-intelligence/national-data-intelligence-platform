@@ -132,6 +132,16 @@ if [ -n "$usr_cols" ]; then
     || pass "processed mbrana/mflowussd_users is PII-stripped"
 fi
 
+# 6e. data-quality governance lane (Track B batch 2 — landed 2026-09-20)
+thr=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_ops -At -c "SELECT count(*) FROM ops_governance.dq_threshold" 2>/dev/null)
+[ "${thr:-0}" -ge 11 ] && pass "dq_threshold seeded (${thr} rows)" || fail "dq_threshold has ${thr:-0} rows (expected ≥11 — init 38 not applied?)"
+dqe=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_ops -At -c "SELECT count(*) FROM ops_governance.dq_flag_event" 2>/dev/null)
+[ -n "${dqe:-}" ] && pass "dq_flag_event history table present (${dqe} events)" || fail "dq_flag_event missing (init 38 not applied?)"
+dqdag=$(kubectl -n "$NS" exec deploy/airflow -- airflow dags list 2>/dev/null | grep -c "dq_detection")
+[ "${dqdag:-0}" -ge 1 ] && pass "airflow DAG dq_detection registered" || fail "airflow DAG dq_detection missing"
+
 # 6c. ML tier — registry, deployments, latest-run predictions, airflow DAG
 # The X-Mock-* demo-impersonation channel is SECRET-GATED (auth.py fail-secure):
 # without X-Mock-Secret the gateway 401s and this check could never pass.

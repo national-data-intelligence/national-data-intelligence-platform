@@ -36,6 +36,10 @@ seeds:
     +post-hook:
       - "ALTER TABLE {{ this }} OWNER TO vault_admin"
       - "GRANT SELECT ON {{ this }} TO bi_reader"
+    # Governance contract seed sits with its consumer (mart_data_quality),
+    # not with the public reference seeds.
+    reporting_deadlines:
+      +schema: bi_quality
 
 on-run-end:
   - "GRANT USAGE ON SCHEMA bi_mdm TO bi_reader"

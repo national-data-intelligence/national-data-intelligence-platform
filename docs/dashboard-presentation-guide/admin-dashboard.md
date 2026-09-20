@@ -457,10 +457,19 @@ mart + ingestion signals, honest `NULL`s where a signal doesn't exist.
   `nhdw-raw/<source>/…`) with quality (`GET /api/dq/sources`, from the Trino mart
   **`marts.bi_quality.mart_data_quality`**). Columns: Source · Status
   (live/stale/down/unknown) · Last ingest (+ new-data/unchanged chip) · Records ·
-  Lag/SLA · Completeness · Validity · Volume trend (sparkline). The six sources and
-  their freshness SLAs are a registry in `dq.py`: DHIS2 (6h), EthioEMR (1h), HCMIS
-  (4h), mBrana (2h), MFR (48h), Climate (168h). Status logic: `live` within SLA,
+  Lag/SLA · Completeness · Validity · Volume trend (sparkline). The seven sources'
+  freshness SLAs live in **`ops_governance.dq_threshold`** (scope `sla_hours`,
+  seeded by `38_governance.sql`: DHIS2 6h, EthioEMR 1h, HCMIS 4h, mBrana 2h,
+  eLMIS-hist 720h, MFR 48h, Climate 168h); the `dq.py` registry is the
+  fallback when a row is absent. Status logic: `live` within SLA,
   `stale` past SLA, `down` only after ≥3 days of silence (`max(72h, 2×SLA)`).
+- **Incident queue & governance KPIs** — the durable DQ record
+  (`GET /api/dq/flags`, paged; `GET /api/dq/kpi`): incidents raised by the
+  detector (`POST /api/dq/detect` — service token from the 06:15 `dq_detection`
+  DAG, or an admin on demand) into `ops_governance.dq_flag` with every status
+  transition appended to `dq_flag_event`. KPIs: open by class/severity/source,
+  raise-rate per week, hours-to-acknowledge/-resolve, re-opened fingerprints,
+  MDM steward backlog. In-app only — no email path exists in the detector.
 - **DQ dimension scorecard** — Completeness · Validity · Timeliness · Consistency ·
   Uniqueness (`GET /api/dq/dimensions`). Completeness/validity/timeliness are
   `avg` over `mart_data_quality`; consistency = relationship-test pass rate,
