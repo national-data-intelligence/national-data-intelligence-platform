@@ -36,15 +36,16 @@ Seed data (the 14 GB of source dumps + LLM weights) is **not in git**. The from-
 rclone setup, `_workspace/nhdw/…`), or already present. `deploy.yml` only redeploys app images +
 reseeds the file-based catalog/RBAC (which ARE in the repo) — it does not re-ingest source data.
 
-## Scope of the push-to-main `deploy.yml` (important)
-`deploy.yml` is deliberately **app-tier only**: it rebuilds the 5 SPA/gateway images
-(`ci-redeploy.sh` `COMPONENTS`) and reseeds catalog/RBAC. It does **not** rebuild the dbt images,
-re-run the ingest→vault→marts pipeline, or reload source dumps. So a push that changes a **dbt
-model, a source schema, or `synthesize_*.py`** will NOT appear on the cluster via `deploy.yml`
-(its path filter also excludes `2_pipelines/**` / `0_external/**`). Those land through the
-heavier **`provision.yml`** run (full seed) or a deliberate manual pipeline re-run on the host
-(`kustomize build 1_infrastructure/k8s/jobs | …` + the dbt Jobs). This keeps every push from
-triggering a multi-minute pipeline rebuild — pipeline changes are a conscious, verified operation.
+## Scope of `deploy.yml` (push to main or develop)
+`deploy.yml` deploys **two tiers**:
+* **App tier** — rebuilds the affected SPA/gateway images and reseeds catalog/RBAC.
+* **Data tier** — applies new/changed Postgres init DDL (idempotent by contract), reloads the
+  `nhdw_ref` vocabulary when its seeds change, rebuilds the affected dbt/bridge images, and reruns
+  the dbt job chain from the earliest affected stage **through `dbt-marts`** (a vault run drops the
+  report views until marts rebuilds them, so the chain never stops early).
+Still **not** covered: source-dump reloads, ingestor reruns, and new-database `.sh` init files
+(boot-only — those land through the from-bare **`provision.yml`** or a deliberate manual step).
+A push touching only docs/infra outside the path filter deploys nothing.
 
 ## Still open (needs the owner)
 - Install the self-hosted runner on palladium2 (needs a registration token from the repo).
