@@ -52,7 +52,9 @@ VALUES
     ('ar-bi-lat',    'info',     'service=internal-bi',
         'email:platform@moh.gov.et', 'platform@moh.gov.et', 'Dashboard latency > p95 SLA', 'seed'),
     ('ar-dq-tests',  'info',     'kind=dq.test',
-        'email:stewards@moh.gov.et', 'stewards@moh.gov.et', 'dbt test failures (rolled up daily)', 'seed')
+        'email:stewards@moh.gov.et', 'stewards@moh.gov.et', 'dbt test failures (rolled up daily)', 'seed'),
+    ('ar-dq-incidents', 'warning', 'kind=dq.incident',
+        'inapp:dq-queue', 'admin › Data Quality', 'Detector incidents land in the in-app DQ queue only (no email by design)', 'seed')
 ON CONFLICT (id) DO UPDATE SET
     severity    = EXCLUDED.severity,
     match_label = EXCLUDED.match_label,

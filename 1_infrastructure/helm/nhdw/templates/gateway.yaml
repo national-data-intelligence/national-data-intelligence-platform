@@ -68,6 +68,7 @@ spec:
             - { name: SMTP_FROM, valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_FROM, optional: true } } }
             - { name: ALERT_EVAL_MODEL, value: "ears" }
             - { name: ALERT_EVAL_TOKEN, valueFrom: { secretKeyRef: { name: alert-eval-secrets, key: TOKEN } } }
+            - { name: DQ_DETECT_TOKEN, valueFrom: { secretKeyRef: { name: dq-detect-secrets, key: TOKEN, optional: true } } }
           volumeMounts:
             # workspace-profiles configMap is created by the deploy role from the canonical
             # 6_access-points/jupyterhub/profiles.yaml (see chart README — external-file

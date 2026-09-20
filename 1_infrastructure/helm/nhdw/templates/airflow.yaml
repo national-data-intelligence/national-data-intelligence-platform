@@ -127,6 +127,7 @@ spec:
             # alert_evaluation DAG → gateway POST /api/alerts/evaluate.
             - { name: NHDW_GATEWAY_URL, value: "http://nhdw-gateway.{{ .Values.namespace }}.svc.cluster.local:8000" }
             - { name: ALERT_EVAL_TOKEN, valueFrom: { secretKeyRef: { name: alert-eval-secrets, key: TOKEN } } }
+            - { name: DQ_DETECT_TOKEN, valueFrom: { secretKeyRef: { name: dq-detect-secrets, key: TOKEN, optional: true } } }
           volumeMounts:
             - { name: logs, mountPath: /opt/airflow/logs }
           livenessProbe:

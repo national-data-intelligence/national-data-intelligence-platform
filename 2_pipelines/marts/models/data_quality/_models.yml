@@ -1,5 +1,27 @@
 version: 2
 
+seeds:
+  - name: reporting_deadlines
+    description: |
+      Governed per-source reporting contract: cadence, days-after-period-end the
+      report is due, and the grace window before lateness counts. cadence 'none'
+      = no arrival deadline (the immutable eLMIS archive → timeliness stays NULL).
+      Joined by mart_data_quality on source_key (EWARS/Climate folds to Climate).
+      Hand-authored governance contract — edit the CSV directly (unlike the
+      entity-model-generated seeds).
+    columns:
+      - name: source_key
+        tests: [not_null, unique]
+      - name: cadence
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['daily', 'weekly', 'monthly', 'quarterly', 'none']
+      - name: deadline_offset_days
+        tests: [not_null]
+      - name: grace_hours
+        tests: [not_null]
+
 models:
   - name: mart_data_quality
     description: |
@@ -9,7 +31,7 @@ models:
       report at their native geographic + temporal depth, so period_id and
       region_id are NULL where a source carries no such dimension (e.g. MFR
       is point-in-time reference data → period_id NULL; HCMIS/mBrana report
-      at national grain → region_id NULL). completeness_pct/validity_pct
+      at national grain → region_id NULL). completeness_pct/validity_pct/timeliness_pct
       are NULL where a source has no honest signal for that dimension yet;
       timeliness_pct is NULL until a reporting-deadline contract lands.
       Source labels are clean, human-facing names (the raw '!'-prefixed
@@ -38,6 +60,18 @@ models:
           - not_null
           - dbt_utils.expression_is_true:
               expression: ">= 0"
+      - name: deadline_cadence
+        description: >
+          Governed reporting cadence from the reporting_deadlines seed
+          (source-key joined; EWARS/Climate folds to Climate). 'none' means the
+          source has no arrival deadline (e.g. an immutable archive).
+        tests:
+          - accepted_values:
+              values: ['daily', 'weekly', 'monthly', 'quarterly', 'none']
+      - name: deadline_offset_days
+        description: Days after period end when the source's report is due (reporting_deadlines seed).
+      - name: deadline_grace_hours
+        description: Grace window after the deadline before lateness counts (reporting_deadlines seed).
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [source, period_id, region_id, woreda_uid]

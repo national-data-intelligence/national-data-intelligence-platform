@@ -115,6 +115,7 @@ configMapGenerator:
       - ../../../3_storage/postgres/init/31_superset_db.sh
       - ../../../3_storage/postgres/init/23_seaweedfs_filer_db.sh
       - ../../../3_storage/postgres/init/37_openmetadata_db.sh
+      - ../../../3_storage/postgres/init/38_governance.sql
 
 
   - name: keycloak-seed-script
