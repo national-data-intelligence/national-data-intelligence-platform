@@ -16,6 +16,7 @@ on:
       - '6_access-points/**'
       - 'bundle/seed-pack/app/security/**'
       - '7_security/scripts/**'
+      - '2_pipelines/ml/registry/validators.py'   # baked into nhdw/gateway
       - 'bundle/scripts/ci-redeploy.sh'
       # data tier (pipeline images, init DDL, reference vocabulary, MDM)
       - '2_pipelines/staging/**'

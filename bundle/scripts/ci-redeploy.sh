@@ -83,7 +83,20 @@ fi
 BUILT=(); RESTART=()
 for c in "${COMPONENTS[@]}"; do
   IFS='|' read -r prefix image dockerfile context deploy <<<"$c"
-  if [ "$changed_input" = "all" ] || touched "$prefix"; then
+  hit=0
+  if [ "$changed_input" = "all" ] || touched "$prefix"; then hit=1; fi
+  # the gateway bakes in the validator harness from outside its context —
+  # a change to the canonical source must rebuild it too
+  if [ "$image" = "nhdw/gateway:1.0.0" ] && touched "2_pipelines/ml/registry/validators.py"; then hit=1; fi
+  if [ "$hit" = 1 ]; then
+    # nhdw/gateway bakes in the graduation validator harness — canonical home
+    # 2_pipelines/ml/registry/validators.py; COPY can't reach outside the
+    # build context, so stage it (transient, gitignored) exactly like
+    # build-images.sh does. Fresh CI checkouts don't carry the staged copy.
+    if [ "$image" = "nhdw/gateway:1.0.0" ]; then
+      cp "$REPO/2_pipelines/ml/registry/validators.py" \
+         "$REPO/6_access-points/api/nhdw-gateway/validators.py"
+    fi
     log "build $image  (context $context)"
     if docker build -t "$image" -f "$context/$dockerfile" "$context" >/tmp/ci-build-$deploy.log 2>&1; then
       docker save "$image" | sudo k3s ctr images import - >/dev/null 2>&1 || docker save "$image" | k3s ctr images import - >/dev/null 2>&1
