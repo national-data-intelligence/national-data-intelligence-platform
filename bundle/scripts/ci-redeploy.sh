@@ -131,31 +131,36 @@ fi
 # URIs and break login (the 2026-09-20 incident).
 if touched "bundle/seed-pack/app/security/users.yaml" \
    || touched "7_security/keycloak/scripts/setup-keycloak.py"; then
-  log "reseed keycloak users/clients (live job spec)"
+  log "reseed keycloak users/clients (host base: ${NHDW_HOSTBASE:-127.0.0.1.nip.io})"
   kubectl -n "$NS" create configmap keycloak-seed-script \
     --from-file="$REPO/7_security/keycloak/scripts/setup-keycloak.py" \
     --dry-run=client -o yaml | kubectl -n "$NS" apply -f - >/dev/null
   kubectl -n "$NS" create configmap keycloak-users-seed \
     --from-file="$REPO/bundle/seed-pack/app/security/users.yaml" \
     --dry-run=client -o yaml | kubectl -n "$NS" apply -f - >/dev/null
-  if ! kubectl -n "$NS" get job keycloak-seed -o json > /tmp/kc-job-live.json 2>/dev/null; then
-    echo "  ✗ no live keycloak-seed job to re-run — seed by hand from the provisioned spec"; exit 1
+  # RENDER FIRST, delete only once a valid spec is in hand: a render failure
+  # after the delete would leave the cluster with no seed Job at all (and the
+  # live spec was the only carrier of this deployment's host base).
+  RENDER="$REPO/bundle/scripts/render-keycloak-seed-job.py"
+  HB="${NHDW_HOSTBASE:-127.0.0.1.nip.io}"
+  if kubectl -n "$NS" get job keycloak-seed -o json > /tmp/kc-job-live.json 2>/dev/null; then
+    python3 "$RENDER" --hostbase "$HB" --from-live /tmp/kc-job-live.json > /tmp/kc-job.json
+  else
+    # self-healing: no live Job (fresh host, or a previous run removed it) —
+    # render the committed manifest and stamp THIS deployment's host base on it
+    log "  (no live keycloak-seed job — rendering from the base manifest)"
+    kustomize build --load-restrictor=LoadRestrictionsNone "$REPO/1_infrastructure/k8s/base" \
+      | python3 "$RENDER" --hostbase "$HB" > /tmp/kc-job.json
   fi
-  python3 - <<'PY' < /tmp/kc-job-live.json > /tmp/kc-job.json
-import json, sys
-j = json.load(sys.stdin)
-spec = {k: v for k, v in j["spec"].items()
-        if k not in ("selector", "manualSelector", "completionMode", "suspend")}
-tmpl_labels = spec.get("template", {}).get("metadata", {}).get("labels", {})
-for k in list(tmpl_labels):
-    if "controller-uid" in k or "job-name" in k:
-        del tmpl_labels[k]
-print(json.dumps({"apiVersion": "batch/v1", "kind": "Job",
-                  "metadata": {"name": "keycloak-seed",
-                               "namespace": j["metadata"]["namespace"]},
-                  "spec": spec}))
-PY
-  kubectl -n "$NS" delete job keycloak-seed --wait=true >/dev/null
+  if ! python3 -c "
+import json,sys
+j=json.load(open('/tmp/kc-job.json'))
+env={e['name']: e.get('value') for e in j['spec']['template']['spec']['containers'][0]['env'] if 'value' in e}
+assert env.get('PUBLIC_HOST_BASE') == '$HB', f\"host base not stamped: {env.get('PUBLIC_HOST_BASE')}\"
+"; then
+    echo "  ✗ rendered keycloak-seed job failed its host-base check — NOT touching the live job"; exit 1
+  fi
+  kubectl -n "$NS" delete job keycloak-seed --ignore-not-found --wait=true >/dev/null
   kubectl -n "$NS" apply -f /tmp/kc-job.json >/dev/null
   if ! kubectl -n "$NS" wait --for=condition=complete job/keycloak-seed --timeout=300s >/dev/null 2>&1; then
     echo "  ✗ keycloak-seed did not complete"; kubectl -n "$NS" logs job/keycloak-seed --tail=20; exit 1
