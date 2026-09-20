@@ -31,6 +31,9 @@ COMPONENTS=(
   "6_access-points/dashboards/admin|nhdw/admin:1.0.0|admin/Dockerfile|$DASH_CTX|admin"
   "6_access-points/dashboards/workshop|nhdw/workshop:1.0.0|workshop/Dockerfile|$DASH_CTX|workshop"
   "6_access-points/api/nhdw-gateway|nhdw/gateway:1.0.0|Dockerfile|$REPO/6_access-points/api/nhdw-gateway|nhdw-gateway"
+  # DAGs are BAKED into the airflow image (5_orchestrator/Dockerfile) — a DAG
+  # change must rebuild + restart it or the scheduler keeps the old code
+  "5_orchestrator|nhdw/airflow:1.0.0|Dockerfile|$REPO/5_orchestrator|airflow"
 )
 # paths whose change triggers a catalog/RBAC reseed (no image rebuild)
 RESEED_GLOBS=("6_access-points/dashboards/internal-bi/catalog" "bundle/seed-pack/app/security" "6_access-points/dashboards/public/static/articles" "7_security/scripts/" "bundle/roles/")

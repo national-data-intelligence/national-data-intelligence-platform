@@ -454,6 +454,15 @@ bash "$SCRIPTS/seed-graduation.sh" || { echo; echo "✗ graduation seed FAILED �
 # system was removed platform-wide; every dashboard widget is now a foldered
 # build-time module. Archived to _archive/2026-07-06/runtime-plugin-system/.)
 
+# ─── 7.8 · OpenMetadata catalog seed (metadata plane, batch 1) ───────────────
+# Waits for the OM API, validates the ingestion-bot token, triggers the
+# connectors DAG once. NON-FATAL by design: the catalog is never load-bearing
+# (docs/metadata-plane.md) — a boot without OM (or before its one manual
+# bot-token step) is still fully demoable, so this step warns and continues.
+step "7.8 · OpenMetadata catalog seed (non-fatal)"
+bash "$SCRIPTS/seed-openmetadata.sh" \
+  || echo "  ! OpenMetadata seed incomplete (catalog-only — the platform is unaffected); see above."
+
 # ─── 7.9 · verification gate ─────────────────────────────────────────────────
 # Fail LOUDLY, not silently. Every prior step exiting 0 does NOT prove the demo
 # is actually usable (a mart can be empty, a contract unmet) — so run the fast
