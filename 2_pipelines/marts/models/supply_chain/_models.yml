@@ -57,6 +57,28 @@ seeds:
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [hub_id, region_id]
+  - name: pct_gf_tracer_category
+    description: |
+      Crosswalk from the eLMIS tracer products in scope for Global Fund KPI S8
+      (HIV, TB, malaria) to the handbook's disease and product category, with the
+      basis for each mapping. Reviewable by design. The archive carries no TB
+      tracer and no malaria treatment tracer — only the malaria RDT.
+    columns:
+      - name: product_code
+        tests: [not_null, unique]
+      - name: gf_disease
+        tests:
+          - accepted_values:
+              arguments: { values: ['HIV', 'TB', 'Malaria'] }
+  - name: pct_kpi_definitions
+    description: |
+      The per-KPI contract for PCT: numerator, denominator, formula, grain, source,
+      period, target, exclusions, official reference and limitation. Rows whose
+      source is an existing mart (satp, reporting_timeliness) document it without
+      recomputing it.
+    columns:
+      - name: kpi_code
+        tests: [not_null, unique]
 
 models:
   - name: mart_supply_region_stock
@@ -407,3 +429,51 @@ models:
         tests:
           - accepted_values:
               arguments: { values: ['stocked_out', 'understocked', 'according_to_plan', 'overstocked'] }
+
+  - name: mart_pct_kpi
+    description: |
+      PCT KPI layer on the Zambia eLMIS archive — long format at base grain (KPI ×
+      month × province × programme | disease/category | band) with numerator and
+      denominator on every row. No pre-aggregated rows: consumers compute
+      sum(numerator) / sum(denominator) under the active filters (region_id =
+      province code = profile region code; programme_id = eLMIS programme code;
+      month_id 'YYYY-MM'). Contracts per KPI: seed pct_kpi_definitions. osa_s8
+      follows the Global Fund KPI Handbook S8 method with eLMIS period-end stock.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [kpi_code, month_id, region_id, programme_id, disease, category]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "numerator <= denominator"
+    columns:
+      - name: kpi_code
+        tests:
+          - not_null
+          - accepted_values:
+              arguments: { values: ['osa_s8', 'stockout_exposure', 'stockout_days_rate', 'mos_band', 'order_fill'] }
+      - name: month_id
+        tests: [not_null]
+      - name: region_id
+        description: eLMIS province zone code (equals the active profile's region code — the geography filter key)
+        tests: [not_null]
+      - name: programme_id
+        description: eLMIS programme code; NULL for osa_s8 (S8 counts a facility once per category across programmes)
+      - name: category
+        description: GF product category (osa_s8) or months-of-stock band (mos_band)
+        tests:
+          - accepted_values:
+              arguments: { values: ['HIV antiretrovirals', 'HIV diagnostics', 'Malaria diagnostics',
+                                    'stocked_out', 'below_eop', 'within_policy', 'over_max'] }
+      - name: numerator
+        tests: [not_null]
+      - name: denominator
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "> 0" }
+      - name: target
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "= 90" }
+              config: { where: "kpi_code = 'osa_s8'" }
