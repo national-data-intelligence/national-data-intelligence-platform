@@ -412,6 +412,15 @@ purpose-of-use (full PBAC) on the masking seam.
   tier already generalises (candidates and decisions are keyed by `entity_class_code`), so the work
   is source-side: emit the token, and add a person hub/token link. Prerequisites: (1) a second
   source carrying persons, (2) an owner decision that a keyed pseudonym may flow into the warehouse.
+- **Six of seven sources carry no per-report arrival time** (profiled 2026-09-21). `timeliness_pct` was NULL
+  for every source, and the reason turned out to be source-side, not mart-side: DHIS2's `created` column holds
+  143 distinct values across 701,338 rows, all inside a five-minute window on the seed date — it is the bulk
+  load instant, not a submission time. The same is true of HCMIS, mBrana, EthioEMR, MFR and Climate. eLMIS is
+  the exception (73,925 distinct submission times across 73,926 requisitions, spread over a year), and its
+  timeliness is now measured and live. **Correct at the source:** the synthesizers should stamp a plausible
+  per-report submission time — drawn from a lateness distribution per facility, not a single load instant — so
+  the reporting-deadline contract already seeded for each source becomes measurable rather than decorative.
+  Until then the six stay honestly NULL rather than showing a number that describes the loader.
 - **DHIS2 org-unit sat has no coordinates** and HCMIS facility sat carries only name/description — a second
   coordinate authority (or admin-area column) on the FAC side would make ambiguity resolution stronger. mBrana's
   `woreda`/`zone`/`town` ride in `match_features` as today's tie-break.
