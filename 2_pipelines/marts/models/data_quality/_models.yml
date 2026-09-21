@@ -27,13 +27,16 @@ models:
     description: |
       Cross-source "source pulse" — data-quality signals at ONE grain:
       source × period × region × woreda, unioned across ALL SIX ingested
-      sources (DHIS2, HCMIS, mBrana, EthioEMR, MFR, EWARS/Climate). Sources
+      sources plus the eLMIS historical archive (DHIS2, HCMIS, mBrana,
+      EthioEMR, MFR, EWARS/Climate, eLMIS-hist). Sources
       report at their native geographic + temporal depth, so period_id and
       region_id are NULL where a source carries no such dimension (e.g. MFR
       is point-in-time reference data → period_id NULL; HCMIS/mBrana report
       at national grain → region_id NULL). completeness_pct/validity_pct/timeliness_pct
-      are NULL where a source has no honest signal for that dimension yet;
-      timeliness_pct is NULL until a reporting-deadline contract lands.
+      are NULL where a source has no honest signal for that dimension yet.
+      timeliness_pct is MEASURED for eLMIS-hist (real per-requisition
+      submission times vs the governed deadline) and NULL for the sources that
+      land as bulk snapshots.
       Source labels are clean, human-facing names (the raw '!'-prefixed
       record_source convention stays in the vault). Adapters must tolerate
       NULL dimensions. Consumed by /api/dq (source pulse + scorecard).
@@ -42,7 +45,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['DHIS2', 'HCMIS', 'mBrana', 'EthioEMR', 'MFR', 'EWARS/Climate']
+              values: ['DHIS2', 'HCMIS', 'mBrana', 'EthioEMR', 'MFR', 'EWARS/Climate', 'eLMIS-hist']
       - name: period_id
         description: "Period bucket as text (YYYY-MM month, or YYYY-Www ISO-week for EWARS/Climate). NULL for point-in-time reference sources (MFR)."
       - name: region_id
@@ -55,6 +58,15 @@ models:
         tests:
           - dbt_utils.expression_is_true:
               expression: ">= 0 AND validity_pct <= 100 OR validity_pct IS NULL"
+      - name: timeliness_pct
+        description: >
+          Share of reports that arrived within the governed deadline. REAL
+          where a source carries per-report arrival times (eLMIS-hist), NULL
+          where it lands as a bulk snapshot — a load stamp measures the
+          loader, not the reporter.
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0 AND timeliness_pct <= 100 OR timeliness_pct IS NULL"
       - name: reports_received
         tests:
           - not_null
@@ -64,7 +76,7 @@ models:
         description: >
           Governed reporting cadence from the reporting_deadlines seed
           (source-key joined; EWARS/Climate folds to Climate). 'none' means the
-          source has no arrival deadline (e.g. an immutable archive).
+          source has no arrival deadline.
         tests:
           - accepted_values:
               values: ['daily', 'weekly', 'monthly', 'quarterly', 'none']
@@ -75,3 +87,11 @@ models:
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [source, period_id, region_id, woreda_uid]
+      # The eLMIS rows are the only MEASURED timeliness in the warehouse, and
+      # they reach this mart through an inner join on the reporting_deadlines
+      # seed — a renamed or deleted source_key would drop the source silently
+      # instead of failing. This asserts it is still there and still measured.
+      - dbt_utils.expression_is_true:
+          expression: >
+            (SELECT count(*) FROM {{ model }}
+             WHERE source = 'eLMIS-hist' AND timeliness_pct IS NOT NULL) > 0

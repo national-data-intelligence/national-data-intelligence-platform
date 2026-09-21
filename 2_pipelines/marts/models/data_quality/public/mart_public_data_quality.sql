@@ -3,8 +3,10 @@
     at SOURCE × period × region grain (woreda dropped to enlarge groups).
 
     A transparency scorecard: reporting completeness, timeliness and validity
-    by source system, period and region across all six ingested data feeds
-    (DHIS2, HCMIS, mBrana, EthioEMR, MFR, IDSR/EWARS). A dimension stays NULL
+    by source system, period and region across the six national data feeds
+    (DHIS2, HCMIS, mBrana, EthioEMR, MFR, IDSR/EWARS). The eLMIS historical
+    archive is deliberately NOT published here (see the WHERE clause). A
+    dimension stays NULL
     where the source carries no honest signal for it (matching the internal
     mart — no fabrication). k-anonymity: a cell is published only when it
     aggregates >= 5 received reports.
@@ -27,6 +29,12 @@ SELECT
     SUM(reports_received)::bigint    AS reports_received
 FROM {{ ref('mart_data_quality') }}
 WHERE period_id IS NOT NULL
+  -- eLMIS-hist is excluded on purpose. It is a foreign (Zambian) historical
+  -- archive carried for supply-chain feature work — the data dictionary marks
+  -- it internal-dashboards-only, and it never joins the entity model.
+  -- Publishing it on Ethiopia's national transparency scorecard would present
+  -- another country's reporting record as this country's.
+  AND source <> 'eLMIS-hist'
 GROUP BY 1, 2, 3
 HAVING SUM(reports_received) >= 5
 ORDER BY source, period_id, region_id
