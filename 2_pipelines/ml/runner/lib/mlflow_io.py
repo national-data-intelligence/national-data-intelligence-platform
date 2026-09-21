@@ -13,7 +13,9 @@ service DNS; the compose-era `nhdw-mlflow` hostname is dead.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
+import math
 import os
 import tempfile
 import types
@@ -94,14 +96,41 @@ def log_and_register(pkg, model, train_module: types.ModuleType,
         })
         mlflow.log_metric("training_rows", len(input_df))
 
+        # Model-provided evidence (optional, generic — never per-model code):
+        # a package that evaluates itself exposes `metrics` (flat numbers) and
+        # `evaluation` (named tables) on the returned model, and both land INSIDE
+        # this run, so the registered version carries its own evidence. Models
+        # without them are unaffected.
+        metrics = getattr(model, "metrics", None)
+        if isinstance(metrics, dict):
+            clean = {str(k): float(v) for k, v in metrics.items()
+                     if isinstance(v, (int, float)) and not isinstance(v, bool)
+                     and math.isfinite(float(v))}
+            if clean:
+                mlflow.log_metrics(clean)
+        evaluation = getattr(model, "evaluation", None)
+        if isinstance(evaluation, dict):
+            for tname, table in evaluation.items():
+                mlflow.log_dict({"rows": table} if isinstance(table, list) else table,
+                                f"evaluation/{tname}.json")
+        query = ((pkg.feature_spec or {}).get("input") or {}).get("query")
+        if query:
+            mlflow.set_tag("nhdw.feature_query_sha256",
+                           hashlib.sha256(" ".join(query.split()).encode()).hexdigest()[:16])
+
         # The package files ride with the run: predict-batch pulls
         # package/feature_spec.yaml + package/params.yaml from the champion
         # version's run, and the gateway serves package/model_card.md.
         for fname in ("manifest.yaml", "feature_spec.yaml", "params.yaml",
-                      "model_card.md", "requirements.txt", "train.py"):
+                      "model_card.md", "requirements.txt", "train.py",
+                      "forecast_contract.yaml"):
             fpath = pkg.root / fname
             if fpath.exists():
                 mlflow.log_artifact(str(fpath), artifact_path=PACKAGE_ARTIFACT_DIR)
+
+        # The package's committed EDA (standard practice §1) rides with the run too.
+        if (pkg.root / "eda").is_dir():
+            mlflow.log_artifacts(str(pkg.root / "eda"), artifact_path=f"{PACKAGE_ARTIFACT_DIR}/eda")
 
         # Reference feature profile (B4 drift contract).
         reference_profile = profile_mod.build_profile(input_df)

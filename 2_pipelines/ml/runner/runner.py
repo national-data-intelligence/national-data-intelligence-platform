@@ -96,7 +96,7 @@ def _train(package_ref: str, alias: str | None, trigger: str,
             pkg, model, train_module, df, sample_out, params,
             run_label=run_label, alias=alias or None)
 
-        db.record_run(
+        ml_run_id = db.record_run(
             model_name=pkg.name, model_version=reg["version"],
             deployment_kind=pkg.deployment_kind, trigger_kind=trigger,
             run_label=run_label, input_filters={"package_ref": package_ref,
@@ -105,6 +105,17 @@ def _train(package_ref: str, alias: str | None, trigger: str,
             latency_ms=int((time.perf_counter() - t0) * 1000),
             mlflow_run_id=reg["mlflow_run_id"],
             reference_profile_uri=reg["reference_profile_uri"])
+
+        # Model-provided backtest rows (optional, generic): a package that
+        # evaluates itself may expose `performance_rows` — one entry per
+        # evaluation window with its metrics — and they land in
+        # ops_ml.model_performance under the new version, so marts can read the
+        # evidence the registered version was selected on. Backtest metrics are
+        # named `backtest_*` by the package, never mistakable for live scoring.
+        for w in (getattr(model, "performance_rows", None) or []):
+            db.write_performance(pkg.name, reg["version"], w["window_start"],
+                                 w["window_end"], w["metrics"],
+                                 run_id=ml_run_id, sample_size=w.get("sample_size"))
         log.info("train done: %s → version %s (@%s)", pkg.name, reg["version"],
                  alias or "-")
         return 0

@@ -48,6 +48,9 @@ seeds:
     pct_kpi_definitions:
       +schema: bi_supply
       +column_types: { target: numeric }
+    pct_policy_parameters:
+      +schema: bi_supply
+      +column_types: { value: numeric }
 
 on-run-end:
   - "GRANT USAGE ON SCHEMA bi_mdm TO bi_reader"
