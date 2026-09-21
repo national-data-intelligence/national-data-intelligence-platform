@@ -504,3 +504,28 @@ models:
         tests:
           - dbt_utils.expression_is_true:
               arguments: { expression: "BETWEEN 21.9 AND 33.8 OR lng IS NULL" }
+
+  - name: mart_pct_demand_month
+    description: |
+      PCT demand base — facility × product × programme × month (weekly-schedule reports
+      collapsed; stock state from the period-end report). adjusted_demand = eLMIS's own
+      normalized_consumption (dispensed where NULL; demand_basis says which);
+      demand_censored = any stockout that month. pipeline_assumed is a labelled planning
+      assumption (receipts are too sparsely recorded to measure it).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [facility_code, product_code, programme_id, month_id]
+    columns:
+      - name: region_id
+        tests: [not_null]
+      - name: demand_basis
+        tests:
+          - not_null
+          - accepted_values:
+              arguments: { values: ['normalized_consumption', 'dispensed_fallback'] }
+      - name: approved_capped
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "<= calculated_order OR approved_capped IS NULL" }
+

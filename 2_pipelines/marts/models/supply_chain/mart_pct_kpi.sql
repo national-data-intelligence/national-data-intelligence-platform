@@ -30,60 +30,19 @@
     stockout_exposure / stockout_days_rate / mos_band   tracer products
     order_fill        all products; explicitly NOT OTIF
 
-    Reporting schedules: facilities on a weekly schedule (e.g. WEEKLY1) submit
-    several reports in one calendar month. fpm_month collapses them to ONE row per
-    facility × product × month: stock state (stock_in_hand, amc) from the latest
-    report in the month — the period-end position — while stockout occurrence is
-    "any report that month" and additive quantities are summed across the month's
-    reports, each line capped (approved at the calculated quantity; stockout days at
-    reporting days) so data anomalies cannot push a rate past 100%.
+    Monthly facility view: read from mart_pct_demand_month (keyed on month_id,
+    stock state = period end, quantities line-capped) rather than repeating it.
 #}
 
-WITH province AS (
-    SELECT d.code          AS district_code,
-           p.code          AS region_id,
-           ps.name         AS region_name
-    FROM {{ source('nhdw_vault_raw', 'hub_elmis_hist_zone') }} d
-    JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_zone_current') }} ds USING (hk_elmis_hist_zone)
-    JOIN {{ source('nhdw_vault_raw', 'hub_elmis_hist_zone') }} p ON p.code = ds.parent_zone_code
-    JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_zone_current') }} ps ON ps.hk_elmis_hist_zone = p.hk_elmis_hist_zone
-    WHERE ds.geographic_level_code = 'District' AND ps.geographic_level_code = 'Province'
-),
-
-programme AS (
-    SELECT h.code AS programme_id, s.name AS programme_name
-    FROM {{ source('nhdw_vault_raw', 'hub_elmis_hist_programme') }} h
-    JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_programme_current') }} s USING (hk_elmis_hist_programme)
+WITH fpm_month AS (
+    -- the monthly facility view (weekly reports collapsed) — owned by mart_pct_demand_month
+    SELECT * FROM {{ ref('mart_pct_demand_month') }}
 ),
 
 policy AS (
     SELECT h.code AS facility_type_code, s.nominal_max_months, s.nominal_eop
     FROM {{ source('nhdw_vault_raw', 'hub_elmis_hist_facility_type') }} h
     JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_facility_type_current') }} s USING (hk_elmis_hist_facility_type)
-),
-
-fpm AS (
-    SELECT f.*, pv.region_id, pv.region_name, pg.programme_id
-    FROM {{ ref('mart_elmis_hist_facility_product_month') }} f
-    JOIN province  pv ON pv.district_code = f.geographic_zone_code
-    JOIN programme pg ON pg.programme_name = f.programme_name
-),
-
-fpm_month AS (
-    SELECT facility_code, facility_type_code, product_code, tracer,
-           month_id, (month_id || '-01')::date AS period_start,
-           region_id, region_name, programme_id, programme_name,
-           (array_agg(stock_in_hand ORDER BY period_start DESC))[1] AS stock_in_hand,
-           (array_agg(amc           ORDER BY period_start DESC))[1] AS amc,
-           bool_or(stockout_days > 0)                                AS stockout_any,
-           sum(least(coalesce(stockout_days, 0), reporting_days)) FILTER (WHERE reporting_days > 0) AS stockout_days,
-           sum(reporting_days) FILTER (WHERE reporting_days > 0)     AS reporting_days,
-           sum(least(coalesce(quantity_approved, 0), calculated_order_quantity))
-               FILTER (WHERE calculated_order_quantity > 0)          AS approved_capped,
-           sum(calculated_order_quantity) FILTER (WHERE calculated_order_quantity > 0) AS calculated_order
-    FROM fpm
-    GROUP BY facility_code, facility_type_code, product_code, tracer, month_id,
-             region_id, region_name, programme_id, programme_name
 ),
 
 -- ── osa_s8: one row per facility × month × category, available if ANY tracer of
