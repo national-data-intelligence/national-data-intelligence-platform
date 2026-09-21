@@ -466,3 +466,31 @@ run. The durable fix is not the six patches; it is that
 `bundle/scripts/test-coldboot-initdb.sh` runs the real init directory in CI on
 every push, `verify-system` check 9 drives the masking negative path on every
 deploy, and a failed DDL, seed or job now stops the run.
+
+---
+
+## 20. The classification_gap detector, verified on real data
+
+**Result.** Running the detector after the sequence grant landed: 8 findings —
+6 `stale_ingest`, 1 `mdm_backlog`, 1 `classification_gap`. The new one reports
+**11 of 623 mart columns look sensitive but are unclassified**, naming each one.
+
+**Judged, not just counted.** Most of the eleven are name-pattern false positives —
+`mart_ct_nodes.name`, `supplier_name`, `elmis_product_name` are facility, supplier
+and product names, which the scan's own note calls a review item rather than a
+mask. The one that looked genuinely alarming,
+`bi_service.mart_reported_vs_recorded.observation`, was checked rather than
+assumed: it holds five distinct category labels (Malaria RDT, Penta3 dose, Blood
+pressure, HIV test, ANC visit) across 537 rows — an observation TYPE, not patient
+free text. No leak. A steward dismisses these by classifying them `default`/`none`,
+which is the intended workflow.
+
+**A third defect this surfaced.** The failed first run had inserted the flag and
+then died on the event insert, with no transaction around the pair — leaving a
+raised incident with no history row, which breaks the append-only record the
+governance KPIs are computed from. Both writes are now in one transaction, and the
+event is also written when a flag has no history at all, so the orphaned row on the
+cluster heals on the next detector run instead of staying broken.
+
+**Reverse.** Revert the `_detect_classification_gaps` call and the transaction in
+`_upsert_flags`.
