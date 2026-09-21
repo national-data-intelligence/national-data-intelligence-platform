@@ -110,6 +110,8 @@ def _movement(r: dict) -> dict:
         "planned": _b(r.get("planned")), "repaired": _b(r.get("repaired")),
         "capped": _b(r.get("capped")), "why": _j(r.get("why_json"), {}),
         "atRisk": _b(r.get("at_risk")), "demandBasis": r.get("demand_basis"),
+        "forecastP10": _i(r.get("forecast_p10")), "forecastP90": _i(r.get("forecast_p90")),
+        "forecastVersion": r.get("forecast_model_version"), "forecastRun": r.get("forecast_mlflow_run_id"),
     }
 
 

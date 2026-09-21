@@ -71,18 +71,29 @@ export function applyPlan(p: any): void {
 }
 
 let _load: Promise<boolean> | null = null;
-/** Fetch the mart-backed plan once. Every caller awaits the SAME request, so no caller
- *  sees "loaded" before the data has actually arrived. Resolves true when it did. */
+/** Fetch the mart-backed plan. Every caller awaits the SAME in-flight request, so no
+ *  caller sees "loaded" before the data arrived — but a FAILED attempt is never
+ *  cached (a page opened mid-deploy must recover on the next mount or retry),
+ *  and one automatic retry covers a gateway that was restarting. */
 export function ensurePlanLoaded(): Promise<boolean> {
   if (_load) return _load;
+  const attempt = async (): Promise<boolean> => {
+    const r = await authFetch('/gw/ct/plan');
+    if (!r.ok) throw new Error(String(r.status));
+    applyPlan(await r.json());
+    return true;
+  };
   _load = (async () => {
     try {
-      const r = await authFetch('/gw/ct/plan');
-      if (!r.ok) return false;
-      applyPlan(await r.json());
-      return true;
+      return await attempt();
     } catch {
-      return false;   // the page keeps its empty state
+      await new Promise(res => setTimeout(res, 5000));
+      try {
+        return await attempt();
+      } catch {
+        _load = null;    // do not cache failure — the page keeps its empty state
+        return false;
+      }
     }
   })();
   return _load;

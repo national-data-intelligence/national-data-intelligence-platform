@@ -65,6 +65,28 @@ if [ "$code" != "200" ]; then
 fi
 echo "  ✓ ingestion-bot token accepted"
 
+# 2.5 org lineage view depth — the chain source → lake → staging → landing →
+#     vault → mart → widget is ~6 hops each way; OM ships upstreamDepth=2, which
+#     hides everything past the vault. System settings are admin-only over the
+#     API and the SSO admin has no scriptable login (see the token note above),
+#     so this writes the setting where OM persists it — its own database row —
+#     and restarts OM to drop the in-memory copy. Idempotent: no row change, no
+#     restart. The full settings JSON comes from the API (bot-readable), so the
+#     graph-performance limits are preserved.
+depth_now=$(kubectl -n "$NS" run om-seed-lineage --rm -i --restart=Never --quiet     --image=curlimages/curl:8.10.1 --env="TOK=$tok" --     curl -s -m 10 -H "Authorization: Bearer $TOK" "$OM_SVC/api/v1/system/settings/lineageSettings" | tr -d '\r')
+if printf %s "$depth_now" | grep -q '"upstreamDepth":8'; then
+  echo "  = lineage depth already 8"
+else
+  body=$(printf %s "$depth_now" | python3 -c '
+import json, sys
+v = json.load(sys.stdin)["config_value"]
+v["upstreamDepth"], v["downstreamDepth"] = 8, 3
+print(json.dumps(v))')
+  printf %s "$body" | kubectl -n "$NS" exec -i postgres-vault-0 --     sh -c 'psql -q -U vault_admin -d nhdw_openmetadata -v ON_ERROR_STOP=1 -c       "INSERT INTO openmetadata_settings (configtype, json) VALUES ('"'"'lineageSettings'"'"', \$json\$$(cat)\$json\$::jsonb)
+       ON CONFLICT (configtype) DO UPDATE SET json = EXCLUDED.json"'     && echo "  ✓ lineage depth 8/3 written" || echo "  … lineage depth write failed (non-fatal)"
+  kubectl -n "$NS" rollout restart deploy/openmetadata >/dev/null 2>&1     && kubectl -n "$NS" rollout status deploy/openmetadata --timeout=600s >/dev/null 2>&1     && echo "  ✓ openmetadata restarted" || echo "  … restart pending"
+fi
+
 # 3. kick the ingestion DAG once (best-effort; scheduler also runs it daily)
 if kubectl -n "$NS" get deploy airflow >/dev/null 2>&1; then
   kubectl -n "$NS" exec deploy/airflow -- airflow dags unpause openmetadata_ingestion >/dev/null 2>&1 || true
