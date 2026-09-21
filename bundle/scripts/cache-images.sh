@@ -198,9 +198,27 @@ for img in "${ALL[@]}"; do
     # --platform linux/amd64: multi-arch (manifest-list) images like trinodb/trino
     # otherwise save as an index that k3d/ctr import as index-only → ErrImageNeverPull.
     if [ ! -f "$tar" ]; then echo "save $img"
-      docker save --platform linux/amd64 "$img" -o "$tar" 2>/dev/null \
-        || docker save "$img" -o "$tar" 2>/dev/null
-      sanitize_tar "$tar"; fi
+      # WRITE TO A TEMP NAME, VERIFY, THEN RENAME. A save interrupted mid-write
+      # — a network drop while the daemon was still pulling the layers, a full
+      # disk, a killed run — used to leave a TRUNCATED tar under the final name,
+      # and "the tar exists" is the only freshness check above. That corrupt tar
+      # then shipped as the offline bundle and failed every later cold boot at
+      # import, far from the cause. `tar -tf` proves structural integrity (every
+      # entry readable to the end) before the file can claim its real name.
+      if docker save --platform linux/amd64 "$img" -o "$tar.tmp" 2>/dev/null \
+          || docker save "$img" -o "$tar.tmp" 2>/dev/null; then
+        if tar -tf "$tar.tmp" >/dev/null 2>&1; then
+          mv "$tar.tmp" "$tar"
+          sanitize_tar "$tar"
+        else
+          rm -f "$tar.tmp"
+          echo "  ✗ saved tar for $img is corrupt (truncated save?) — NOT cached"
+        fi
+      else
+        rm -f "$tar.tmp"
+        echo "  ✗ docker save failed for $img — NOT cached"
+      fi
+    fi
   fi
   docker image inspect "$img" >/dev/null 2>&1 && IMPORT+=("$img")
 done
