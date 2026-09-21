@@ -11,11 +11,19 @@
 # The in-cluster ingestors reach the host-published source ports via host.k3d.internal — an entry
 # k3d injects into CoreDNS at cluster creation. Verify-only (orchestration must not mutate system
 # config): if it is missing the cluster is malformed and the boot must stop.
-- name: Verify host.k3d.internal is present in CoreDNS NodeHosts (ingestors need it)
+- name: Verify host.k3d.internal RESOLVES from inside the cluster (ingestors need it)
+  # k3d injects this alias into CoreDNS NodeHosts; on k3s the provision role
+  # supplies it via a coredns-custom server block instead. The first version of
+  # this check grepped NodeHosts — the k3d mechanism — and therefore failed on
+  # every k3s host whose DNS was working perfectly. Test the OUTCOME, not one
+  # implementation: resolve the name from a pod, whatever put it there.
   ansible.builtin.shell:
-    cmd: >-
-      set -o pipefail;
-      kubectl -n kube-system get cm coredns -o jsonpath='{.data.NodeHosts}' | grep -q 'host\.k3d\.internal'
+    cmd: |
+      set -o pipefail
+      kubectl -n {{ nhdw_namespace }} run dns-probe-$$ --rm -i --restart=Never \
+        --image=python:3.12-alpine --timeout=90s -- \
+        python3 -c "import socket; print(socket.gethostbyname('host.k3d.internal'))" \
+        | grep -E '^[0-9]+\.'
     executable: /bin/bash
   changed_when: false
 
