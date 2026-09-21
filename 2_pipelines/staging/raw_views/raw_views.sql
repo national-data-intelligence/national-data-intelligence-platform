@@ -141,6 +141,21 @@ CREATE OR REPLACE VIEW raw_elmis_hist__reference_programme AS
 CREATE OR REPLACE VIEW raw_elmis_hist__reference_reporting_period AS
     SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_reporting_period/**/*.parquet', format = 'Parquet');
 
+CREATE OR REPLACE VIEW raw_elmis_hist__reference_facility_type AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_facility_type/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_elmis_hist__reference_product_group AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_product_group/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_elmis_hist__reference_product_category AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_product_category/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_elmis_hist__reference_programme_product AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_programme_product/**/*.parquet', format = 'Parquet');
+
+CREATE OR REPLACE VIEW raw_elmis_hist__reference_facility_programme_schedule AS
+    SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/reference_facility_programme_schedule/**/*.parquet', format = 'Parquet');
+
 CREATE OR REPLACE VIEW raw_elmis_hist__history_requisition AS
     SELECT * FROM s3(nhdw_minio, url = 'http://seaweedfs-s3.nhdw.svc.cluster.local:8333/nhdw-raw/elmis_hist/history_requisition/**/*.parquet', format = 'Parquet');
 
