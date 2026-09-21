@@ -32,6 +32,7 @@ async function _post<T>(path: string, payload: unknown): Promise<T> {
 export type DqSummary = {
   total: number; pass: number; fail: number; warn: number; skip: number;
   runtime_s: number; generated_at: string | null;
+  bands: Record<string, number>;
 };
 
 export type DqTest = {
@@ -108,6 +109,28 @@ export const getIngestion      = () => _json<IngestionResp>('ingestion');
 export const getDimensions     = () => _json<Dimensions>('dimensions');
 export const getReconciliation = () => _json<ReconResp>('reconciliation');
 export const getCompliance     = () => _json<Compliance>('compliance');
+
+// ── incident queue + governance KPIs (durable history — batch 2) ──
+export type DqFlag = {
+  id: string; raised_at: string; updated_at: string | null; resolved_at: string | null;
+  raised_by: string; source: string; table_name: string; error_class: string;
+  severity: string; description: string; status: string; events: number; acks: number;
+};
+export type FlagsResp = { flags: DqFlag[]; counts: Record<string, number>; limit: number; offset: number };
+export type DqKpi = {
+  open_by: { error_class: string; severity: string; source: string; n: number }[];
+  raised_weekly: { week: string; raised: number }[];
+  avg_hours_to_ack: number | null;
+  avg_hours_to_resolve: number | null;
+  resolved_total: number;
+  reopened_fingerprints: number;
+  steward: { backlog?: number; decisions?: number };
+};
+export type DetectResp = { findings: number; by_class: Record<string, number>; open_flags: number; latency_ms: number };
+export const getFlags = (status = 'open', limit = 50, offset = 0) =>
+    _json<FlagsResp>(`flags?status=${status}&limit=${limit}&offset=${offset}`);
+export const getKpi   = () => _json<DqKpi>('kpi');
+export const runDetect = () => _post<DetectResp>('detect', {});
 
 export const ackTest = (t: {
   unique_id: string; model?: string; test?: string;

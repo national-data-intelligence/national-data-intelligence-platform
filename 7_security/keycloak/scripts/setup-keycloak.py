@@ -172,6 +172,9 @@ JUPYTERHUB_OIDC_SECRET = os.environ.get("JUPYTERHUB_OIDC_SECRET", "").strip()
 # Confidential OIDC secret for Superset's native FAB Keycloak login (moh-staff —
 # the analyst audience; #81). Same split-URL/native-OIDC pattern as Airflow.
 SUPERSET_OIDC_SECRET = os.environ.get("SUPERSET_OIDC_SECRET", "").strip()
+# OpenMetadata server-side OIDC (moh-staff): the OM server exchanges the code
+# at /callback and hands the browser a session cookie.
+OPENMETADATA_OIDC_SECRET = os.environ.get("OPENMETADATA_OIDC_SECRET", "").strip()
 # Confidential OIDC secret for the MinIO console's native OIDC (privileged-ops).
 # The console runs AssumeRoleWithWebIdentity against this client → temporary MinIO
 # creds mapped to the consoleAdmin policy, so an authenticated operator SSOs in.
@@ -185,7 +188,8 @@ SUPERSET_OIDC_SECRET = os.environ.get("SUPERSET_OIDC_SECRET", "").strip()
 MLFLOW_GATE_OIDC_SECRET       = os.environ.get("MLFLOW_GATE_OIDC_SECRET", "").strip()
 PROMETHEUS_GATE_OIDC_SECRET   = os.environ.get("PROMETHEUS_GATE_OIDC_SECRET", "").strip()
 ALERTMANAGER_GATE_OIDC_SECRET = os.environ.get("ALERTMANAGER_GATE_OIDC_SECRET", "").strip()
-HEADLAMP_GATE_OIDC_SECRET     = os.environ.get("HEADLAMP_GATE_OIDC_SECRET", "").strip()
+HEADLAMP_GATE_OIDC_SECRET     = os.environ.get("HEADLAMP_GATE_OIDC_SECRET", "")
+SEAWEEDFS_GATE_OIDC_SECRET = os.environ.get("SEAWEEDFS_GATE_OIDC_SECRET", "").strip()
 
 
 def _google_configured() -> bool:
@@ -247,6 +251,14 @@ TOOL_CLIENTS = [
     # /oauth-authorized/keycloak (covered by base + /*). Same pattern as Airflow.
     {"realm": "moh-staff", "client_id": "superset",
      "base": f"https://superset.{_HOST_BASE}", "secret": SUPERSET_OIDC_SECRET},
+    # OpenMetadata (moh-staff): CONFIDENTIAL — the OM server runs the exchange at
+    # /callback, then forwards the browser to the UI's /auth/callback with a
+    # session cookie (both covered by base + /*). OM needs OIDC_SERVER_URL set to
+    # this same base or its login rejects the UI's redirect ("must exactly match
+    # a trusted redirect URI"). NO PKCE on this client: Keycloak enforces the
+    # attribute against the server-side flow, which does not send a challenge.
+    {"realm": "moh-staff", "client_id": "openmetadata",
+     "base": f"https://openmetadata.{_HOST_BASE}", "secret": OPENMETADATA_OIDC_SECRET},
 ]
 
 # tool-gate clients — the nhdw/tool-gate reverse proxies (main.py). Same
@@ -262,16 +274,18 @@ _GATE_BASES = {
     # Headlamp's gate lives at /oauth2gate + /k8s on the ADMIN host (path-routed
     # beside the admin SPA), so its redirect base is the admin host.
     "headlamp":     f"https://admin.{_HOST_BASE}",
+    "seaweedfs":    f"https://seaweedfs.{_HOST_BASE}",
 }
 _GATE_SECRETS = {
     "mlflow":       MLFLOW_GATE_OIDC_SECRET,
     "prometheus":   PROMETHEUS_GATE_OIDC_SECRET,
     "alertmanager": ALERTMANAGER_GATE_OIDC_SECRET,
     "headlamp":     HEADLAMP_GATE_OIDC_SECRET,
+    "seaweedfs":    SEAWEEDFS_GATE_OIDC_SECRET,
 }
 GATE_CLIENTS = [
     {"realm": realm, "client_id": cid, "base": _GATE_BASES[cid], "secret": _GATE_SECRETS[cid]}
-    for cid in ("mlflow", "prometheus", "alertmanager", "headlamp")
+    for cid in ("mlflow", "prometheus", "alertmanager", "headlamp", "seaweedfs")
     for realm in ("moh-staff", "privileged-ops")
 ]
 

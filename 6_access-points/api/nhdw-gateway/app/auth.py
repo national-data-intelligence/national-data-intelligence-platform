@@ -113,16 +113,26 @@ def _invalidate_jwks(iss: str) -> None:
     _jwks_by_iss.pop(iss, None)
 
 
-def _dev_user(x_mock_user: str | None, x_mock_role: str | None) -> UserCtx:
+def _dev_user(x_mock_user: str | None, x_mock_role: str | None,
+              x_mock_trust: str | None = None) -> UserCtx:
     if not x_mock_user:
         # Anonymous: useful for the public dashboard.
         return UserCtx(
             kc_sub="", username="anonymous", realm="public",
             primary_role="R-PUB-ANON", roles=["R-PUB-ANON"])
     role = x_mock_role or "R-DEV"
+    # Trust tier can only be DOWNGRADED through this channel: "low" is honored
+    # (so view-as can demonstrate the trust guard + column masking as a
+    # federated visitor actually experiences them), anything else stays "high",
+    # which is the default for every internal credential anyway. Downgrading
+    # never widens access, so this adds no privilege to a channel that already
+    # grants full impersonation behind the shared secret.
+    trust = "low" if (x_mock_trust or "").lower() == "low" else "high"
     return UserCtx(
         kc_sub=x_mock_user, username=f"dev:{x_mock_user[:8]}",
         realm="dev", primary_role=role, roles=[role],
+        idp="mock" if trust == "low" else "",
+        idp_trust=trust,
         full_name=f"Dev user {x_mock_user[:8]}")
 
 
@@ -132,6 +142,7 @@ async def get_user(
     x_mock_user: str | None = Header(default=None, alias="X-Mock-User"),
     x_mock_role: str | None = Header(default=None, alias="X-Mock-Role"),
     x_mock_secret: str | None = Header(default=None, alias="X-Mock-Secret"),
+    x_mock_trust: str | None = Header(default=None, alias="X-Mock-Trust"),
     x_act_as_owner: str | None = Header(default=None, alias="X-Act-As-Owner"),
 ) -> UserCtx:
     """FastAPI dependency: returns UserCtx for the calling principal.
@@ -152,14 +163,14 @@ async def get_user(
     if x_mock_user or x_mock_role:
         # DEV_AUTH: local, no-Keycloak dev — header-only (never exposed).
         if settings.DEV_AUTH:
-            return _dev_user(x_mock_user, x_mock_role)
+            return _dev_user(x_mock_user, x_mock_role, x_mock_trust)
         # Deployed demo impersonation: the gateway ingress is reachable, so the
         # X-Mock-* channel is gated by the shared secret — otherwise any caller
         # could claim R-SUPER. Empty secret ⇒ channel disabled (fail-secure).
         if (settings.GATEWAY_DEMO_IMPERSONATION
                 and settings.GATEWAY_IMPERSONATION_SECRET
                 and x_mock_secret == settings.GATEWAY_IMPERSONATION_SECRET):
-            return _dev_user(x_mock_user, x_mock_role)
+            return _dev_user(x_mock_user, x_mock_role, x_mock_trust)
         # enabled-but-missing/bad secret, or impersonation off → do not honor.
     elif settings.DEV_AUTH or settings.GATEWAY_PUBLIC_ANON:
         # No credential at all → the anonymous public tier (R-PUB-ANON). Enabled

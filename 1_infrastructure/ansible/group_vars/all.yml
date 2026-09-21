@@ -5,8 +5,16 @@
 nhdw_repo_root: "{{ (playbook_dir ~ '/../..') | realpath }}"
 nhdw_namespace: nhdw
 # Ingress host base (must match the Helm chart's hostBase for the values profile in use). The
-# verify role probes https://<sub>.{{ nhdw_host_base }}/. Fleet installs override this.
-nhdw_host_base: 127.0.0.1.nip.io
+# verify role probes https://<sub>.{{ nhdw_host_base }}/ and the deploy role passes it to
+# `helm --set hostBase=`.
+#
+# DEFINED PER INVENTORY, not here. A plain `nhdw_host_base:` in playbook group_vars
+# OUTRANKS the inventory's own vars in Ansible precedence, so a value set in
+# inventory/palladium2.yml was silently ignored and verify probed
+# 127.0.0.1.nip.io against a host serving 20.84.70.78.nip.io — connection refused
+# on every dashboard. The fallback below only applies when an inventory says nothing.
+nhdw_host_base_default: 127.0.0.1.nip.io
+nhdw_host_base: "{{ hostvars[inventory_hostname].get('nhdw_host_base_inventory', nhdw_host_base_default) }}"
 
 # Topology (single|fleet, from inventory) → the matching Helm values profile (P3.2).
 nhdw_values_file: "{{ nhdw_repo_root }}/1_infrastructure/helm/nhdw/values-{{ nhdw_topology }}.yaml"

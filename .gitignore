@@ -150,3 +150,11 @@ client_secret_*.json
 *.bak.bloated-orig
 supply-control-tower.zip
 *.apps.googleusercontent.com.json
+
+# ── palladium-console ───────────────────────────────────────────────────────
+# A SEPARATE product: a Palladium-wide console that drives many projects, of
+# which NHDW is one. It lives here only while it is being built and carries its
+# own git history — it must never enter this repo's.
+# (Not to be confused with bundle/demo-console/, which IS part of NHDW — that is
+# this deployment's operator cockpit.)
+palladium-console/

@@ -12,9 +12,24 @@ on:
   push:
     branches: [main, develop]
     paths:
+      # app tier
       - '6_access-points/**'
+      - '5_orchestrator/**'                       # DAGs baked into nhdw/airflow
       - 'bundle/seed-pack/app/security/**'
+      - '7_security/scripts/**'
+      - '7_security/opa/**'                       # policy source → regen + reload
+      - 'bundle/roles/**'                         # role YAMLs → reseed + policy regen
+      - '2_pipelines/ml/registry/validators.py'   # baked into nhdw/gateway
       - 'bundle/scripts/ci-redeploy.sh'
+      # k8s manifests — the overlay is applied (Secrets excluded, see ci-redeploy)
+      - '1_infrastructure/k8s/**'
+      # data tier (pipeline images, init DDL, reference vocabulary, MDM)
+      - '2_pipelines/staging/**'
+      - '2_pipelines/vault/**'
+      - '2_pipelines/marts/**'
+      - '2_pipelines/mdm/**'
+      - '3_storage/postgres/init/**'
+      - 'bundle/seeds/ref-vocab/**'
   workflow_dispatch:
     inputs:
       scope:
@@ -23,7 +38,16 @@ on:
         default: ''
 
 concurrency:
-  group: nhdw-deploy
+  # ONE group for every workflow that mutates the cluster. Provisioning and a
+  # redeploy both drive helm against the same release; running them at once
+  # races two `helm upgrade`s and can leave the release wedged mid-transaction.
+  # Queue instead of cancel — an interrupted deploy is worse than a slow one.
+  #
+  # Caveat worth knowing: GitHub keeps at most ONE pending run per group, so a
+  # third arrival cancels the one already waiting. Pushing while a manual
+  # scope=all dispatch is queued will cancel that dispatch — re-trigger it after
+  # the in-flight run finishes rather than assuming it ran.
+  group: nhdw-cluster
   cancel-in-progress: false
 
 jobs:
@@ -32,10 +56,16 @@ jobs:
     env:
       KUBECONFIG: ${{ secrets.NHDW_KUBECONFIG_PATH || '/home/biniyam/.kube/config' }}
       NS: nhdw
+      # verify-system probes the live ingress — must match the deployed hostBase
+      # (defaults to 127.0.0.1.nip.io otherwise and reports a false outage)
+      NHDW_HOSTBASE: ${{ vars.NHDW_HOSTBASE || '20.84.70.78.nip.io' }}
+      # the deployment's own secrets.yaml (gitignored); used ONLY to render the
+      # overlay — Secrets themselves are never applied from CI
+      NHDW_SECRETS_FILE: ${{ vars.NHDW_SECRETS_FILE || '/home/biniyam/ethio-nhdw-demo/1_infrastructure/k8s/overlays/dev/secrets.yaml' }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Compute redeploy scope
         id: scope
@@ -43,7 +73,12 @@ jobs:
           if [ -n "${{ github.event.inputs.scope }}" ]; then
             echo "value=${{ github.event.inputs.scope }}" >> "$GITHUB_OUTPUT"
           else
-            changed="$(git diff --name-only HEAD~1 HEAD | tr '\n' ' ')"
+            # whole push range, not just the last commit (HEAD~1 misses the
+            # earlier commits of a multi-commit push); fall back on force-push
+            # or first push where event.before is unknown/all-zeros
+            changed="$(git diff --name-only "${{ github.event.before }}" "${{ github.event.after }}" 2>/dev/null | tr '\n' ' ')" \
+              || changed=""
+            [ -z "$changed" ] && changed="$(git diff --name-only HEAD~1 HEAD | tr '\n' ' ')"
             echo "value=${changed:-all}" >> "$GITHUB_OUTPUT"
           fi
 

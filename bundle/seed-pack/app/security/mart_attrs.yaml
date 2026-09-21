@@ -67,6 +67,22 @@
   default_sensitivity: restricted
   description: "Consent-activity KPIs (governance mirror) — restricted."
 
+- schema_name: bi_governance
+  table_name: mart_dq_incidents
+  subject: PRG
+  data_class: DC.PRF
+  granularity: aggregate
+  default_sensitivity: restricted
+  description: "DQ incident record (governance) — flags with lifecycle latencies; restricted."
+
+- schema_name: bi_governance
+  table_name: mart_dq_governance_kpi
+  subject: PRG
+  data_class: DC.PRF
+  granularity: aggregate
+  default_sensitivity: restricted
+  description: "DQ governance KPIs (long format, mirrors /api/dq/kpi) — restricted."
+
 # ── HMIS coverage + EPI safety (bi_hmis) ────────────────────────────────
 - schema_name: bi_hmis
   table_name: mart_hmis_indicator_coverage
@@ -311,6 +327,62 @@
   granularity: aggregate
   default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional, not personal
   description: "eLMIS v2 history — planning-module mock: latest stock position + suggested resupply per facility × tracer product (governed)."
+- schema_name: bi_supply
+  table_name: mart_pct_kpi
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # province × month aggregates; no facility identities
+  description: "PCT KPI layer (Zambia eLMIS) — Global Fund S8 on-shelf availability, stockout exposure, months-of-stock bands, order fill; numerator + denominator per row."
+- schema_name: bi_supply
+  table_name: pct_kpi_definitions
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "PCT KPI contracts (seed) — numerator, denominator, formula, grain, source, target, exclusions, reference, limitation per KPI."
+- schema_name: bi_supply
+  table_name: mart_pct_facility_geo
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed like the other facility-grain eLMIS marts; lat/lng masked by column_classification
+  description: "PCT facility geography (Zambia eLMIS) — every facility located, with coord_basis saying how (source / repaired / inferred)."
+- schema_name: bi_supply
+  table_name: mart_pct_demand_month
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional
+  description: "PCT demand base (Zambia eLMIS) — facility × product × month: adjusted demand, stock state, orders, labelled pipeline assumption."
+- schema_name: bi_supply
+  table_name: mart_pct_position
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional
+  description: "PCT projected position (Zambia eLMIS, AMC basis) — risk band, replenishment excl./incl. assumed pipeline, district redistribution, input flags."
+- schema_name: bi_supply
+  table_name: pct_policy_parameters
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "PCT planning parameters (seed) — each marked SOURCED or ASSUMPTION with its source; shown beside every recommendation."
+- schema_name: bi_supply
+  table_name: mart_pct_forecast
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional
+  description: "PCT demand forecast (Zambia eLMIS, H1) — P10/P50/P90 per facility × tracer product with model version and MLflow run provenance."
+- schema_name: bi_supply
+  table_name: mart_pct_forecast_accuracy
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "PCT forecast backtest accuracy (historical, not live) — fold ledger by split, comparator and demand class."
 # ── MDM augmentation (PCT dataflow design): golden records + discovered relationships ──
 - schema_name: bi_mdm
   table_name: mdm_commodity_match_candidates

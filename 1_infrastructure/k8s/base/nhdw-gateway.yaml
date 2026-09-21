@@ -41,6 +41,9 @@ spec:
             # the public ingress can't claim R-SUPER. Held by the demo view-as +
             # the boot seed scripts. Empty ⇒ channel disabled (fail-secure).
             - { name: GATEWAY_IMPERSONATION_SECRET, valueFrom: { secretKeyRef: { name: nhdw-gateway-secrets, key: IMPERSONATION_SECRET, optional: true } } }
+            # column masking: hash/tokenize HMAC key — optional: absent ⇒ those
+            # mask classes degrade to drop (fail-closed), the gateway still boots
+            - { name: MASKING_HMAC_KEY, valueFrom: { secretKeyRef: { name: nhdw-gateway-secrets, key: MASKING_HMAC_KEY, optional: true } } }
             # OPA is the PDP and it ENFORCES: denials become 403 (no advisory flip);
             # if OPA is unreachable, fail CLOSED (deny).
             - { name: OPA_ENFORCE,   value: "true" }
@@ -117,7 +120,27 @@ spec:
             - { name: SMTP_FROM, valueFrom: { secretKeyRef: { name: smtp-secrets, key: SMTP_FROM, optional: true } } }
             - { name: ALERT_EVAL_MODEL, value: "ears" }
             - { name: ALERT_EVAL_TOKEN, valueFrom: { secretKeyRef: { name: alert-eval-secrets, key: TOKEN } } }
+            # DQ detector service token (routes/dq.py /detect; Airflow dq_detection DAG).
+            # optional:true → absent secret ⇒ service path off, admin bearer still works.
+            - { name: DQ_DETECT_TOKEN, valueFrom: { secretKeyRef: { name: dq-detect-secrets, key: TOKEN, optional: true } } }
+            - { name: NHDW_PROFILE_DIR, value: "/opt/nhdw-profiles" }
+            - { name: NHDW_PROFILE_STATE_DIR, value: "/opt/nhdw-state" }
+            - { name: DEMO_CONTROL_TOKEN, valueFrom: { secretKeyRef: { name: demo-control-secrets, key: TOKEN, optional: true } } }
+            # Fallback only — the ACTIVE pointer file in that directory wins, so a
+            # swap does not need a redeploy.
+            - { name: NHDW_PROFILE, value: "et-v3" }
           volumeMounts:
+            # Country profiles live on the HOST at /opt/nhdw-profiles — copy decks,
+            # geography and the manifest that says which country this deployment is
+            # about. hostPath rather than a configMap because the geometry runs to
+            # hundreds of KB (configMaps cap at ~1 MB) and because a profile swap
+            # must be a file write on the server, visible to the gateway without a
+            # rollout. Read-only: the gateway serves profiles, it never edits them.
+            - { name: profiles, mountPath: /opt/nhdw-profiles, readOnly: true }
+            # WRITABLE, and only this: which profile is active is state, not
+            # content. Keeping them apart means the gateway can switch profiles
+            # but can never edit one.
+            - { name: profile-state, mountPath: /opt/nhdw-state }
             - { name: workspace-profiles, mountPath: /app/config, readOnly: true }
           readinessProbe:
             httpGet: { path: /health, port: 8000 }
@@ -128,6 +151,12 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 15
       volumes:
+        # Single-node k3s, so hostPath is safe here. If this ever spreads across
+        # nodes the profile store moves to the object store and this mount goes.
+        - name: profiles
+          hostPath: { path: /opt/nhdw-profiles, type: DirectoryOrCreate }
+        - name: profile-state
+          hostPath: { path: /opt/nhdw-state, type: DirectoryOrCreate }
         - { name: workspace-profiles, configMap: { name: workspace-profiles } }
 ---
 apiVersion: v1

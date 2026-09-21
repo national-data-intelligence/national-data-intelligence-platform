@@ -34,10 +34,11 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from . import mart_attrs, metrics, opa, ops_db
 from .routes import (access_requests, alerts, api_tokens, artifacts, audit,
-                      chat, ct, datasets, docs, dq, exports, graduation, groups, marts,
-                      me, ml, observability, perm_admin,
+                      chat, classification, ct, datasets, demo, docs, dq, exports,
+                      graduation, groups, marts,
+                      mdm, me, ml, observability, perm_admin,
                       permissions as permissions_route,
-                      policy, projects, public_articles, queries,
+                      policy, profile, projects, public_articles, queries,
                       reports, sql_lab, topology, workspace)
 from .settings import settings
 
@@ -72,6 +73,23 @@ async def lifespan(app: FastAPI):
             raise RuntimeError(
                 f"OPA self-test failed for {len(failures)} case(s) under OPA_ENFORCE=true; "
                 f"refusing to start. Check mart_attrs catalog + role policies.")
+
+        # ── Masking self-test: assert the live OPA's masked_columns matches
+        # the per-role reveal sets (reveal-grant ↔ rego drift protection).
+        mask_results = await mart_attrs.run_mask_self_test(opa)
+        mask_failures = [(c, obs) for c, obs, _r in mask_results
+                         if obs != sorted(c.expect_masked)]
+        for case, observed, reason in mask_results:
+            ok = (observed == sorted(case.expect_masked))
+            log.log(logging.INFO if ok else logging.WARNING,
+                    "mask self-test %s: role=%s trust=%s expect=%s observed=%s · %s",
+                    "PASS" if ok else "FAIL", case.role, case.idp_trust,
+                    sorted(case.expect_masked), observed, case.note)
+        if mask_failures and settings.OPA_ENFORCE:
+            raise RuntimeError(
+                f"masking self-test failed for {len(mask_failures)} case(s) under "
+                f"OPA_ENFORCE=true; refusing to start. Check role reveal sets + "
+                f"the deployed common.rego.")
     except Exception as e:                                       # noqa: BLE001
         if settings.OPA_ENFORCE:
             raise
@@ -181,6 +199,12 @@ async def audit_all_requests(request: Request, call_next):
 
 
 app.include_router(me.router)
+# The country profile is UNAUTHENTICATED on purpose: it carries the masthead and
+# the map, which the public dashboard needs before anyone signs in.
+app.include_router(profile.router)
+# Demo control: /health is open so a console can show status before sign-in;
+# everything that mutates requires DEMO_CONTROL_TOKEN.
+app.include_router(demo.router)
 app.include_router(marts.router)
 app.include_router(ct.router)
 app.include_router(exports.router)
@@ -191,6 +215,8 @@ app.include_router(topology.router)
 app.include_router(docs.router)
 app.include_router(workspace.router)
 app.include_router(graduation.router)
+app.include_router(mdm.router)
+app.include_router(classification.router)
 app.include_router(access_requests.public_router)
 app.include_router(access_requests.admin_router)
 app.include_router(public_articles.public_router)

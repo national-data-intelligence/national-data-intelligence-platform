@@ -15,6 +15,32 @@ and catchments, regions, and every mart with its description. It is generated fr
 the entity model and the dbt schema files, so it stays in step with what the
 system actually serves rather than drifting into a hand-maintained list.
 
+## Reference data and master data
+
+Two governed layers decide what things ARE across sources.
+
+**Reference vocabulary (`nhdw_ref`)** — an OMOP-style concept store (concepts,
+crosswalks, bitemporal validity) built from the entity model plus curated
+supplements (`bundle/seeds/ref-vocab/`). The vault's resolution views join the
+crosswalk instead of carrying regex/CASE mappings in code, so a mapping change
+is a data edit, not a model edit. Concept identity is stable across rebuilds
+(an append-only committed registry assigns ids).
+
+**Master data (MDM)** — a matcher (`2_pipelines/mdm`, a side-lane Job after the
+marts build) proposes same-entity candidates with scores and evidence: exact
+normalised-name twins across sources, ambiguous names with a geo/admin-area
+tie-break, and trigram near-names. It never merges anything. A steward works
+the queue in the admin console (MDM Stewardship); every verdict lands in an
+append-only, bitemporal decision log that the vault build reads — accept re-keys
+the source record onto its master on the next pipeline run, revert supersedes
+and falls back to the deterministic derivation, and an empty log leaves every
+conformed key byte-identical. Facility masters are conformed hub entities;
+commodity masters are vocabulary concepts (an exact-name commodity conforms
+implicitly because the concept code IS the normalised name). Downstream, the
+facility dimension and marts carry `master_entity_uid` (a stable UUID derived
+from the conformed key) and `mdm_state` (`conformed` vs `single_source`) so
+consumers can see and filter conformance provenance.
+
 ## The dashboards
 
 Five surfaces sit on the gateway:
@@ -51,3 +77,44 @@ The internal BI assistant is wired to the same gateway and the same access rules
 so a question it answers is bounded by the asker's role exactly as a dashboard
 read would be. It reads the widget catalogue and the live page to ground its
 answers in what the user can actually see.
+
+### Standard practice for every model (binding)
+
+Every model package (`bundle/seed-pack/app/ml/<name>/`) follows the same lifecycle,
+whoever builds it. The layers already exist; a model is not done until it uses all
+of them.
+
+1. **Exploratory analysis and census** — `eda/` in the package holds the reproducible
+   queries behind the modelling choices: the target population, what is excluded
+   and why, demand/series classes, missingness and censoring. Nothing is decided on a
+   notebook that is not committed as a query or script.
+2. **Target and features** — `feature_spec.yaml` names every column explicitly (never
+   `SELECT *`) and reads a governed mart. The target is defined once (for PCT: the
+   `adjusted_demand` of `mart_pct_demand_month`). Every feature is available at the
+   forecast's `as_of` date — a leakage test in `tests/` proves it.
+3. **Evaluation before promotion** — a rolling-origin fold ledger with an untouched
+   final holdout, predeclared baselines, and a predeclared promotion rule. Metrics
+   are chosen for the data: no MAPE on series with zeros, no seasonal comparator
+   without a prior season.
+4. **Tracking** — every training run logs its parameters, metrics (per fold,
+   holdout and segment), feature-query hash and artifacts **inside the MLflow run**,
+   and registers a version. A metric that exists only in job output does not exist.
+5. **Uncertainty** — quantiles come from a stated method with nominal coverage that
+   is checked on the holdout; intervals are never relabelled.
+6. **Serving** — batch inference by the Airflow batch DAG into `ops_ml`, contract
+   keys in `attrs` (the shared prediction schema stays stable), and a governed mart
+   that the dashboards read — dashboards never read `ops_ml` for a product surface.
+7. **Monitoring** — an `actuals` block in the manifest so the performance scorer can
+   compare predictions with what happened; drift checks on the inputs. Surfaces say
+   "backtest performance" until live actuals exist.
+8. **Promotion and audit** — promotion by the gateway's promote route (MLflow alias +
+   audit event), only when the predeclared rule passes; the model card states the
+   evidence.
+9. **Delivery** — package changes reach the cluster through `seed-ml.sh`
+   (`--retrain` when a champion already exists); the runner and packages are not yet
+   rebuilt by CI, which is a known platform gap.
+10. **Model card** — purpose, data, target, exclusions, method, evaluation, limits and
+    owner, kept current with the code.
+
+The PCT forecast contract (`docs/pct-forecast-contract.md`) is this practice applied
+to supply-chain demand forecasting.

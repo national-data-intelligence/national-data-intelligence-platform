@@ -248,6 +248,31 @@
                     'line_item_created_at', 'modified_date'],
         'volatile': ['modified_date'],
     },
+    'elmis_hist_facility_type': {
+        'payload': ['source_id', 'name', 'geographic_level_code',
+                    'nominal_max_months', 'nominal_eop', 'active'],
+        'volatile': [],
+    },
+    'elmis_hist_product_group': {
+        'payload': ['source_id', 'name'],
+        'volatile': [],
+    },
+    'elmis_hist_product_category': {
+        'payload': ['source_id', 'name', 'display_order'],
+        'volatile': [],
+    },
+    'elmis_hist_programme_product': {
+        'payload': ['programme_code', 'product_code', 'source_id', 'product_category_code',
+                    'doses_per_month', 'active', 'current_price', 'display_order', 'full_supply'],
+        'volatile': [],
+    },
+    'elmis_hist_facility_schedule': {
+        'payload': ['facility_code', 'programme_code', 'processing_schedule_code',
+                    'source_requisition_group_id', 'source_requisition_group_code',
+                    'source_group_member_id', 'source_group_schedule_id',
+                    'direct_delivery', 'drop_off_facility_code'],
+        'volatile': [],
+    },
 
     'mfr_facility': {
         'payload': ['name', 'status', 'mode', 'operational_status',

@@ -106,6 +106,10 @@ spec:
             # overlay patches THIS env var to nhdw/ml-runner:1.0.0 (the strategic
             # merge hoists the patched var to the front of the env list).
             - { name: ML_RUNNER_IMAGE, value: {{ include "nhdw.image" (dict "name" "ml-runner" "ctx" .) | quote }} }
+            # parity with base/airflow.yaml: the ingestor/dbt/runner pods this
+            # scheduler spawns read NHDW_S3_ENDPOINT to reach the lake. Absent,
+            # a Helm-provisioned Airflow spawns pods with no object store.
+            - { name: NHDW_S3_ENDPOINT, value: "http://seaweedfs-s3.{{ .Values.namespace }}.svc.cluster.local:8333" }
             - { name: AIRFLOW__CORE__EXECUTOR, value: "LocalExecutor" }
             - name: AIRFLOW_DB_PASSWORD
               valueFrom: { secretKeyRef: { name: airflow-secrets, key: AIRFLOW_DB_PASSWORD } }
@@ -127,6 +131,7 @@ spec:
             # alert_evaluation DAG → gateway POST /api/alerts/evaluate.
             - { name: NHDW_GATEWAY_URL, value: "http://nhdw-gateway.{{ .Values.namespace }}.svc.cluster.local:8000" }
             - { name: ALERT_EVAL_TOKEN, valueFrom: { secretKeyRef: { name: alert-eval-secrets, key: TOKEN } } }
+            - { name: DQ_DETECT_TOKEN, valueFrom: { secretKeyRef: { name: dq-detect-secrets, key: TOKEN, optional: true } } }
           volumeMounts:
             - { name: logs, mountPath: /opt/airflow/logs }
           livenessProbe:
@@ -146,6 +151,10 @@ spec:
             # overlay patches THIS env var to nhdw/ml-runner:1.0.0 (the strategic
             # merge hoists the patched var to the front of the env list).
             - { name: ML_RUNNER_IMAGE, value: {{ include "nhdw.image" (dict "name" "ml-runner" "ctx" .) | quote }} }
+            # parity with base/airflow.yaml: the ingestor/dbt/runner pods this
+            # scheduler spawns read NHDW_S3_ENDPOINT to reach the lake. Absent,
+            # a Helm-provisioned Airflow spawns pods with no object store.
+            - { name: NHDW_S3_ENDPOINT, value: "http://seaweedfs-s3.{{ .Values.namespace }}.svc.cluster.local:8333" }
             - { name: AIRFLOW__CORE__EXECUTOR, value: "LocalExecutor" }
             - name: AIRFLOW_DB_PASSWORD
               valueFrom: { secretKeyRef: { name: airflow-secrets, key: AIRFLOW_DB_PASSWORD } }

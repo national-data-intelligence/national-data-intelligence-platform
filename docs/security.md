@@ -36,6 +36,33 @@ renders a panel it has no data for. The grants and the OPA policies are kept in
 step, so there are no empty shells where a widget is shown but every read behind
 it is refused.
 
+## Column masking
+
+Below the row filter sits a column-level layer. Sensitive columns are classified
+in `ops_perm.column_classification` (a denylist — a column with no row is simply
+visible), each with a sensitivity tier and a masking treatment: drop the column,
+hash it, reveal only the tail (phone numbers), reduce its precision (GPS
+coordinates round to about 11 km, dates truncate to the month), or replace it
+with a stable pseudonym so joins still work but the raw value never leaves.
+
+Which caller sees a classified column clear is the policy's call, not the
+gateway's: each role carries a reveal set (`column_access.reveal` in
+`bundle/roles/*.yaml`, compiled into the OPA policy), the gateway sends the
+queried relation's classified columns with every decision request, and OPA
+returns the subset the caller may not see. Analysts and decision-makers reveal
+`restricted` (their maps plot exact facility GPS); the security officer also
+reveals `privileged`; a low-trust federated login reveals nothing regardless of
+role. The transformation is applied on every read path — direct mart reads,
+widgets, the Supply Control Tower feed, exports, reports, and ad-hoc SQL, where
+an explicit reference to a masked column is refused outright (aliasing would
+defeat name-based masking) while `SELECT *` comes back masked.
+
+Every edge fails closed: an unknown masking class drops the column, a missing
+HMAC key drops rather than reveals, and the gateway refuses to start if the live
+policy's reveal behavior drifts from the expected matrix. Three parties write the
+classification store — the committed seed, stewards, and the OpenMetadata sync —
+each owning only its own rows (`managed_by`), so no writer can undo another's.
+
 ## Tool access
 
 Analyst and operator tools — dbt docs, Airflow, Superset, MLflow, Jupyter, the

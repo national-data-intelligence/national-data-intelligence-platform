@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import asyncpg
+from fastapi import HTTPException
 
 from .auth import UserCtx
 from .settings import settings
@@ -244,14 +245,24 @@ async def register_export(*, user: UserCtx, mart_scope: list[str],
                           retention_ttl_days: int = 90) -> str:
     pool = await ensure_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("""
-            INSERT INTO ops_export.export_registry
-                (requester, mart_scope, sql_text, filter_envelope,
-                 policy_decision, format, status, retention_ttl_days)
-            VALUES ($1::uuid, $2, $3, $4::jsonb, $5::jsonb, $6, 'pending', $7)
-            RETURNING id;
-        """, user.kc_sub, mart_scope, sql_text, json.dumps(filter_envelope),
-             json.dumps(policy_decision), format, retention_ttl_days)
+        try:
+            row = await conn.fetchrow("""
+                INSERT INTO ops_export.export_registry
+                    (requester, mart_scope, sql_text, filter_envelope,
+                     policy_decision, format, status, retention_ttl_days)
+                VALUES ($1::uuid, $2, $3, $4::jsonb, $5::jsonb, $6, 'pending', $7)
+                RETURNING id;
+            """, user.kc_sub, mart_scope, sql_text, json.dumps(filter_envelope),
+                 json.dumps(policy_decision), format, retention_ttl_days)
+        except asyncpg.exceptions.ForeignKeyViolationError:
+            # requester must exist in ops_identity.user. A real login JIT-caches
+            # it, so this means the caller is a principal the warehouse has never
+            # seen — say so, instead of surfacing a 500 the operator has to read
+            # the gateway log to interpret.
+            log.warning("export refused: no identity row for %s", user.kc_sub)
+            raise HTTPException(
+                409, "no cached identity for this principal — log in to the "
+                     "dashboards once so the warehouse records you, then export.")
         return str(row["id"])
 
 

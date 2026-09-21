@@ -83,6 +83,10 @@ spec:
               valueFrom: { secretKeyRef: { name: superset-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             - name: JUPYTERHUB_OIDC_SECRET
               valueFrom: { secretKeyRef: { name: jupyterhub-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            # parity with base: without it the OpenMetadata OIDC client is never
+            # seeded, so OM SSO is dead on a Helm-provisioned cluster
+            - name: OPENMETADATA_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: openmetadata-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             # tool-gate confidential clients — one secret per gate, MUST match the
             # gate Deployment's OIDC_CLIENT_SECRET (tool-gates.yaml). optional:true
             # → absent ⇒ setup-keycloak skips that gate client (its SSO stays off).
@@ -94,6 +98,8 @@ spec:
               valueFrom: { secretKeyRef: { name: alertmanager-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             - name: HEADLAMP_GATE_OIDC_SECRET
               valueFrom: { secretKeyRef: { name: headlamp-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: SEAWEEDFS_GATE_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: seaweedfs-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             # Realm SMTP (execute-actions-email) → external Google SMTP relay.
             # HOST/PORT/TLS default to Gmail in setup-keycloak; USER/PASS are the
             # app-password (Mailpit fallback retired 2026-07-06).

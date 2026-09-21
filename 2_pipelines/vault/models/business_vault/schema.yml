@@ -140,6 +140,37 @@ models:
           - relationships:
               to: ref('hub_commodity_conformed')
               field: hk_commodity_conformed
+  - name: lnk_facility_identifier
+    description: >
+      Every identifier a conformed facility is known by, namespaced
+      (NHDW.facility_id / DHIS2.uid / HCMIS.institution_id / MBRANA.id /
+      MFR.fhir_id). Resolves "who is this?" from any source identifier. The
+      namespace is part of the key because the HCMIS and mBrana integer id
+      spaces overlap.
+    columns:
+      - name: hk_facility_identifier
+        description: 'Link hash key (PK): hash(master, namespace, value).'
+        tests:
+          - not_null
+          - unique
+      - name: hk_facility_conformed
+        description: 'FK to hub_facility_conformed.hk_facility_conformed.'
+        tests:
+          - not_null
+          - relationships:
+              to: ref('hub_facility_conformed')
+              field: hk_facility_conformed
+      - name: identifier_namespace
+        description: 'Identifier system the value belongs to.'
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['NHDW.facility_id', 'DHIS2.uid', 'HCMIS.institution_id',
+                       'MBRANA.id', 'MFR.fhir_id']
+      - name: identifier_value
+        description: 'The identifier as the source system holds it.'
+        tests:
+          - not_null
   - name: lnk_same_as_facility
     description: 'Link relating 2 hub roles at the grain documented in the model SQL.'
     columns:
@@ -159,6 +190,51 @@ models:
           - relationships:
               to: ref('hub_facility_conformed')
               field: hk_facility_conformed
+  - name: v_facility_resolution_asof
+    description: >
+      The facility masters AS THEY WERE at `release_as_of` — the reproducible
+      counterpart to the live resolution view. Reads the decision log at a
+      knowledge-time cut, so a pinned report can be re-derived. Unparameterised
+      it is identical to v_facility_resolution (verified live, zero-row diff).
+      Pair it with the release's source_watermark: decisions are only one of
+      the two inputs that determine a master.
+    columns:
+      - name: hk_source_facility
+        description: 'The source record this row resolves.'
+        tests:
+          - not_null
+      - name: conformed_bk
+        description: 'The master key as of the pinned time.'
+        tests:
+          - not_null
+      - name: match_strategy
+        description: 'steward_decision | facility_id | norm_name — how it resolved then.'
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['steward_decision', 'facility_id', 'norm_name']
+  - name: sat_facility_canonical
+    description: >
+      Facility golden record, versioned (insert-only): one row per conformed
+      facility per canonical revision, best value per attribute by fixed source
+      priority, with field-level provenance (*_source columns). New revision
+      only when the golden payload's hashdiff changes vs the latest revision.
+    columns:
+      - name: hk_facility_conformed
+        description: 'FK to parent hub_facility_conformed.'
+        tests:
+          - not_null
+          - relationships:
+              to: ref('hub_facility_conformed')
+              field: hk_facility_conformed
+      - name: canonical_name
+        description: 'Golden facility name (most authoritative source that has one).'
+        tests:
+          - not_null
+      - name: hashdiff
+        description: 'Hash over the golden payload — the revision gate.'
+        tests:
+          - not_null
   - name: sat_date_eth_calendar
     description: 'Satellite carrying the descriptive payload for hk_date_conformed.'
     columns:

@@ -118,6 +118,35 @@ sources:
       - name: stg_elmis_hist__reference_product
       - name: stg_elmis_hist__reference_programme
       - name: stg_elmis_hist__reference_reporting_period
+      - name: stg_elmis_hist__reference_facility_type
+      - name: stg_elmis_hist__reference_product_group
+      - name: stg_elmis_hist__reference_product_category
+      - name: stg_elmis_hist__reference_programme_product
+      - name: stg_elmis_hist__reference_facility_programme_schedule
       - name: stg_elmis_hist__history_requisition
       - name: stg_elmis_hist__history_requisition_line
         description: "7.5M historical R&R lines (pattern-preserving Zambia dump)."
+
+  # ── nhdw_ref — the governed reference vocabulary (OMOP-style) ──────────────
+  # DDL: 3_storage/postgres/init/34_ref_vocab.sql · data: bundle/scripts/
+  # seed-ref-vocab.sh (bootstrap step 5.7, BEFORE the dbt-vault build — the
+  # resolution views JOIN the crosswalk at build time). Steward-editable,
+  # bitemporal; parity rule documented in the DDL.
+  - name: ref_vocab
+    schema: nhdw_ref
+    tables:
+      - name: concept
+        description: "Canonical concepts (programmes, commodities, regions, tiers, diseases, indicators)."
+      - name: source_to_concept_map
+        description: "Source-code → canonical-concept crosswalk (replaces regex/dict/CASE mappings)."
+
+  # ── nhdw_vault_governance — steward MDM decisions (read-only seam) ─────────
+  # postgres_fdw foreign table over nhdw_ops ops_governance.mdm_match_decision
+  # (DDL: 36_mdm_decisions_read.sql; written ONLY by the steward console via
+  # the gateway). v_facility_resolution LEFT JOINs the CURRENT accepted
+  # decisions; an empty log leaves every conformed key byte-identical.
+  - name: vault_governance
+    schema: nhdw_vault_governance
+    tables:
+      - name: mdm_match_decision
+        description: "Append-only bitemporal steward verdicts mapping a source record to its master conformed_bk."

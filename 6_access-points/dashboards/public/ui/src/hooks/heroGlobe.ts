@@ -1,9 +1,29 @@
 /**
- * Hero dot-globe — verbatim port of publicApp.heroGlobe() from
- * _mockups/01-public.html (~155 LOC). Mounts on the supplied
- * canvas element, owns its own RAF loop, no React state.
+ * Hero dot-globe — mounts on the supplied canvas, owns its own RAF loop, no
+ * React state. Originally a port of publicApp.heroGlobe() from the mockup.
+ *
+ * COUNTRY-AGNOSTIC. The globe used to carry four Ethiopian constants: the
+ * geometry filename, a marker centroid of 9.5N/40.0E, a fallback bounding box,
+ * and an opening rotation of 40 degrees that put Ethiopia front-of-globe. All
+ * four are now either supplied by the profile or DERIVED from the geometry the
+ * globe already downloads — the centroid and bbox of a polygon set are facts
+ * about those polygons, not settings, and deriving them means they cannot
+ * disagree with the shape being drawn.
+ *
+ * Geometry comes from /api/proxy/profile/geo/*, so a country swap changes what
+ * this draws without touching this file.
  */
-export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
+type GlobeOpts = {
+  /** bbox of the host country, [minLng, minLat, maxLng, maxLat] — from the profile */
+  bbox?: [number, number, number, number];
+  /** marker + opening rotation; defaults to the centre of the bbox */
+  centroid?: [number, number];
+  /** geometry filenames within the active profile */
+  homeGeo?: string;
+  worldGeo?: string;
+};
+
+export async function heroGlobe(canvas: HTMLCanvasElement, opts: GlobeOpts = {}): Promise<void> {
   if (!canvas) return;
   const ctx = canvas.getContext("2d")!;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -20,7 +40,8 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
       // ── Load world land polygons (Natural Earth 110m, ~237KB once) ──
       let landPolys = [];
       try {
-        const geo = await (await fetch('/static/assets/world-land-110m.geojson')).json();
+        const worldUrl = `/api/proxy/profile/geo/${opts.worldGeo || 'world-land-110m.geojson'}`;
+        const geo = await (await fetch(worldUrl)).json();
         const flat = [];
         for (const f of (geo.features || [])) {
           const g = f.geometry; if (!g) continue;
@@ -40,13 +61,19 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
         console.warn('world land mask not loaded; falling back to evenly-spaced sphere', e);
       }
 
-      // ── Load Ethiopia's own polygon (regions → union) so the host country is
-      // rendered as a bright, dense, country-SHAPED cluster of dots, not a lone
-      // dot. Bounding box is used to seed the extra dense sampling below. ──
-      let ethPolys: Array<{ rings: number[][][], bbox: number[] }> = [];
-      let ethBBox = [33, 3, 48, 15];   // fallback bbox for Ethiopia
+      // ── Load the HOST COUNTRY's own polygons (admin-1 → union) so it renders
+      // as a bright, dense, country-SHAPED cluster of dots rather than a lone
+      // dot. The bounding box seeds the dense sampling below; it is computed
+      // from the geometry unless the profile already supplied it. ──
+      let homePolys: Array<{ rings: number[][][], bbox: number[] }> = [];
+      // Only a last resort: if geometry fails to load AND the profile gave no
+      // bbox, a whole-globe box means the dense fill simply finds nothing,
+      // which degrades to "world dots, no host highlight" instead of drawing a
+      // wrong country.
+      let homeBBox: number[] = opts.bbox ? [...opts.bbox] : [0, 0, -1, -1];
       try {
-        const eg = await (await fetch('/static/assets/eth-regions.geojson')).json();
+        const homeUrl = `/api/proxy/profile/geo/${opts.homeGeo || 'admin1.geojson'}`;
+        const eg = await (await fetch(homeUrl)).json();
         const flat: number[][][][] = [];
         for (const f of (eg.features || [])) {
           const g = f.geometry; if (!g) continue;
@@ -54,7 +81,7 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
           if (g.type === 'MultiPolygon') for (const p of g.coordinates) flat.push(p);
         }
         let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
-        ethPolys = flat.map(rings => {
+        homePolys = flat.map(rings => {
           let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
           for (const [x, y] of rings[0]) {
             if (x < a) a = x; if (x > c) c = x; if (y < b) b = y; if (y > d) d = y;
@@ -62,9 +89,9 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
           }
           return { rings, bbox: [a, b, c, d] };
         });
-        if (isFinite(mnX)) ethBBox = [mnX, mnY, mxX, mxY];
+        if (isFinite(mnX)) homeBBox = [mnX, mnY, mxX, mxY];
       } catch (e) {
-        console.warn('Ethiopia polygon not loaded; using a marker dot only', e);
+        console.warn('host-country geometry not loaded; globe falls back to a marker only', e);
       }
 
       // Ray-cast point-in-polygon · handles outer ring + holes
@@ -94,9 +121,9 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
         return false;
       };
 
-      const isEthiopia = (lng: number, lat: number) => {
-        for (let i = 0; i < ethPolys.length; i++) {
-          const p = ethPolys[i];
+      const isHome = (lng: number, lat: number) => {
+        for (let i = 0; i < homePolys.length; i++) {
+          const p = homePolys[i];
           if (lng < p.bbox[0] || lng > p.bbox[2] || lat < p.bbox[1] || lat > p.bbox[3]) continue;
           if (pointInRing(lng, lat, p.rings[0])) return true;
         }
@@ -111,7 +138,7 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
       // ── Generate sphere candidates · Fibonacci lattice, keep only land ──
       const N = 7200;
       const PHI = Math.PI * (Math.sqrt(5) - 1);
-      const points: Array<{ x: number, y: number, z: number, eth: boolean }> = [];
+      const points: Array<{ x: number, y: number, z: number, home: boolean }> = [];
       for (let i = 0; i < N; i++) {
         const y = 1 - (i / (N - 1)) * 2;
         const r = Math.sqrt(1 - y * y);
@@ -121,27 +148,37 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
         const lat = Math.asin(y) * 180 / Math.PI;
         const lng = Math.atan2(x, z) * 180 / Math.PI;     /* fix mirror: lng=0 at +z (front), east → +x (right) */
         if (!isLand(lng, lat)) continue;
-        points.push({ x, y, z, eth: isEthiopia(lng, lat) });
+        points.push({ x, y, z, home: isHome(lng, lat) });
       }
 
-      // DENSE Ethiopia fill — a fine grid over the country's bbox so the host
-      // nation reads as a bright, solid, correctly-shaped cluster (not the
-      // sparse handful of global-lattice dots that happen to land inside it).
+      // DENSE host-country fill — a fine grid over its bbox so the host nation
+      // reads as a bright, solid, correctly-shaped cluster rather than the
+      // sparse handful of global-lattice dots that happen to land inside it.
+      // Step scales with the country's size: a fixed 0.40 degrees gives Ethiopia
+      // a crisp stipple but would emit ~180k points for a country the size of
+      // Canada and stall the page. Target roughly the same dot COUNT instead.
       {
-        const [aX, aY, cX, dY] = ethBBox;
-        const STEP = 0.40;   // ~44km grid → crisp stippled silhouette (de-bloomed)
-        for (let lng = aX; lng <= cX; lng += STEP) {
-          for (let lat = aY; lat <= dY; lat += STEP) {
-            if (isEthiopia(lng, lat)) { const q = toXYZ(lng, lat); points.push({ x: q.x, y: q.y, z: q.z, eth: true }); }
+        const [aX, aY, cX, dY] = homeBBox;
+        const spanX = cX - aX, spanY = dY - aY;
+        if (spanX > 0 && spanY > 0) {
+          const TARGET = 1500;                       // ~Ethiopia's count at 0.40
+          const STEP = Math.max(0.15, Math.min(2.0, Math.sqrt((spanX * spanY) / TARGET)));
+          for (let lng = aX; lng <= cX; lng += STEP) {
+            for (let lat = aY; lat <= dY; lat += STEP) {
+              if (isHome(lng, lat)) { const q = toXYZ(lng, lat); points.push({ x: q.x, y: q.y, z: q.z, home: true }); }
+            }
           }
         }
       }
 
-      // Single-point Ethiopia marker · projected to the sphere, drawn as
-      // a glowing star ON TOP of the dots when it's on the front-facing
-      // half. Approximate centroid: lat 9.5° N, lng 40° E.
-      const ETH_LAT = 9.5, ETH_LNG = 40.0;
-      const latR = ETH_LAT * Math.PI / 180, lngR = ETH_LNG * Math.PI / 180;
+      // Single-point host marker · projected to the sphere, drawn as a glowing
+      // star ON TOP of the dots when it is on the front-facing half. Position
+      // comes from the profile, else the centre of the geometry's own bbox.
+      const bboxCentre: [number, number] = (homeBBox[2] >= homeBBox[0])
+        ? [(homeBBox[0] + homeBBox[2]) / 2, (homeBBox[1] + homeBBox[3]) / 2]
+        : [0, 0];
+      const [HOME_LNG, HOME_LAT] = opts.centroid ?? bboxCentre;
+      const latR = HOME_LAT * Math.PI / 180, lngR = HOME_LNG * Math.PI / 180;
       // Standard convention to match the lattice's new labelling:
       //   x = cos(lat)*sin(lng) → east positive
       //   z = cos(lat)*cos(lng) → prime meridian at +z (front)
@@ -152,16 +189,19 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
       };
 
       // ── Health motif geometry (built once) · a hairline national outline + an
-      // ECG "vital sign" trace across Ethiopia, projected per-frame like the star. ──
+      // ECG "vital sign" trace across the host country, projected per-frame like the star. ──
       type Sph = { x: number; y: number; z: number };
-      const ethOutline: Sph[][] = ethPolys.map(p => {
+      const homeOutline: Sph[][] = homePolys.map(p => {
         const ring = p.rings[0]; const pts: Sph[] = [];
         for (let i = 0; i < ring.length; i += 6) pts.push(toXYZ(ring[i][0], ring[i][1]));
         return pts;
       });
       const ecg: Sph[] = (() => {
-        const cLat = (ethBBox[1] + ethBBox[3]) / 2;
-        const x0 = ethBBox[0] + 2, x1 = ethBBox[2] - 2, STEPS = 56;
+        const cLat = (homeBBox[1] + homeBBox[3]) / 2;
+        // inset the trace from the edges by 8% of the span rather than a fixed
+        // 2 degrees, which would invert the line on a small country
+        const inset = Math.max(0.2, (homeBBox[2] - homeBBox[0]) * 0.08);
+        const x0 = homeBBox[0] + inset, x1 = homeBBox[2] - inset, STEPS = 56;
         const bump = (u: number, c: number, w: number, a: number) => a * Math.exp(-((u - c) * (u - c)) / (2 * w * w));
         // flat baseline · P bump · sharp QRS complex · T bump (offset in degrees lat)
         const off = (u: number) => bump(u, 0.42, 0.03, 0.35)
@@ -186,9 +226,10 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
 
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-      // Start with Ethiopia (~40° E lng) at the front · positive rotY in
-      // the new convention rotates west-to-east, matching Earth.
-      let rotY = 40 * Math.PI / 180;
+      // Start with the host country facing the viewer. Its opening rotation is
+      // simply its centre longitude — positive rotY rotates west-to-east,
+      // matching Earth.
+      let rotY = HOME_LNG * Math.PI / 180;
       // Tilt the globe forward so the silhouette feels 3D, not a flat disc
       const TILT = -16 * Math.PI / 180;
       const cosT = Math.cos(TILT), sinT = Math.sin(TILT);
@@ -205,7 +246,7 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
         // shows through · particles need to carry the visibility alone.
 
         // ── Continent particles · saturated deep teal · distinct from
-        // navy chrome and from the FMoH-blue Ethiopia star, NOT flag
+        // navy chrome and from the accent-blue host marker, NOT flag
         // colours (no green/yellow/red/gold). Renders as a luminous
         // jewel-tone constellation against the cream background.
         for (let i = 0; i < points.length; i++) {
@@ -221,13 +262,13 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
           const screenY = cy - ty * radius;
           const depth = (tz + 1) / 2;          // 0 = back, 1 = front
           let r: number, fill: string;
-          if (p.eth) {
-            // Ethiopia — dimmer near-white stipple so the ECG motif + outline read on top.
+          if (p.home) {
+            // Host country — dimmer near-white stipple so the ECG motif + outline read on top.
             r = 1.05 + depth * 0.7;
             fill = `rgba(210, 224, 246, ${0.42 + depth * 0.22})`;
           } else {
             // Rest of the world — the accent blue, slightly dimmed so the host
-            // country reads as the clear focal point.
+            // host country reads as the clear focal point.
             r = 1.1 + depth * 0.9;
             fill = `rgba(${accentRGB[0]}, ${accentRGB[1]}, ${accentRGB[2]}, ${0.5 + depth * 0.28})`;
           }
@@ -238,7 +279,7 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
         }
 
         // ── Health motif · hairline national outline + ECG heartbeat, glued to
-        // Ethiopia, back-face culled, dimming as the country rotates to the limb ──
+        // the host country, back-face culled, dimming as it rotates to the limb ──
         const proj = (p: Sph) => {
           const rx = p.x * cosY - p.z * sinY;
           const rz = p.x * sinY + p.z * cosY;
@@ -257,7 +298,7 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
           }
           ctx.stroke();
         };
-        for (const ring of ethOutline) strokePath(ring, 'rgba(232,241,255,0.55)', 1.1);
+        for (const ring of homeOutline) strokePath(ring, 'rgba(232,241,255,0.55)', 1.1);
         strokePath(ecg, 'rgba(240,246,255,0.5)', 1.1);
         if (!reduced && ecg.length > 2) {
           const head = ((now || performance.now()) / 3400) % 1;
@@ -275,7 +316,7 @@ export async function heroGlobe(canvas: HTMLCanvasElement): Promise<void> {
           }
         }
 
-        // Ethiopia marker · single pulsing star drawn on top
+        // Host-country marker · single pulsing star drawn on top
         const srx = star.x * cosY - star.z * sinY;
         const sry = star.y;
         const srz = star.x * sinY + star.z * cosY;

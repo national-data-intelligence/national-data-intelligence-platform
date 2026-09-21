@@ -2,13 +2,28 @@
     v_commodity_resolution — first-pass MDM for commodities, and the
     AutomateDV stage for hub_commodity_conformed + lnk_same_as_commodity.
 
-    Strategy (v0 — exact-normalised-name match):
-        Normalise name (lowercase, strip punctuation) → conformed_bk =
-        the norm_name. Anything sharing a normalised name collapses to
-        the same conformed entity.
+    Strategy (v1 — governed crosswalk, name-normalisation fallback):
+        Each source's NATIVE commodity code resolves through the governed
+        reference vocabulary (nhdw_ref.source_to_concept_map):
+            HCMIS   → the commodity_id embedded in its description KV string
+                      (vocabulary 'HCMIS.commodityId')
+            mBrana  → commodity_code (vocabulary 'MBRANA.commodityCode',
+                      live-derived supplement)
+        The target concept's code IS the canonical norm_name (the PARITY
+        RULE in 34_ref_vocab.sql), and unmapped rows fall back to the old
+        exact-normalised-name match — so conformed keys are byte-identical
+        to the v0 name-match for every mapped row, while new/renamed source
+        rows now conform through governed data instead of string luck.
+        Stewards change a mapping by superseding a crosswalk row, not SQL.
 
-    Same caveat as v_facility_resolution: fuzzy/trigram matching is a
-    follow-up. GS1 codes or ATC codes are the proper bridge.
+    MIGRATION NOTE (2026-09-20): replaced the v0 pure-norm_name strategy
+    parity-first (candidate view full-row diff vs the deployed view: zero
+    differing rows). Fuzzy/trigram matching stays the MDM engine's job
+    (match candidates + steward decisions), NOT this view's; ATC codes
+    arrive later as additional crosswalk vocabularies.
+
+    BOOT-ORDER CONTRACT: nhdw_ref is seeded at bootstrap step 5.7, before
+    this model builds.
 
     Sources (read via the v_sat_*_current views — one identity row per
     source record, never one per historical name):
@@ -29,12 +44,32 @@
 */
 {{ config(materialized='view', schema='nhdw_vault_business') }}
 
-WITH hcmis AS (
+WITH xwalk AS (
+    -- Current crosswalk rows for both commodity vocabularies: not
+    -- invalidated, validity window covers today, newest valid_from wins.
+    SELECT DISTINCT ON (m.source_vocabulary_id, m.source_code)
+        m.source_vocabulary_id,
+        m.source_code,
+        c.concept_code
+    FROM {{ source('ref_vocab', 'source_to_concept_map') }} m
+    JOIN {{ source('ref_vocab', 'concept') }} c
+      ON c.concept_id = m.target_concept_id
+    WHERE m.source_vocabulary_id IN ('HCMIS.commodityId', 'MBRANA.commodityCode')
+      AND m.invalid_reason IS NULL
+      AND CURRENT_DATE >= m.valid_from
+      AND CURRENT_DATE <  m.valid_to
+    ORDER BY m.source_vocabulary_id, m.source_code, m.valid_from DESC
+),
+
+hcmis AS (
     SELECT
         sat.hk_hcmis_commodity AS source_hk,
         'HCMIS' AS source_system,
         sat.name AS source_name,
         sat.description AS source_description,
+        -- native code carried in the description KV string: commodity_id=<CODE> | …
+        SUBSTRING(sat.description FROM 'commodity_id=([A-Za-z0-9-]+)') AS native_code,
+        'HCMIS.commodityId' AS native_vocabulary,
         LOWER(REGEXP_REPLACE(COALESCE(sat.name,''), '[^a-zA-Z0-9 ]', '', 'g')) AS norm_name,
         sat.load_ts
     FROM {{ ref('v_sat_hcmis_commodity_current') }} sat
@@ -45,23 +80,50 @@ mbrana AS (
         'mBrana' AS source_system,
         sat.commodity_name AS source_name,
         sat.commodity_code AS source_description,
+        sat.commodity_code AS native_code,
+        'MBRANA.commodityCode' AS native_vocabulary,
         LOWER(REGEXP_REPLACE(COALESCE(sat.commodity_name,''), '[^a-zA-Z0-9 ]', '', 'g')) AS norm_name,
         sat.load_ts
     FROM {{ ref('v_sat_mbrana_commodity_current') }} sat
 ),
+decisions AS (
+    -- CURRENT steward verdicts for commodities — same seam as
+    -- v_facility_resolution v3 (36_mdm_decisions_read.sql FDW; written only
+    -- via the steward console). A verdict maps ONE source record — keyed
+    -- (source_system, hex(source hub hash)) — onto a master concept_code.
+    -- Precedence: steward decision > vocabulary crosswalk > normalised name.
+    -- Empty log ⇒ byte-identical to the crosswalk-only derivation.
+    SELECT source_system_code, source_record_key, master_bk
+    FROM {{ source('vault_governance', 'mdm_match_decision') }}
+    WHERE recorded_to IS NULL
+      AND decision IN ('accept', 'merge')
+      AND master_bk IS NOT NULL
+      AND deployment_context = '{{ var("deployment_context", "ET") }}'
+      AND entity_class_code = 'commodity'
+      AND CURRENT_DATE >= valid_from AND CURRENT_DATE < valid_to
+),
 resolved AS (
     SELECT
-        source_hk AS hk_source_commodity,
-        source_system,
-        source_name,
-        source_description,
-        norm_name,
-        norm_name AS conformed_bk,
-        load_ts
+        all_src.source_hk AS hk_source_commodity,
+        all_src.source_system,
+        all_src.source_name,
+        all_src.source_description,
+        all_src.norm_name,
+        COALESCE(d.master_bk, x.concept_code, all_src.norm_name) AS conformed_bk,
+        CASE WHEN d.master_bk IS NOT NULL    THEN 'steward_decision'
+             WHEN x.concept_code IS NOT NULL THEN 'vocabulary'
+             ELSE 'norm_name' END AS match_strategy,
+        all_src.load_ts
     FROM (
         SELECT * FROM hcmis UNION ALL SELECT * FROM mbrana
     ) all_src
-    WHERE norm_name <> ''
+    LEFT JOIN xwalk x
+      ON x.source_vocabulary_id = all_src.native_vocabulary
+     AND x.source_code = all_src.native_code
+    LEFT JOIN decisions d
+      ON  d.source_system_code = all_src.source_system
+      AND d.source_record_key  = encode(all_src.source_hk, 'hex')
+    WHERE all_src.norm_name <> ''
 ),
 keyed AS (
     SELECT

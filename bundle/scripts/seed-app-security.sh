@@ -56,7 +56,10 @@ fi
 # CREATE/ALTER ... IF NOT EXISTS (best-effort; duplicate-object errors are skipped)
 # → safe on a virgin boot too, where initdb already ran them.
 echo "▸ [perm-schema-heal] re-apply ops_perm schema (survives restore-state --clean)"
-for sql in 17_perm_schemas.sql 23_perm_admin_grants.sql 25_perm_scope_migration.sql 32_permission_store.sql; do
+# 38_governance.sql joins the heal set: the DQ threshold store + incident
+# history (fingerprint, dq_flag_event, triggers) must survive restore-state
+# --clean and warm clusters, or POST /api/dq/detect 500s.
+for sql in 17_perm_schemas.sql 23_perm_admin_grants.sql 25_perm_scope_migration.sql 32_permission_store.sql 38_governance.sql; do
   f="$REPO/3_storage/postgres/init/${sql}"
   [ -f "$f" ] || { echo "  ! ${sql} missing — skipping"; continue; }
   kubectl -n "$NS" exec -i postgres-vault-0 -- \

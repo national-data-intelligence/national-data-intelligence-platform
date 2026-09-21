@@ -26,6 +26,14 @@ fayda:
 alertmanager:
   email: false
 
+# ── OpenMetadata (catalog / glossary / column lineage — 6_access-points reads it,
+# OPA never does). On by default on this host (headroom measured); set false on
+# constrained fleet machines. OpenSearch exists only as OM's search backend.
+openmetadata:
+  enabled: true
+  tag: "2.0.2"
+  opensearchTag: "2.19.6"
+
 storageClass: local-path
 
 # ── SeaweedFS (object storage — see 3_storage/seaweedfs/) ──
@@ -61,3 +69,8 @@ components:
   admin:            { replicas: 1, resources: {} }
   workshop:         { replicas: 1, resources: {} }
   gateway:          { replicas: 1, resources: {} }
+
+# Active country profile (directory name under /opt/nhdw-profiles on the host).
+# This is only the FALLBACK: the ACTIVE pointer file in that directory wins, so a
+# demo profile swap is a file write rather than a helm upgrade.
+profile: et-v3

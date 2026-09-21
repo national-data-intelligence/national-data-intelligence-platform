@@ -23,6 +23,11 @@ role:
       - Executives (national + all programs):  granularity = aggregate
       - Program managers (assigned programs):  granularity = deidentified rows
       - Regional admins (assigned geography):  granularity = aggregate
+  # Column-grain reveal: decision makers (incl. the R-PD-*/R-RHB-* scoped
+  # aliases OPA routes here) see restricted columns (facility GPS) unmasked
+  # within their row-level scope. privileged stays masked.
+  column_access:
+    reveal: [restricted]
   permissions:
 
     - subject: PRG

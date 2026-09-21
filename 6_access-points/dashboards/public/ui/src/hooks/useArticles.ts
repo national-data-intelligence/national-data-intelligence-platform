@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from 'react';
 import { ARTICLES, type Article } from '../data/articles';
+import { useProfile } from './useProfile';
 
 function shape(a: any): Article | null {
   if (!a || !a.id || !a.title) return null;
@@ -23,6 +24,12 @@ function shape(a: any): Article | null {
 
 export function useArticles(): Article[] {
   const [articles, setArticles] = useState<Article[] | null>(null);
+  // The bundled ARTICLES are Ethiopian. A profile may carry its own, and a
+  // Zambia deployment falling back to Ethiopian cholera bulletins would be a
+  // worse failure than an empty newsroom — so a profile that sets
+  // `articles: []` deliberately gets an empty one.
+  const { copy } = useProfile();
+  const fromProfile = copy?.articles as Article[] | undefined;
   useEffect(() => {
     let cancelled = false;
     fetch('/api/proxy/articles?limit=100')
@@ -36,5 +43,5 @@ export function useArticles(): Article[] {
       .catch(() => { /* keep fallback */ });
     return () => { cancelled = true; };
   }, []);
-  return articles ?? ARTICLES;
+  return articles ?? (Array.isArray(fromProfile) ? fromProfile : ARTICLES);
 }

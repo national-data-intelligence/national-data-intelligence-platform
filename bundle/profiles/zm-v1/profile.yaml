@@ -1,0 +1,70 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Profile · zm-v1 · Zambia
+#
+# The second country, and therefore the proof that the profile mechanism is
+# real rather than a rename of the first.
+#
+# Grounded in data that already exists rather than invented: the administrative
+# hierarchy, provinces, facilities, facility types and programmes all come from
+# the eLMIS 2016–2018 archive already ingested through the pipeline (2,807
+# facilities across 10 provinces and 108 districts). Boundaries are geoBoundaries
+# ADM1 (CC BY 4.0, Zambia Data Hub via the national SDI). Published national
+# indicators are cited on each figure in the copy deck.
+#
+# Note what is NOT here: `native_name` is absent throughout, because Zambia's
+# official language is English. That is the case the presentation layer has to
+# handle without a placeholder — the hero's native line simply does not render.
+# ─────────────────────────────────────────────────────────────────────────────
+key: zm-v1
+label: Zambia
+revision: 1
+
+country:
+  name: Zambia
+  official_name: Republic of Zambia
+  adjective: Zambian
+  iso2: ZM
+  iso3: ZMB
+  # No native block: English is the official language, so there is no second
+  # script to render. The SPA omits the native headline rather than showing an
+  # empty element.
+
+ministry:
+  abbr: MoH
+  name: Ministry of Health
+  # logo omitted → the SPA falls back to the bundled mark. A real deployment
+  # ships the ministry's own file here.
+
+platform:
+  name: National Health Data Warehouse
+  abbr: NHDW
+
+geography:
+  # Zambia: Province → District → Facility. One level shallower than Ethiopia's
+  # region/zone/woreda/kebele, which is exactly why the dashboards read these
+  # labels instead of saying "woreda" in their own markup.
+  levels:
+    - {code: admin1, singular: Province, plural: Provinces}
+    - {code: admin2, singular: District, plural: Districts}
+  admin1: geo/admin1.geojson
+  world: _shared/world-land-110m.geojson
+
+brand:
+  # Zambian national green. Deliberately far from Ethiopia's blue so a profile
+  # swap is unmistakable on screen rather than a subtle copy change.
+  accent: "#1b7a44"
+
+locale:
+  default: en
+  fiscal_calendar: gregorian
+
+layers:
+  appsec:
+    users: seed-pack/app/security/users.zm.yaml
+    note: a Zambian cast of demo users and their provincial scopes
+  data:
+    sources: bundle/seeds/sources
+    note: >-
+      the eLMIS 2016–2018 archive is ALREADY ingested and is genuinely Zambian;
+      the other six sources still carry Ethiopian synthetic data and are the
+      remaining work for a full data-layer swap

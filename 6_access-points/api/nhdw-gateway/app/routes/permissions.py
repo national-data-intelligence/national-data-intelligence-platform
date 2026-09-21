@@ -20,7 +20,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from .. import mart_attrs, ops_db, opa, permissions
+from .. import mart_attrs, masking, ops_db, opa, permissions
 from ..auth import UserCtx, get_user
 from ..mart_attrs import MartAttrsMissing
 from ..settings import settings
@@ -158,11 +158,16 @@ async def widget_data(widget_id: str, request: Request,
     fetcher = FETCHERS.get(widget_id)
     opa_payload: dict[str, Any] = {"decision": "skipped (no mart binding)"}
     decision = None
+    colclass: dict[str, Any] = {}
     if fetcher is not None:
         async with pool.acquire() as _c:
             scope = await permissions.effective_user_scope(_c, user)
+        # classified columns of the bound mart (denylist) — OPA decides which
+        # the caller may not see clear; applied to the fetched rows below
+        colclass = await mart_attrs.columns_for_mart(fetcher.schema, fetcher.table)
         decision = await opa.decide(user, action="read", resource=fetcher.subject,
-                                    attributes=fetcher.opa_attributes(), scope=scope)
+                                    attributes=fetcher.opa_attributes(), scope=scope,
+                                    columns={n: c.sensitivity for n, c in colclass.items()})
     # NOTE: unbound widgets deliberately skip the OPA mart-gate — their widgets.yaml
     # `requires` is an INCOMPLETE payload (no data_class), so calling OPA would wrongly
     # deny under OPA_ENFORCE. They have no bound mart, so they return a stub (no data to
@@ -209,6 +214,14 @@ async def widget_data(widget_id: str, request: Request,
         except Exception as exc:                                  # noqa: BLE001
             log.warning("fetcher %s failed: %s", widget_id, exc)
             raise HTTPException(502, f"data fetch failed for {widget_id}: {exc}")
+        # masking obligation (was log-only — the widget path is one of the
+        # paths the masking rollout closes)
+        if decision is not None and decision.masked_columns:
+            data["rows"], _dropped = masking.apply_masking(
+                data["rows"], colclass, decision.masked_columns)
+            if _dropped:
+                data["columns"] = [c for c in data.get("columns", [])
+                                   if c not in set(_dropped)]
     else:
         data = {"columns": [], "rows": [],
                 "note": "permitted-stub — no fetcher bound for this widget"}

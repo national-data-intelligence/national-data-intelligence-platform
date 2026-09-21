@@ -35,6 +35,11 @@
       MFR           organizations (raw hub + business-vault current sat) —
                     share mapped to a national FAC-id → completeness;
                     non-empty name → validity.
+      eLMIS-hist    historical R&R requisitions (raw link + business-vault
+                    current sats) — MEASURED timeliness: submission time vs
+                    the period's governed deadline; workflow reached a
+                    submitted state → validity. completeness stays NULL (the
+                    expected-report schedule is current-state only).
       EWARS/Climate mart_idsr_disease_weekly — weekly notifiable-disease
                     signal volume (reports_received). completeness/validity
                     stay NULL because no reporting-deadline / expected-report
@@ -184,10 +189,62 @@ ewars AS (
         NULL::bigint                            AS reports_expected
     FROM {{ ref('mart_idsr_disease_weekly') }}
     GROUP BY 1,2,3,4
+),
+elmis AS (
+    -- The ONE source with MEASURED timeliness. Every other source here lands
+    -- as a bulk snapshot (a single load_ts instant), so a "% on time" built
+    -- from its load stamp would measure the loader, not the reporter — which
+    -- is why the rest stay NULL. eLMIS carries a real per-requisition
+    -- submission time, so its number is observed.
+    --
+    -- Read from mart_elmis_hist_timeliness rather than recomputed: that model
+    -- is the warehouse's definition of eLMIS on-time (its 79.8%/9-day-median
+    -- baseline is a documented regression anchor), and a second computation
+    -- here would be a second definition waiting to drift. This only rolls its
+    -- month x programme grain up to the source x period grain of this mart.
+    --
+    -- completeness_pct and validity_pct stay NULL deliberately: the
+    -- expected-report contract is the facility x programme reporting
+    -- schedule, and the only copy of it is a CURRENT-state table with no
+    -- validity dates — applying today's group membership to a 2017 period
+    -- would invent an expectation rather than measure one.
+    SELECT
+        'eLMIS-hist'::text                      AS source,
+        month_id                                AS period_id,
+        NULL::text                              AS region_id,
+        NULL::text                              AS woreda_uid,
+        NULL::numeric                           AS completeness_pct,
+        100.0 * SUM(on_time_requisitions)::numeric
+              / GREATEST(SUM(requisitions), 1)  AS timeliness_pct,
+        NULL::numeric                           AS validity_pct,
+        SUM(requisitions)::bigint               AS reports_received,
+        NULL::bigint                            AS reports_expected
+    FROM {{ ref('mart_elmis_hist_timeliness') }}
+    GROUP BY 1,2
+),
+unioned AS (
+    SELECT * FROM dhis2
+    UNION ALL SELECT * FROM hcmis
+    UNION ALL SELECT * FROM mbrana
+    UNION ALL SELECT * FROM ethioemr
+    UNION ALL SELECT * FROM mfr
+    UNION ALL SELECT * FROM ewars
+    UNION ALL SELECT * FROM elmis
 )
-SELECT * FROM dhis2
-UNION ALL SELECT * FROM hcmis
-UNION ALL SELECT * FROM mbrana
-UNION ALL SELECT * FROM ethioemr
-UNION ALL SELECT * FROM mfr
-UNION ALL SELECT * FROM ewars
+
+-- Timeliness wiring: each source's reporting deadline comes from the governed
+-- reporting_deadlines seed. timeliness_pct is REAL wherever a source carries
+-- per-report arrival timestamps, and NULL where it does not — computing "% on
+-- time" from a bulk load stamp would measure the loader, not the reporter.
+-- Today that means eLMIS is measured (real per-requisition submission times)
+-- and the other six stay NULL until their synthesizers stamp arrival per
+-- report. Live ingest-freshness is monitored separately: the DQ detector
+-- raises stale_ingest incidents against the dq_threshold SLAs.
+SELECT
+    u.*,
+    dl.cadence              AS deadline_cadence,
+    dl.deadline_offset_days AS deadline_offset_days,
+    dl.grace_hours          AS deadline_grace_hours
+FROM unioned u
+LEFT JOIN {{ ref('reporting_deadlines') }} dl
+       ON dl.source_key = CASE u.source WHEN 'EWARS/Climate' THEN 'Climate' ELSE u.source END

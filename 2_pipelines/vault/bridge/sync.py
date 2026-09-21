@@ -32,6 +32,8 @@ import psycopg2
 from clickhouse_driver import Client
 from psycopg2.extras import execute_values
 
+from lineage import emit_bridge_lineage
+
 log = logging.getLogger("bridge")
 logging.basicConfig(
     level=logging.INFO,
@@ -203,6 +205,7 @@ def main() -> int:
         dt = time.time() - t0
         summary.append((v, n, dt))
         log.info("  %-46s %8d rows  %.1fs", v, n, dt)
+        emit_bridge_lineage(table=v, schema=schema)   # best-effort catalog hop (no-op unless OM_LINEAGE_* set)
 
     total_rows = sum(s[1] for s in summary)
     total_dt = sum(s[2] for s in summary)

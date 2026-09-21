@@ -45,6 +45,9 @@ spec:
             - { name: OPS_READER_PASSWORD,     valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: OPS_READER_PASSWORD     } } }
             - { name: GRAFANA_DB_PASSWORD,     valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: GRAFANA_DB_PASSWORD     } } }
             - { name: MLFLOW_DB_PASSWORD,      valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: MLFLOW_DB_PASSWORD      } } }
+            # parity with base/postgres-vault.yaml: 37_openmetadata_db.sh reads this
+            # at initdb — without it a Helm cold boot has no OpenMetadata database
+            - { name: OPENMETADATA_DB_PASSWORD, valueFrom: { secretKeyRef: { name: openmetadata-secrets,  key: DB_PASSWORD, optional: true } } }
             - { name: SEAWEEDFS_FILER_DB_PASSWORD, valueFrom: { secretKeyRef: { name: postgres-vault-secrets, key: SEAWEEDFS_FILER_DB_PASSWORD, optional: true } } }
             - { name: KEYCLOAK_DB_PASSWORD,    valueFrom: { secretKeyRef: { name: keycloak-secrets,       key: KC_DB_PASSWORD          } } }
             - { name: AIRFLOW_DB_PASSWORD,     valueFrom: { secretKeyRef: { name: airflow-secrets,        key: AIRFLOW_DB_PASSWORD     } } }

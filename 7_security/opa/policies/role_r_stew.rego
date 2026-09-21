@@ -7,6 +7,8 @@ import rego.v1
 role_id := "R-STEW"
 phase   := 1
 
+reveal_sensitivity := set()
+
 default allow := false
 
 # permission[0]: PRG / members=all / gran=aggregate / verbs=['read']

@@ -116,6 +116,18 @@
   role_label: R-STEW
   roles:      [R-STEW]
 
+# The steward's DECISION-CONSOLE identity. The MDM stewardship page lives on
+# the admin dashboard, which authenticates against privileged-ops — a moh-staff
+# steward (demo.steward above, whose home is the workshop) cannot log in there,
+# and one Keycloak user cannot span realms. Same person, ops-realm hat.
+- kc_sub:     bbbbbbbb-cccc-dddd-eeee-000000000001
+  username:   steward.ops
+  email:      stew.ops@nhdw.gov.et
+  full_name:  Demo Data Steward (Ops)
+  realm:      privileged-ops
+  role_label: R-STEW
+  roles:      [R-STEW]
+
 # ── Sec officer ───────────────────────────────────────────────────────
 - kc_sub:     cccccccc-dddd-eeee-ffff-000000000000
   username:   sec.officer

@@ -36,6 +36,21 @@ seeds:
     +post-hook:
       - "ALTER TABLE {{ this }} OWNER TO vault_admin"
       - "GRANT SELECT ON {{ this }} TO bi_reader"
+    # Governance contract seed sits with its consumer (mart_data_quality),
+    # not with the public reference seeds.
+    reporting_deadlines:
+      +schema: bi_quality
+    # PCT seeds describe the Zambia eLMIS archive, which is internal-only — they
+    # must never land in bi_public beside the public reference seeds.
+    pct_gf_tracer_category:
+      +schema: bi_supply
+      +column_types: { product_code: text }
+    pct_kpi_definitions:
+      +schema: bi_supply
+      +column_types: { target: numeric }
+    pct_policy_parameters:
+      +schema: bi_supply
+      +column_types: { value: numeric }
 
 on-run-end:
   - "GRANT USAGE ON SCHEMA bi_mdm TO bi_reader"

@@ -321,20 +321,60 @@ async def _load_role_scope(conn, role_ids: list[int]) -> dict[str, set[str]]:
 
 
 async def _load_catalog_overrides(conn) -> dict[tuple[str, str], dict]:
-    """Runtime catalog overrides (#47, ops_perm.catalog_override) keyed by
-    (kind, scope_id). Applied ON TOP of grants at resolve time — an override can
-    only SUBTRACT visibility (enabled=false) or re-layout (placement overrides);
-    it never grants. Small table → loaded once per resolve."""
+    """Runtime catalog overrides keyed by (kind, scope_id). Applied ON TOP of
+    grants at resolve time — an override can only SUBTRACT visibility
+    (enabled=false) or re-layout (placement overrides); it never grants.
+
+    TWO layers, composed here:
+
+      1. the COUNTRY PROFILE's catalog layer — widgets that do not fit this
+         country's shape. Ethiopia reports at woreda grain and Zambia does not,
+         so a woreda table is a husk under a Zambian profile rather than an
+         empty-looking bug. Read from the profile directory, never persisted.
+
+      2. the OPERATOR's overrides (#47, ops_perm.catalog_override) — what a human
+         turned off in Dashboard-Control.
+
+    The operator WINS on conflict. Their toggles are a deliberate decision about
+    this deployment and must survive a profile swap; the profile is a default
+    about the country. Keeping the profile layer out of the table is what makes
+    that possible — writing it there would stomp the human's choice, and the
+    table's own contract says it is never written by the seed path.
+
+    Because both layers can only subtract, composing them cannot widen access,
+    which is why this needed no schema change and no new grant path."""
+    out: dict[tuple[str, str], dict] = {}
+
+    # layer 1 — the profile's shape
+    for kind, scope_id in _profile_disabled():
+        out[(kind, scope_id)] = {"enabled": False, "overrides": {},
+                                 "source": "profile"}
+
+    # layer 2 — the operator, last so it overwrites
     rows = await conn.fetch(
         "SELECT kind, scope_id, enabled, overrides FROM ops_perm.catalog_override")
-    out: dict[tuple[str, str], dict] = {}
     for r in rows:
         ov = _decode_jsonb(r["overrides"])
         out[(r["kind"], r["scope_id"])] = {
             "enabled": r["enabled"],
             "overrides": ov if isinstance(ov, dict) else {},
+            "source": "operator",
         }
     return out
+
+
+def _profile_disabled() -> list[tuple[str, str]]:
+    """(kind, scope_id) pairs the active country profile turns off.
+
+    Never raises: a profile with no catalog layer, or an unreadable one, simply
+    disables nothing. Losing a country's widget tailoring shows a husk; failing
+    the resolve shows an empty dashboard, and the first is far better."""
+    try:
+        from .routes import profile as profile_route
+        return profile_route.catalog_disabled()
+    except Exception:                                           # noqa: BLE001
+        log.debug("catalog: profile layer unavailable", exc_info=True)
+        return []
 
 
 def _ov_disabled(ov: dict[tuple[str, str], dict] | None, kind: str, scope_id: str) -> bool:

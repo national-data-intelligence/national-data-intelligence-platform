@@ -324,6 +324,13 @@ fi
 step "5.5 · packed state (bundle/state — restored before seeds, if present)"
 bash "$SCRIPTS/restore-state.sh"
 
+# The reference vocabulary must exist BEFORE the dbt-vault build: the business-
+# vault resolution views JOIN nhdw_ref.source_to_concept_map at build time
+# (parity-first migrations — see 3_storage/postgres/init/34_ref_vocab.sql).
+step "5.7 · reference vocabulary (nhdw_ref crosswalks + concepts)"
+bash "$SCRIPTS/seed-ref-vocab.sh" \
+  || { echo "✗ nhdw_ref seed FAILED — the vault build would mis-resolve; aborting."; exit 1; }
+
 # ─── 6. seed the DATA tiers (sources → ingestors → dbt pipeline) ────────────
 step "6 · DATA seed (sources → ingestors → dbt pipeline)"
 
@@ -446,6 +453,34 @@ bash "$SCRIPTS/seed-graduation.sh" || { echo; echo "✗ graduation seed FAILED �
 # (7.7 demo widget-plugin RETIRED 2026-07-06 — the runtime-swappable-plugin
 # system was removed platform-wide; every dashboard widget is now a foldered
 # build-time module. Archived to _archive/2026-07-06/runtime-plugin-system/.)
+
+# ─── 7.8 · OpenMetadata catalog seed (metadata plane, batch 1) ───────────────
+# Waits for the OM API, validates the ingestion-bot token, triggers the
+# connectors DAG once. NON-FATAL by design: the catalog is never load-bearing
+# (docs/metadata-plane.md) — a boot without OM (or before its one manual
+# bot-token step) is still fully demoable, so this step warns and continues.
+step "7.8 · OpenMetadata catalog seed (non-fatal)"
+bash "$SCRIPTS/seed-openmetadata.sh" \
+  || echo "  ! OpenMetadata seed incomplete (catalog-only — the platform is unaffected); see above."
+
+# ─── 7.85 · DQ detection seed (governance plane, batch 2) ────────────────────
+# Runs the incident detector once so the Admin DQ queue and governance KPIs
+# have content on a cold boot. The incidents are REAL findings over the
+# just-built pipeline (stale sources, failed dbt tests, MDM backlog) — never
+# fixtures. NON-FATAL: the queue is derived state; a boot without it is fully
+# usable and the 06:15 DAG catches up.
+step "7.85 · DQ detection seed (non-fatal)"
+DQTOK=$(kubectl -n "$NS" get secret dq-detect-secrets -o jsonpath='{.data.TOKEN}' 2>/dev/null | base64 -d || true)
+if [ -n "$DQTOK" ]; then
+  kubectl -n "$NS" run dq-detect-seed --rm -i --restart=Never --quiet \
+    --image=curlimages/curl:8.10.1 -- -s -m 120 -X POST \
+    -H "X-Detect-Token: $DQTOK" \
+    "http://nhdw-gateway.$NS.svc.cluster.local:8000/api/dq/detect" \
+    && echo "  ✓ first detection ran" \
+    || echo "  ! DQ detection seed incomplete (queue-only — the platform is unaffected)"
+else
+  echo "  ! dq-detect-secrets absent — skipping (the 06:15 DAG will populate the queue)"
+fi
 
 # ─── 7.9 · verification gate ─────────────────────────────────────────────────
 # Fail LOUDLY, not silently. Every prior step exiting 0 does NOT prove the demo

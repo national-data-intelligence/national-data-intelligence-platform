@@ -108,6 +108,12 @@ class Settings(BaseSettings):
     SMTP_PASS: str = ""
     ALERT_EVAL_MODEL: str = "ears"       # DZ forecast model whose alarm_prob drives alerts
     ALERT_EVAL_TOKEN: str = ""           # shared secret for the Airflow → POST /evaluate call
+    DQ_DETECT_TOKEN: str = ""   # shared secret for the Airflow → POST /api/dq/detect call
+    # Shared secret the demo console presents to swap profiles and fire demo
+    # actions. EMPTY DISABLES the mutating half of /api/demo entirely — a
+    # deployment with no token configured cannot be driven, which is the right
+    # default for anything that is not a demo box.
+    DEMO_CONTROL_TOKEN: str = ""
 
 
 settings = Settings()

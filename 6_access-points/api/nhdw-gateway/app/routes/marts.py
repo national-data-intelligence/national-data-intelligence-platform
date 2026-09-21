@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..auth import UserCtx, get_user
-from .. import mart_attrs, ops_db, opa, permissions, trino_client
+from .. import mart_attrs, masking, ops_db, opa, permissions, trino_client
 from ..mart_attrs import MartAttrsMissing
 from ..settings import settings
 
@@ -75,6 +75,11 @@ async def get_mart(schema: str, table: str, request: Request,
     # plus data_class / granularity / sensitivity. Look the mart up in
     # the catalog and pass those attributes; a cataloged mart is a
     # prerequisite for serving under OPA_ENFORCE=true.
+    # Classified columns of this mart (denylist — {} when nothing classified).
+    # Pushed into OPA input so the policy emits masked_columns; the transform
+    # itself happens on the result rows below.
+    colclass = await mart_attrs.columns_for_mart(schema, table)
+    col_sens = {n: c.sensitivity for n, c in colclass.items()}
     try:
         attrs = await mart_attrs.lookup(schema, table)
     except MartAttrsMissing as miss:
@@ -86,11 +91,12 @@ async def get_mart(schema: str, table: str, request: Request,
                 denied_reason=f"mart_attrs catalog miss: {miss}")
             raise HTTPException(
                 403, "mart not cataloged — refusing to serve under OPA_ENFORCE=true")
-        decision = await opa.decide(user, action="read", resource=mart)
+        decision = await opa.decide(user, action="read", resource=mart,
+                                    columns=col_sens)
     else:
         decision = await opa.decide(
             user, action="read", resource=attrs.subject,
-            attributes=attrs.opa_attributes)
+            attributes=attrs.opa_attributes, columns=col_sens)
 
     if not decision.allow:
         await ops_db.log_gateway_query(
@@ -131,6 +137,14 @@ async def get_mart(schema: str, table: str, request: Request,
             latency_ms=int((time.perf_counter() - t0) * 1000),
             http_status=500, policy_decision="error", denied_reason=str(exc))
         raise HTTPException(500, f"mart query failed: {exc}")
+
+    # Apply the masking obligation to the result (was log-only — the direct
+    # mart read is one of the paths the masking rollout closes).
+    if decision.masked_columns:
+        res["rows"], dropped = masking.apply_masking(
+            res["rows"], colclass, decision.masked_columns)
+        if dropped:
+            res["columns"] = [c for c in res.get("columns", []) if c not in set(dropped)]
 
     await ops_db.log_gateway_query(
         user=user, method="GET", path=f"/api/marts/{mart}",

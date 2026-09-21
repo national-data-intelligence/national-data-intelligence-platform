@@ -57,6 +57,39 @@ seeds:
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [hub_id, region_id]
+  - name: pct_gf_tracer_category
+    description: |
+      Crosswalk from the eLMIS tracer products in scope for Global Fund KPI S8
+      (HIV, TB, malaria) to the handbook's disease and product category, with the
+      basis for each mapping. Reviewable by design. The archive carries no TB
+      tracer and no malaria treatment tracer — only the malaria RDT.
+    columns:
+      - name: product_code
+        tests: [not_null, unique]
+      - name: gf_disease
+        tests:
+          - accepted_values:
+              arguments: { values: ['HIV', 'TB', 'Malaria'] }
+  - name: pct_kpi_definitions
+    description: |
+      The per-KPI contract for PCT: numerator, denominator, formula, grain, source,
+      period, target, exclusions, official reference and limitation. Rows whose
+      source is an existing mart (satp, reporting_timeliness) document it without
+      recomputing it.
+    columns:
+      - name: kpi_code
+        tests: [not_null, unique]
+  - name: pct_policy_parameters
+    description: |
+      Planning parameters the position mart applies, each marked SOURCED or ASSUMPTION with its
+      source. Lead time is an assumption (no lead-time data in the archive); editable.
+    columns:
+      - name: parameter
+        tests: [not_null, unique]
+      - name: basis
+        tests:
+          - accepted_values:
+              arguments: { values: ['SOURCED', 'ASSUMPTION'] }
 
 models:
   - name: mart_supply_region_stock
@@ -407,3 +440,167 @@ models:
         tests:
           - accepted_values:
               arguments: { values: ['stocked_out', 'understocked', 'according_to_plan', 'overstocked'] }
+
+  - name: mart_pct_kpi
+    description: |
+      PCT KPI layer on the Zambia eLMIS archive — long format at base grain (KPI ×
+      month × province × programme | disease/category | band) with numerator and
+      denominator on every row. No pre-aggregated rows: consumers compute
+      sum(numerator) / sum(denominator) under the active filters (region_id =
+      province code = profile region code; programme_id = eLMIS programme code;
+      month_id 'YYYY-MM'). Contracts per KPI: seed pct_kpi_definitions. osa_s8
+      follows the Global Fund KPI Handbook S8 method with eLMIS period-end stock.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [kpi_code, month_id, region_id, programme_id, disease, category]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "numerator <= denominator"
+    columns:
+      - name: kpi_code
+        tests:
+          - not_null
+          - accepted_values:
+              arguments: { values: ['osa_s8', 'stockout_exposure', 'stockout_days_rate', 'mos_band', 'order_fill'] }
+      - name: month_id
+        tests: [not_null]
+      - name: region_id
+        description: eLMIS province zone code (equals the active profile's region code — the geography filter key)
+        tests: [not_null]
+      - name: programme_id
+        description: eLMIS programme code; NULL for osa_s8 (S8 counts a facility once per category across programmes)
+      - name: category
+        description: GF product category (osa_s8) or months-of-stock band (mos_band)
+        tests:
+          - accepted_values:
+              arguments: { values: ['HIV antiretrovirals', 'HIV diagnostics', 'Malaria diagnostics',
+                                    'stocked_out', 'below_eop', 'within_policy', 'over_max'] }
+      - name: numerator
+        tests: [not_null]
+      - name: denominator
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "> 0" }
+      - name: target
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "= 90" }
+              config: { where: "kpi_code = 'osa_s8'" }
+
+  - name: mart_pct_facility_geo
+    description: |
+      PCT facility geography: every eLMIS facility located and labelled by how the
+      point was obtained (coord_basis: source / repaired_lat_sign / repaired_lng_sign
+      / district_facility_mean / province_facility_mean / none). region_id = profile
+      region code (same geography filter as mart_pct_kpi). lat/lng are classified
+      restricted / generalize.
+    columns:
+      - name: facility_code
+        tests: [not_null, unique]
+      - name: region_id
+        tests: [not_null]
+      - name: coord_basis
+        tests:
+          - not_null
+          - accepted_values:
+              arguments: { values: ['source', 'repaired_lat_sign', 'repaired_lng_sign',
+                                    'district_facility_mean', 'province_facility_mean', 'none'] }
+      - name: lat
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "BETWEEN -18.1 AND -8.2 OR lat IS NULL" }
+      - name: lng
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "BETWEEN 21.9 AND 33.8 OR lng IS NULL" }
+
+  - name: mart_pct_demand_month
+    description: |
+      PCT demand base — facility × product × programme × month (weekly-schedule reports
+      collapsed; stock state from the period-end report). adjusted_demand = eLMIS's own
+      normalized_consumption (dispensed where NULL; demand_basis says which);
+      demand_censored = any stockout that month. pipeline_assumed is a labelled planning
+      assumption (receipts are too sparsely recorded to measure it).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [facility_code, product_code, programme_id, month_id]
+    columns:
+      - name: region_id
+        tests: [not_null]
+      - name: demand_basis
+        tests:
+          - not_null
+          - accepted_values:
+              arguments: { values: ['normalized_consumption', 'dispensed_fallback'] }
+      - name: approved_capped
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "<= calculated_order OR approved_capped IS NULL" }
+
+  - name: mart_pct_position
+    description: |
+      PCT projected position — facility × tracer product × programme at the anchor month, on eLMIS AMC
+      (demand_basis = elmis_amc). Explicit policy per row (max / EOP from facility type; lead time and
+      review period from pct_policy_parameters). Replenishment excluding (primary) and including the
+      assumed pipeline; district redistribution; flags for missing inputs. No monetary value (eLMIS price
+      semantics unverifiable).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [facility_code, product_code, programme_id]
+    columns:
+      - name: risk_band
+        tests:
+          - not_null
+          - accepted_values:
+              arguments: { values: ['stocked_out', 'below_eop', 'within_policy', 'over_max', 'no_recent_demand', 'unknown'] }
+      - name: replenishment_units_excl_pipeline
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: ">= 0 OR replenishment_units_excl_pipeline IS NULL" }
+      - name: replenishment_units_incl_pipeline
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "<= replenishment_units_excl_pipeline OR replenishment_units_incl_pipeline IS NULL" }
+
+  - name: mart_pct_forecast
+    description: |
+      PCT demand forecast (H1) per facility × tracer product from the latest contract-conforming run of
+      elmis_consumption_forecast (P10/P50/P90, demand class, method), with provenance (model_version,
+      predict run, MLflow run of the version's training) and geography from mart_pct_facility_geo.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [facility_code, product_code]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "p10 <= p50 AND p50 <= p90 AND p10 >= 0"
+    columns:
+      - name: horizon
+        tests:
+          - accepted_values:
+              arguments: { values: [1] }
+      - name: mlflow_run_id
+        tests: [not_null]
+      - name: demand_class
+        tests:
+          - accepted_values:
+              arguments: { values: ['smooth', 'erratic', 'intermittent', 'lumpy'] }
+  - name: mart_pct_forecast_accuracy
+    description: |
+      Historical BACKTEST accuracy of the model version behind the current forecast (fold ledger written at
+      training into ops_ml.model_performance): split × measure × subject (selected portfolio, each comparator
+      incl. eLMIS AMC, each demand class). Never observed accuracy for the forecast months.
+    columns:
+      - name: split
+        tests:
+          - accepted_values:
+              arguments: { values: ['tuning', 'holdout'] }
+      - name: subject_type
+        tests:
+          - accepted_values:
+              arguments: { values: ['portfolio', 'method', 'demand_class'] }
+

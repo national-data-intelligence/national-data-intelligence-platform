@@ -178,7 +178,7 @@ Diseases with no tracked countermeasure (deliberately unmapped): MEN, RELF — s
 
 ### mart_data_quality
 
-Cross-source "source pulse" — data-quality signals at ONE grain: source × period × region × woreda, unioned across ALL SIX ingested sources (DHIS2, HCMIS, mBrana, EthioEMR, MFR, EWARS/Climate). Sources report at their native geographic + temporal depth, so period_id and region_id are NULL where a source carries no such dimension (e.g. MFR is point-in-time reference data → period_id NULL; HCMIS/mBrana report at national grain → region_id NULL). completeness_pct/validity_pct are NULL where a source has no honest signal for that dimension yet; timeliness_pct is NULL until a reporting-deadline contract lands. Source labels are clean, human-facing names (the raw '!'-prefixed record_source convention stays in the vault). Adapters must tolerate NULL dimensions. Consumed by /api/dq (source pulse + scorecard).
+Cross-source "source pulse" — data-quality signals at ONE grain: source × period × region × woreda, unioned across the six ingested national sources (DHIS2, HCMIS, mBrana, EthioEMR, MFR, EWARS/Climate) plus the eLMIS historical archive. Sources report at their native geographic + temporal depth, so period_id and region_id are NULL where a source carries no such dimension (e.g. MFR is point-in-time reference data → period_id NULL; HCMIS/mBrana report at national grain → region_id NULL). completeness_pct/validity_pct are NULL where a source has no honest signal for that dimension yet. timeliness_pct is MEASURED for eLMIS-hist — the one source carrying real per-requisition submission times, rolled up from mart_elmis_hist_timeliness rather than recomputed — and NULL for the six that land as bulk snapshots, where a "% on time" built from the load stamp would measure the loader rather than the reporter. eLMIS-hist is excluded from the public projection (mart_public_data_quality): it is a foreign archive and does not belong on a national transparency scorecard. Source labels are clean, human-facing names (the raw '!'-prefixed record_source convention stays in the vault). Adapters must tolerate NULL dimensions. Consumed by /api/dq (source pulse + scorecard).
 
 ### mart_health_workforce
 
@@ -302,7 +302,7 @@ eLMIS v2 history — "period availability" (the OSA proxy; never labelled OSA) p
 
 ### mart_elmis_hist_timeliness
 
-eLMIS v2 history — requisition timeliness (on time = created ≤ period end + 15 d) per month × programme; median lag. Σ requisitions = 73,926 = source.
+eLMIS v2 history — requisition timeliness (on time = created ≤ period end + the governed deadline from the reporting_deadlines seed, 15 d for this source) per month × programme; median lag. Σ requisitions = 73,926 = source; 79.8% on time, 9-day median lag. The warehouse's single definition of on-time: mart_data_quality reads this model rather than recomputing.
 
 ### mart_elmis_hist_satp
 

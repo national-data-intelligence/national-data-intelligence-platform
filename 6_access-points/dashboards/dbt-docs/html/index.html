@@ -36,8 +36,8 @@
       <p class="muted">The landing zone — unmodelled source extracts — lives in object storage,
          outside dbt's model graph, so it isn't shown here.</p>
     </div>
-    <a class="lake-link" href="https://minio.127.0.0.1.nip.io/" target="_blank" rel="noreferrer">
-      Browse the lake in MinIO →
+    <a class="lake-link" id="lake-link" href="#" target="_blank" rel="noreferrer">
+      Browse the lake (SeaweedFS) →
     </a>
   </div>
 
@@ -46,6 +46,10 @@
 
 <script>
 (async () => {
+  // The lake console lives at seaweedfs.<same host base as this page>, behind
+  // its SSO gate — derived at runtime so the link is right on any deployment.
+  const lakeLink = document.getElementById('lake-link');
+  if (lakeLink) lakeLink.href = `https://seaweedfs.${location.hostname.split('.').slice(1).join('.')}/`;
   const fmt = (iso) => { if (!iso) return '—'; const d = new Date(iso); return isNaN(d.getTime()) ? iso : d.toLocaleString(); };
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 

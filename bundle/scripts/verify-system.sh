@@ -20,6 +20,11 @@
 #      bundled mc binary is executable
 #   8. no retired names outside _archive (1_sources, fake-fayda image refs,
 #      1_infrastructure/{scripts,docker}) — replacement-means-removal guard
+#   9. live regression tests that used to sit unrun: the masking negative path
+#      (a low-trust identity gets GENERALIZED coordinates on both the Control
+#      Tower feed and the generic mart reader, an analyst with the reveal grant
+#      gets exact ones, a partner role is denied) and the public
+#      access-request surface (duplicate guard, validation, identity honesty)
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS=nhdw
@@ -71,9 +76,26 @@ prov=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
 [ "${prov:-0}" -ge 1 ] && pass "provenance column live (managed_by classes: $prov)" \
                        || fail "provenance managed_by missing on ops_identity.user"
 
-# 5. gateway + fayda OIDC
-curl -sk --max-time 5 https://gateway.${NHDW_HOSTBASE}/health | grep -q '"ok"' \
-  && pass "gateway healthy" || fail "gateway health check failed"
+# MDM: the matcher must have filled the steward candidate queue (side-lane job
+# after dbt-marts; the live corpus yields ~990 facility candidates)
+ncand=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_ops -At -c \
+  "SELECT count(*) FROM ops_governance.mdm_match_candidate" 2>/dev/null)
+[ "${ncand:-0}" -gt 0 ] && pass "MDM candidate queue populated ($ncand)" \
+                        || fail "MDM candidate queue empty (matcher never ran?)"
+
+# 5. gateway + fayda OIDC. The gateway probe retries for up to a minute: a
+#    just-restarted gateway needs a few seconds before ingress endpoints
+#    repoint, and the CI verifies right after a rollout — fail only if it
+#    STAYS down.
+gw_ok=0
+for _ in $(seq 12); do
+  if curl -sk --max-time 5 "https://gateway.${NHDW_HOSTBASE}/health" | grep -q '"ok"'; then
+    gw_ok=1; break
+  fi
+  sleep 5
+done
+[ "$gw_ok" = 1 ] && pass "gateway healthy" || fail "gateway health check failed"
 curl -s --max-time 5 http://localhost:8096/.well-known/openid-configuration | grep -q issuer \
   && pass "fayda-replica OIDC discovery on :8096" || fail "fayda-replica OIDC discovery failed"
 
@@ -114,6 +136,16 @@ if [ -n "$usr_cols" ]; then
     && fail "processed mbrana/mflowussd_users still carries PII columns" \
     || pass "processed mbrana/mflowussd_users is PII-stripped"
 fi
+
+# 6e. data-quality governance lane (Track B batch 2 — landed 2026-09-20)
+thr=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_ops -At -c "SELECT count(*) FROM ops_governance.dq_threshold" 2>/dev/null)
+[ "${thr:-0}" -ge 11 ] && pass "dq_threshold seeded (${thr} rows)" || fail "dq_threshold has ${thr:-0} rows (expected ≥11 — init 38 not applied?)"
+dqe=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
+  psql -U vault_admin -d nhdw_ops -At -c "SELECT count(*) FROM ops_governance.dq_flag_event" 2>/dev/null)
+[ -n "${dqe:-}" ] && pass "dq_flag_event history table present (${dqe} events)" || fail "dq_flag_event missing (init 38 not applied?)"
+dqdag=$(kubectl -n "$NS" exec deploy/airflow -- airflow dags list 2>/dev/null | grep -c "dq_detection")
+[ "${dqdag:-0}" -ge 1 ] && pass "airflow DAG dq_detection registered" || fail "airflow DAG dq_detection missing"
 
 # 6c. ML tier — registry, deployments, latest-run predictions, airflow DAG
 # The X-Mock-* demo-impersonation channel is SECRET-GATED (auth.py fail-secure):
@@ -164,7 +196,23 @@ cmodel=$(kubectl -n "$NS" exec postgres-vault-0 -- env PGPASSWORD="$PGPW" \
 # 7. pack/unpack surface
 bash -n "$REPO/bundle/scripts/pack.sh" && bash -n "$REPO/bundle/scripts/restore-state.sh" \
   && pass "pack.sh + restore-state.sh parse" || fail "pack/restore syntax error"
-[ -x "$REPO/bundle/bin/mc" ] && pass "bundled mc binary present" || fail "bundle/bin/mc missing"
+# mc is a DERIVED artifact, not a committed one: bundle/bin/ is gitignored and
+# lib/objstore.sh materialises mc on first use (bundled binary → extract from
+# the cached minio/mc image → network as the loud last resort). So asserting
+# the binary exists fails every fresh checkout while the system is healthy.
+# What actually matters is that an AIRGAPPED boot can still get it — i.e. at
+# least one OFFLINE source is present.
+MC_IMG="${OBJSTORE_MC_IMAGE:-minio/mc:RELEASE.2025-04-08T15-39-49Z}"
+MC_TAR="$REPO/bundle/images/$(echo "$MC_IMG" | tr '/:' '__').tar"
+if [ -x "$REPO/bundle/bin/mc" ]; then
+  pass "mc available offline (bundled binary)"
+elif [ -f "$MC_TAR" ]; then
+  pass "mc available offline (cached image tar)"
+elif command -v docker >/dev/null 2>&1 && docker image inspect "$MC_IMG" >/dev/null 2>&1; then
+  pass "mc available offline (image in the local store)"
+else
+  fail "mc has NO offline source — an airgapped boot would have to download it (cache-images.sh ships $MC_IMG)"
+fi
 
 # 8. replacement-means-removal guard
 stale=$(grep -rIl --exclude-dir='.*' "1_sources/\|nhdw/fake-fayda\|1_infrastructure/scripts/\|1_infrastructure/docker/" "$REPO" \
@@ -172,6 +220,33 @@ stale=$(grep -rIl --exclude-dir='.*' "1_sources/\|nhdw/fake-fayda\|1_infrastruct
   | grep -v "_archive/" | grep -v "k8s-deployment-changelog" | grep -v "bundle/state/" \
   | grep -v "verify-system.sh" || true)   # this script necessarily contains the patterns
 [ -z "$stale" ] && pass "no retired names outside _archive" || fail "retired names still referenced: $stale"
+
+# 9. masking negative path — the ONE check that proves column masking
+# transforms rather than merely logging. It lived as a standalone script that
+# nothing ran, which is how a fail-open on the Control Tower GPS survived a
+# deploy: the policy self-tests passed because the policy was right, and no
+# gate ever asked what a low-trust caller actually received.
+run_live_test() {   # $1 = label, $2 = script path
+  if [ ! -f "$2" ]; then fail "$1: test script missing at $2"; return; fi
+  local out rc
+  out="$(NHDW_HOSTBASE="$NHDW_HOSTBASE" NS="$NS" bash "$2" 2>&1)"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    pass "$1"
+  else
+    fail "$1 FAILED:"
+    printf '%s\n' "$out" | sed 's/^/      /'
+  fi
+}
+
+run_live_test "masking negative path enforced on both read paths" \
+              "$REPO/6_access-points/api/nhdw-gateway/tests/test_masking_e2e.sh"
+
+# The public access-request surface is the one anonymous WRITE the system
+# exposes; its duplicate guard, schema validation and honest-identity storage
+# are security behaviour, not cosmetics. This test cleans up its own rows.
+run_live_test "public access-request surface (duplicate guard · validation · identity honesty)" \
+              "$REPO/6_access-points/api/nhdw-gateway/tests/test_public_access_request.sh"
 
 echo
 if [ "$FAIL" -ne 0 ]; then echo "== verify-system: FAILURES above =="; exit 1; fi

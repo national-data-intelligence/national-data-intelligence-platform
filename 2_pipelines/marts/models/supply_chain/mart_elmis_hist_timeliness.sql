@@ -2,8 +2,16 @@
     mart_elmis_hist_timeliness — facility reporting timeliness per month ×
     programme (legacy eLMIS v2 history).
 
-    A requisition is "on time" when created within 15 days of its reporting
-    period's end (P1 baseline: median lag 9 days, 79.8% ≤ 15d nationally).
+    A requisition is "on time" when created within the governed deadline of
+    its reporting period's end — 15 days, read from the reporting_deadlines
+    seed rather than hardcoded here, so the deadline is a governed contract a
+    steward can change in one place. The seed's eLMIS row carries 0 grace
+    hours precisely to keep this model's P1 baseline exact: median lag 9 days,
+    79.8% ≤ 15d nationally.
+
+    mart_data_quality reads THIS model for its eLMIS timeliness rather than
+    recomputing — one definition of on-time in the warehouse, not two.
+
     Grain month × programme (~140 rows).
 */
 {{ config(materialized='table') }}
@@ -14,10 +22,10 @@ SELECT
     prog.name                                       AS programme_name,
     count(*)                                        AS requisitions,
     count(*) FILTER (WHERE rs.requisition_created_at::timestamp
-                           <= per.period_end::timestamp + interval '15 days')
+                           <= per.period_end::timestamp + dl.deadline)
                                                     AS on_time_requisitions,
     round(100.0 * count(*) FILTER (WHERE rs.requisition_created_at::timestamp
-                           <= per.period_end::timestamp + interval '15 days')
+                           <= per.period_end::timestamp + dl.deadline)
           / NULLIF(count(*), 0), 1)                 AS on_time_pct,
     round(percentile_cont(0.5) WITHIN GROUP (ORDER BY
         EXTRACT(EPOCH FROM rs.requisition_created_at::timestamp
@@ -30,5 +38,12 @@ JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_programme_current') }} p
     USING (hk_elmis_hist_programme)
 JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_period_current') }} per
     USING (hk_elmis_hist_period)
+-- one row: the governed deadline for this source. An inner join on purpose —
+-- if the seed row ever goes missing the model fails loudly instead of
+-- quietly measuring against a different rule.
+CROSS JOIN (SELECT MAKE_INTERVAL(days  => deadline_offset_days,
+                                 hours => grace_hours) AS deadline
+            FROM {{ ref('reporting_deadlines') }}
+            WHERE source_key = 'eLMIS-hist') dl
 WHERE rs.requisition_created_at IS NOT NULL
 GROUP BY 1, 2, 3

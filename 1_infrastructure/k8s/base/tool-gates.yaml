@@ -193,3 +193,48 @@ metadata: { name: headlamp-gate, namespace: nhdw, labels: { app: headlamp-gate }
 spec:
   selector: { app: headlamp-gate }
   ports: [ { port: 80, targetPort: http, name: http } ]
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# seaweedfs-gate — fronts the SeaweedFS filer's built-in file browser, the lake
+# console (SeaweedFS ships no separate console app; the filer UI at :8888 IS
+# it). The UI is WRITE-CAPABLE (upload/delete), so the role set is tighter than
+# the read-only observability gates: platform admins only, no R-OPS-SEC/ENG.
+# Replaces the MinIO console retired with MinIO on 2026-09-09.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: seaweedfs-gate, namespace: nhdw, labels: { app: seaweedfs-gate, tier: tool-sso } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: seaweedfs-gate } }
+  template:
+    metadata: { labels: { app: seaweedfs-gate, tier: tool-sso } }
+    spec:
+      containers:
+        - name: gate
+          image: nhdw-registry:5500/nhdw/tool-gate:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports: [ { containerPort: 80, name: http } ]
+          env:
+            - { name: TOOL_NAME,            value: "seaweedfs" }
+            - { name: UPSTREAM_URL,         value: "http://seaweedfs-filer.nhdw.svc.cluster.local:8888" }
+            - { name: ALLOWED_ROLES,        value: "R-OPS-ADM,R-SUPER" }
+            - { name: OIDC_REALMS,          value: "privileged-ops,moh-staff" }
+            - { name: OIDC_CLIENT_ID,       value: "seaweedfs" }
+            - name: OIDC_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: seaweedfs-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - { name: OIDC_REDIRECT_URI,    value: "https://seaweedfs.127.0.0.1.nip.io/oauth2gate/callback" }
+            - { name: APP_BASE,             value: "https://seaweedfs.127.0.0.1.nip.io" }
+            - { name: KEYCLOAK_BASE,        value: "http://keycloak.nhdw.svc.cluster.local:8080" }
+            - { name: KEYCLOAK_PUBLIC_BASE, value: "https://keycloak.127.0.0.1.nip.io" }
+            - { name: LOKI_URL,             value: "http://loki.nhdw.svc.cluster.local:3100" }
+            - name: SESSION_SECRET
+              valueFrom: { secretKeyRef: { name: seaweedfs-gate-secrets, key: SESSION_SECRET, optional: true } }
+          readinessProbe: { httpGet: { path: /oauth2gate/health, port: http }, initialDelaySeconds: 5, periodSeconds: 10 }
+          livenessProbe:  { httpGet: { path: /oauth2gate/health, port: http }, initialDelaySeconds: 10, periodSeconds: 20 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: seaweedfs-gate, namespace: nhdw, labels: { app: seaweedfs-gate } }
+spec:
+  selector: { app: seaweedfs-gate }
+  ports: [ { port: 80, targetPort: http, name: http } ]

@@ -48,6 +48,7 @@ spec:
             - { name: KEYCLOAK_DB_PASSWORD,    valueFrom: { secretKeyRef: { name: keycloak-secrets,       key: KC_DB_PASSWORD          } } }
             - { name: AIRFLOW_DB_PASSWORD,     valueFrom: { secretKeyRef: { name: airflow-secrets,        key: AIRFLOW_DB_PASSWORD     } } }
             - { name: SUPERSET_DB_PASSWORD,    valueFrom: { secretKeyRef: { name: superset-secrets,       key: DB_PASSWORD, optional: true } } }
+            - { name: OPENMETADATA_DB_PASSWORD, valueFrom: { secretKeyRef: { name: openmetadata-secrets,  key: DB_PASSWORD, optional: true } } }
           volumeMounts:
             - { name: data, mountPath: /var/lib/postgresql/data }
             - { name: initdb, mountPath: /docker-entrypoint-initdb.d }

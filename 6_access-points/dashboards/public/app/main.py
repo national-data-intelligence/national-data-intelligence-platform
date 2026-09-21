@@ -410,6 +410,50 @@ async def proxy_widget_data(widget_id: str) -> JSONResponse:
                         status_code=r.status_code)
 
 
+# ── country profile ──────────────────────────────────────────────────────────
+# The masthead, the map and the geography vocabulary are DATA now, not literals
+# in the bundle. Proxied same-origin like everything else so the browser needs no
+# CORS and no second host. Every one of these degrades to an empty object rather
+# than an error: a public page with the bundled English masthead is fine, a
+# public page that 502s is not.
+@app.get("/api/proxy/profile")
+async def proxy_profile() -> JSONResponse:
+    from app import marts as _m
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as c:
+            r = await c.get(f"{_m.GATEWAY_URL}/api/profile")
+        return JSONResponse(r.json(), status_code=r.status_code)
+    except Exception as e:                                       # noqa: BLE001
+        return JSONResponse({"_unavailable": str(e)}, status_code=200)
+
+
+@app.get("/api/proxy/profile/copy/{surface}")
+async def proxy_profile_copy(surface: str) -> JSONResponse:
+    from app import marts as _m
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as c:
+            r = await c.get(f"{_m.GATEWAY_URL}/api/profile/copy/{surface}")
+        return JSONResponse(r.json(), status_code=r.status_code)
+    except Exception as e:                                       # noqa: BLE001
+        return JSONResponse({"_unavailable": str(e)}, status_code=200)
+
+
+@app.get("/api/proxy/profile/geo/{name}")
+async def proxy_profile_geo(name: str) -> Response:
+    """Boundary geometry. Streamed through rather than redirected so the browser
+    sees one origin, and cache headers are preserved so the 240 KB world mask is
+    fetched once per profile."""
+    from app import marts as _m
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as c:
+            r = await c.get(f"{_m.GATEWAY_URL}/api/profile/geo/{name}")
+    except httpx.RequestError as e:
+        return JSONResponse({"detail": f"gateway unreachable: {e}"}, status_code=502)
+    return Response(content=r.content, status_code=r.status_code,
+                    media_type=r.headers.get("content-type", "application/geo+json"),
+                    headers={"Cache-Control": r.headers.get("Cache-Control", "no-store")})
+
+
 @app.get("/api/proxy/articles")
 async def proxy_articles(category: str | None = None, limit: int = 50) -> JSONResponse:
     """Anonymous newsroom/articles feed — proxied same-origin to the gateway's

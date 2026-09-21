@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { regionChart, trendChart, type ChartData } from '../../hooks/charts';
 import { useWidgetData, type WidgetData, type WidgetRow } from '../../hooks/widgetData';
+import { useProfile } from '../../hooks/useProfile';
 import type { PublicWidget } from '../../runtime/types';
 
 type Tone = 'good' | 'watch' | 'alert' | 'info';
@@ -139,10 +140,14 @@ function adaptSupply(d: WidgetData | null): Supply | null {
   };
 }
 
-// ── Offline fallback — used ONLY when the gateway returns nothing. Values are
-// REAL published figures (Ethiopia DHS 2024-25 key indicators; TB/ART/completeness
-// from routine-programme estimates), NOT fabricated deltas — honesty guardrail:
-// a fallback must never invent month-on-month movement the warehouse hasn't measured.
+// ── Offline fallback — used ONLY when the gateway returns nothing.
+//
+// These are REAL published figures, not fabricated deltas: a fallback must never
+// invent month-on-month movement the warehouse has not measured. Which is also
+// why the ACTIVE PROFILE supplies them now — a Zambia deployment quietly falling
+// back to Ethiopian DHS numbers would be a worse failure than showing nothing.
+// The array below is the last resort if the profile carries none, and is the
+// same Ethiopia DHS 2024-25 set that shipped before profiles existed.
 const KPIS_FALLBACK: KPI[] = [
   { key: 'PENTA3-COV', kind: 'coverage', order: 1, tone: 'alert', lbl: 'Penta3 coverage', val: '40%', deltaTrend: 'flat', deltaText: 'EDHS 2024-25', target: 'HSDIP target 95%' },
   { key: 'ANC4-COV', kind: 'coverage', order: 2, tone: 'alert', lbl: 'ANC4 coverage', val: '53%', deltaTrend: 'up', deltaText: 'EDHS 2024-25', target: 'HSDIP target 81%' },
@@ -172,13 +177,21 @@ function Tile({ k }: { k: KPI }) {
 }
 
 function PublicInsights() {
+  const { profile, copy } = useProfile();
+  // "regional" in Ethiopia, "provincial" elsewhere — the admin-1 label, lowered.
+  const levelLabel = (profile.geography?.levels?.find(l => l.code === 'admin1')?.singular
+                      ?? 'regional').toLowerCase();
   const regionRef = useRef<HTMLDivElement>(null);
   const trendRef = useRef<HTMLDivElement>(null);
   const insightsData = useWidgetData('pub-insights');
   const regionData = useWidgetData('pub-region');
   const supplyData = useWidgetData('pub-supply');
 
-  const kpis = useMemo(() => adaptKpis(insightsData) ?? KPIS_FALLBACK, [insightsData]);
+  const profileKpis = copy?.insights?.fallback_kpis as KPI[] | undefined;
+  const kpis = useMemo(
+    () => adaptKpis(insightsData) ?? (profileKpis?.length ? profileKpis : KPIS_FALLBACK),
+    [insightsData, profileKpis],
+  );
   const trendLive = useMemo(() => adaptTrend(insightsData), [insightsData]);
   const regionLive = useMemo(() => adaptRegion(regionData), [regionData]);
   const supply = useMemo(() => adaptSupply(supplyData), [supplyData]);
@@ -207,7 +220,9 @@ function PublicInsights() {
         <div>
           <p className="ins-eyebrow"><span className="ins-rule"></span> Health of the nation, in numbers</p>
           <h2 className="ins-h2">Public insights</h2>
-          <p className="ins-sub">National coverage figures from the 2024-25 Ethiopia DHS, with programme indicators from the warehouse marts. Aggregated to national and regional level, k-anonymity ≥ 5.</p>
+          <p className="ins-sub">{copy?.insights?.section_sub
+            ?? 'National coverage figures from the latest Demographic and Health Survey, with programme indicators from the warehouse marts.'}
+            {' '}Aggregated to national and {levelLabel} level, k-anonymity ≥ 5.</p>
         </div>
       </div>
 
