@@ -25,6 +25,7 @@ fix up its column list.
 from __future__ import annotations
 
 import datetime as _dt
+import decimal as _decimal
 import hashlib
 import hmac
 import logging
@@ -52,7 +53,12 @@ def _generalize(value: Any):
         return None
     if isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)):
+    # Decimal belongs here explicitly: Trino returns every NUMERIC mart column
+    # as decimal.Decimal, which is neither int nor float. Without it the
+    # generalize class fell through to "could not generalize" and dropped the
+    # column instead of coarsening it — i.e. generalize was dead for exactly
+    # the columns it exists to protect (GPS coordinates).
+    if isinstance(value, (int, float, _decimal.Decimal)):
         return round(float(value), 1)
     if isinstance(value, _dt.datetime):
         return value.date().replace(day=1).isoformat()

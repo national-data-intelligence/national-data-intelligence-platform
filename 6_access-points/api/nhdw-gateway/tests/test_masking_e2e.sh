@@ -68,11 +68,19 @@ case "$sup" in
   *) fail "super-user coordinates unexpected ($sup)" ;;
 esac
 
+# The classification says GENERALIZE, so the correct answer is a coarsened
+# number (one decimal, ~11 km) — not an absent one. A dropped column is
+# fail-closed and leaks nothing, but it is not what the policy asked for, and
+# accepting it here would hide a dead generalize class. It did once: Trino
+# returns numerics as Decimal, a type _generalize did not recognise, so it
+# reported "cannot generalize" and deleted the column on every masked read.
 low="$(ct_lat R-CONS-ANA low 3)"
 case "$low" in
   HTTP-*|NO-NODES) fail "low-trust analyst could not read the CT feed ($low)" ;;
   *.*[0-9][0-9][0-9]*) fail "LOW-TRUST IDENTITY SAW EXACT COORDINATES — masking not applied ($low)" ;;
-  *) pass "low-trust analyst sees GENERALIZED coordinates ($low vs $ana)" ;;
+  None|null|"") fail "low-trust coordinate was DROPPED, not generalized — generalize is not working ($low)" ;;
+  *.[0-9]) pass "low-trust analyst sees GENERALIZED coordinates ($low vs $ana)" ;;
+  *) fail "low-trust coordinate is neither exact nor 1-decimal generalized ($low)" ;;
 esac
 
 prt="$(ct_lat R-CONS-PRT high 4)"
@@ -109,7 +117,9 @@ m_low="$(mart_lat R-CONS-ANA low 2)"
 case "$m_low" in
   HTTP-*|NO-ROWS) fail "low-trust analyst could not read mart_ct_nodes ($m_low)" ;;
   *.*[0-9][0-9][0-9]*) fail "MART READER SERVED EXACT COORDINATES TO A LOW-TRUST IDENTITY ($m_low)" ;;
-  *) pass "mart reader: low-trust sees GENERALIZED coordinates ($m_low vs $m_ana)" ;;
+  None|null|"") fail "mart reader: low-trust coordinate DROPPED, not generalized ($m_low)" ;;
+  *.[0-9]) pass "mart reader: low-trust sees GENERALIZED coordinates ($m_low vs $m_ana)" ;;
+  *) fail "mart reader: low-trust coordinate neither exact nor generalized ($m_low)" ;;
 esac
 
 anon="$(curl -sk --max-time 20 -o /dev/null -w '%{http_code}' "$GW/api/ct/plan")"

@@ -15,6 +15,7 @@ Run:  python3 tests/test_masking.py   (from the gateway root)
 from __future__ import annotations
 
 import datetime
+import decimal
 import os
 import sys
 
@@ -85,6 +86,21 @@ def main() -> int:
     e, _ = m.apply_masking([{"dt": datetime.date(2026, 9, 20)}],
                            {"dt": ColumnClass("dt", "restricted", "generalize", False)}, ["dt"])
     check("generalize truncates dates to month", e[0]["dt"] == "2026-09-01")
+
+    # Trino hands back every NUMERIC column as Decimal. Missing that type made
+    # generalize drop the column instead of coarsening it, which is safe but
+    # not what the classification asks for — and it silently disabled the
+    # class on every numeric mart column in the warehouse.
+    ccd = {"lat": ColumnClass("lat", "restricted", "generalize", False)}
+    f, drp = m.apply_masking([{"lat": decimal.Decimal("11.7900")},
+                              {"lat": decimal.Decimal("9.6000")}], ccd, ["lat"])
+    check("generalize coarsens Decimal rather than dropping it",
+          drp == [] and f[0]["lat"] == 11.8 and f[1]["lat"] == 9.6)
+
+    g, drp = m.apply_masking([{"lat": decimal.Decimal("11.79")}, {"lat": None}],
+                             ccd, ["lat"])
+    check("a NULL neighbour does not poison a generalizable column",
+          drp == [] and g[0]["lat"] == 11.8 and g[1]["lat"] is None)
 
     # ── the LOOKUP key, not the transform ────────────────────────────────
     # Masking is a denylist, so columns_for_mart returning {} means "nothing
