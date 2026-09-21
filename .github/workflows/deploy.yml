@@ -42,6 +42,11 @@ concurrency:
   # redeploy both drive helm against the same release; running them at once
   # races two `helm upgrade`s and can leave the release wedged mid-transaction.
   # Queue instead of cancel — an interrupted deploy is worse than a slow one.
+  #
+  # Caveat worth knowing: GitHub keeps at most ONE pending run per group, so a
+  # third arrival cancels the one already waiting. Pushing while a manual
+  # scope=all dispatch is queued will cancel that dispatch — re-trigger it after
+  # the in-flight run finishes rather than assuming it ran.
   group: nhdw-cluster
   cancel-in-progress: false
 
