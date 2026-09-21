@@ -44,6 +44,20 @@ esac; done
 # Ingestors run in parallel (independent sources → disjoint lake prefixes; hcmiswdm
 # + mbrana share one SQL Server but are read-only). dbt stages are strictly ordered.
 INGEST_JOBS=(dhis2-ingest-metadata dhis2-ingest-dvs climate-ingest ethioemr-ingest hcmiswdm-ingest mbrana-ingest mfr-ingest elmis-hist-ingest)   # elmis-hist: OpenLMIS family lane 2 (openlmis-ingest = lane 1, suspended)
+
+# Sources the active profile does not provide are dropped from EVERY stage that
+# references them — the ingestor list here, and the preflight probe below — from
+# one skip set, so they cannot disagree. climate has no non-Ethiopian data, so a
+# non-default profile skips it unless NHDW_SKIP_SOURCES says otherwise.
+SKIP_SRC="${NHDW_SKIP_SOURCES:-}"
+if [ -z "$SKIP_SRC" ] && [ "${NHDW_PROFILE:-et-v3}" != "et-v3" ]; then SKIP_SRC="climate"; fi
+if [ -n "$SKIP_SRC" ]; then
+  _keep=(); for j in "${INGEST_JOBS[@]}"; do
+    _drop=0; for s in $SKIP_SRC; do case "$j" in ${s}-ingest*) _drop=1;; esac; done
+    [ "$_drop" = 0 ] && _keep+=("$j")
+  done; INGEST_JOBS=("${_keep[@]}")
+  echo "▸ profile ${NHDW_PROFILE:-et-v3}: skipping source(s) [$SKIP_SRC] — ${#INGEST_JOBS[@]} ingestors remain"
+fi
 # mdm-matcher rides after dbt-marts: it reads the freshly built resolution view
 # and (re)fills the steward candidate queue — side-lane, never blocks the marts.
 PIPELINE=(ch-raw-views processed-zone dbt-staging bridge-sync dbt-vault dbt-marts mdm-matcher publish-datasets)
@@ -116,8 +130,6 @@ if [ "$INGEST" = 1 ]; then
     # Sources are host containers slow to accept connections — a fresh DHIS2 /
     # SQL Server is not listening the instant docker reports up, and a country
     # switch that just recreated them widens that window. Retry with backoff.
-    SKIP_SRC="${NHDW_SKIP_SOURCES:-}"
-    if [ -z "$SKIP_SRC" ] && [ "${NHDW_PROFILE:-et-v3}" != "et-v3" ]; then SKIP_SRC="climate"; fi
     [ -n "$SKIP_SRC" ] && echo "  (preflight skips: $SKIP_SRC)"
     PF_TRIES="${NHDW_PREFLIGHT_TRIES:-20}"; pf_ok=0
     for pf_i in $(seq 1 "$PF_TRIES"); do
