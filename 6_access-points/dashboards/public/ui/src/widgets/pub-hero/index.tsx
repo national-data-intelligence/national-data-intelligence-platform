@@ -7,14 +7,29 @@
 import { useEffect, useRef } from 'react';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
 import { heroGlobe } from '../../hooks/heroGlobe';
+import { useProfile } from '../../hooks/useProfile';
 
 function Hero({ host }: { host: PublicHost }) {
   const { setPage } = host;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { profile, copy } = useProfile();
+  const t = copy.hero;
+  const facts = profile.geo_facts;
+  const started = useRef(false);
 
+  // Start the globe once the profile has resolved, so it draws the right
+  // country the first time rather than drawing Ethiopia and correcting itself.
+  // `started` guards against the profile object changing identity on re-render;
+  // the globe owns a RAF loop and must never be mounted twice on one canvas.
   useEffect(() => {
-    if (canvasRef.current) heroGlobe(canvasRef.current);
-  }, []);
+    if (!canvasRef.current || started.current) return;
+    started.current = true;
+    heroGlobe(canvasRef.current, {
+      bbox: facts?.bbox,
+      centroid: facts?.centroid,
+      homeGeo: 'admin1.geojson',
+    });
+  }, [facts?.bbox, facts?.centroid]);
 
   return (
     <section className="hero">
@@ -39,12 +54,12 @@ function Hero({ host }: { host: PublicHost }) {
       <div className="hero-strip hero-strip--top">
         <div className="hero-strip-inner">
           <span className="hs-lhs">
-            <span className="hs-key">Vol. 01</span>
+            <span className="hs-key">{t.strip_volume}</span>
             <span className="hs-sep">/</span>
-            <span className="hs-key">Public Series</span>
+            <span className="hs-key">{t.strip_series}</span>
           </span>
           <span className="hs-rhs">
-            <span>Federal Ministry of Health · የጤና ሚኒስቴር</span>
+            <span>{t.strip_owner}</span>
           </span>
         </div>
       </div>
@@ -52,34 +67,31 @@ function Hero({ host }: { host: PublicHost }) {
       <div className="hero-inner">
         <p className="hero-eyebrow">
           <span className="hero-rule" aria-hidden={true}></span>
-          <span>Public health information service</span>
+          <span>{t.eyebrow}</span>
         </p>
 
         <h1 className="hero-h1">
-          <span>Ethiopia's health data,</span> <span className="h1-accent">in one place.</span>
+          <span>{t.headline_lead}</span> <span className="h1-accent">{t.headline_accent}</span>
         </h1>
-        <p className="hero-h1-am" lang="am">የብሔራዊ የጤና መረጃ ማከማቻ</p>
+        {t.headline_native
+          ? <p className="hero-h1-am" lang={profile.country?.native?.lang || undefined}>{t.headline_native}</p>
+          : null}
 
-        <p className="hero-lede">
-          A single trusted entrance to dashboards, open data, and the analytic consoles
-          that power public-health decisions, from a national bulletin down to a single
-          woreda in any of the 14&nbsp;regions.
-        </p>
+        <p className="hero-lede">{t.lede}</p>
 
         {/* Trust ribbon — the governance posture is the credibility, not fine print. */}
-        <p className="hero-trust"
-           title="Aggregate and privacy-protected, k-anonymity at least 5, sourced from national health systems">
+        <p className="hero-trust" title={t.trust_title}>
           <svg className="ico ico-sm"><use href="#i-shield-check"/></svg>
-          Privacy-protected national health data
+          {t.trust}
         </p>
 
         <div className="hero-actions">
           <button className="btn-cta-primary" onClick={() => setPage('data')}>
-            Open the data catalogue
+            {t.cta_primary}
             <svg className="ico ico-sm"><use href="#i-arrow-right"/></svg>
           </button>
           <button className="btn-cta-secondary" onClick={() => setPage('articles')}>
-            Read the latest bulletins
+            {t.cta_secondary}
             <svg className="ico ico-sm"><use href="#i-arrow-right"/></svg>
           </button>
         </div>

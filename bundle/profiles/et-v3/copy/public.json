@@ -1,0 +1,41 @@
+{
+  "_note": "Copy deck for the public dashboard. Extracted verbatim from the JSX that shipped before profiles existed — et-v3 must render identically. Placeholders in {braces} are filled from profile.yaml so a name is stated once.",
+
+  "govbar": {
+    "skip": "Skip to content",
+    "mark_text": "{platform.abbr}",
+    "mark_tag": "{ministry.name} · {country.name}",
+    "nav": {
+      "home": "Home",
+      "data": "Open data",
+      "articles": "Articles"
+    },
+    "request_access": "Request access",
+    "dashboards": "Dashboards"
+  },
+
+  "hero": {
+    "strip_volume": "Vol. 01",
+    "strip_series": "Public Series",
+    "strip_owner": "{ministry.name} · {ministry.native_name}",
+    "eyebrow": "Public health information service",
+    "headline_lead": "{country.name}'s health data,",
+    "headline_accent": "in one place.",
+    "headline_native": "{platform.native_name}",
+    "lede": "A single trusted entrance to dashboards, open data, and the analytic consoles that power public-health decisions, from a national bulletin down to a single {geography.admin3.singular_lower} in any of the {geography.admin1.count} {geography.admin1.plural_lower}.",
+    "trust": "Privacy-protected national health data",
+    "trust_title": "Aggregate and privacy-protected, k-anonymity at least 5, sourced from national health systems",
+    "cta_primary": "Open the data catalogue",
+    "cta_secondary": "Read the latest bulletins"
+  },
+
+  "footer": {
+    "brand_line": "{platform.name} · {platform.abbr}",
+    "owner_line": "{ministry.name} · {country.official_name}",
+    "columns": [
+      { "title": "About", "links": ["Methodology", "Governance", "Contact"] },
+      { "title": "Open",  "links": ["API docs", "dbt docs", "Code repository"] },
+      { "title": "Legal", "links": ["Privacy notice", "Terms of use", "Data licence"] }
+    ]
+  }
+}

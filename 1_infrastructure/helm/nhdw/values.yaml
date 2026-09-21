@@ -69,3 +69,8 @@ components:
   admin:            { replicas: 1, resources: {} }
   workshop:         { replicas: 1, resources: {} }
   gateway:          { replicas: 1, resources: {} }
+
+# Active country profile (directory name under /opt/nhdw-profiles on the host).
+# This is only the FALLBACK: the ACTIVE pointer file in that directory wins, so a
+# demo profile swap is a file write rather than a helm upgrade.
+profile: et-v3

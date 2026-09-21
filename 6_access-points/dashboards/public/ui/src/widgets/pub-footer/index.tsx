@@ -3,17 +3,19 @@
  * (mockup L1355-1368). Persistent chrome (CHROME_BOTTOM); takes nothing from the
  * host.
  */
+import { useProfile } from '../../hooks/useProfile';
 import type { PublicWidget } from '../../runtime/types';
 
 function Footer() {
+  const { profile, copy } = useProfile();
   return (
     <footer className="foot">
       <div className="foot-inner">
         <div className="foot-brand">
-          <img className="foot-logo" src="/static/assets/logo-fmoh.png" alt="" aria-hidden={true} />
+          <img className="foot-logo" src={`/static/assets/${profile.ministry?.logo || 'logo-fmoh.png'}`} alt="" aria-hidden={true} />
           <div>
-            <strong>National Health Data Warehouse · NHDW</strong><br />
-            Federal Ministry of Health · Federal Democratic Republic of Ethiopia<br />
+            <strong>{copy.footer.brand_line}</strong><br />
+            {copy.footer.owner_line}<br />
             <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.72)' }}>
               Established 2026
             </span>

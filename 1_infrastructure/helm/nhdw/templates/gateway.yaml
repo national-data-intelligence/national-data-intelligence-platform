@@ -74,7 +74,18 @@ spec:
             - { name: ALERT_EVAL_MODEL, value: "ears" }
             - { name: ALERT_EVAL_TOKEN, valueFrom: { secretKeyRef: { name: alert-eval-secrets, key: TOKEN } } }
             - { name: DQ_DETECT_TOKEN, valueFrom: { secretKeyRef: { name: dq-detect-secrets, key: TOKEN, optional: true } } }
+            - { name: NHDW_PROFILE_DIR, value: "/opt/nhdw-profiles" }
+            # Fallback only — the ACTIVE pointer file in that directory wins, so a
+            # swap does not need a redeploy.
+            - { name: NHDW_PROFILE, value: {{ .Values.profile | default "et-v3" | quote }} }
           volumeMounts:
+            # Country profiles live on the HOST at /opt/nhdw-profiles — copy decks,
+            # geography and the manifest that says which country this deployment is
+            # about. hostPath rather than a configMap because the geometry runs to
+            # hundreds of KB (configMaps cap at ~1 MB) and because a profile swap
+            # must be a file write on the server, visible to the gateway without a
+            # rollout. Read-only: the gateway serves profiles, it never edits them.
+            - { name: profiles, mountPath: /opt/nhdw-profiles, readOnly: true }
             # workspace-profiles configMap is created by the deploy role from the canonical
             # 6_access-points/jupyterhub/profiles.yaml (see chart README — external-file
             # configMaps live outside the chart and are referenced by name).
@@ -88,6 +99,10 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 15
       volumes:
+        # Single-node k3s, so hostPath is safe here. If this ever spreads across
+        # nodes the profile store moves to the object store and this mount goes.
+        - name: profiles
+          hostPath: { path: /opt/nhdw-profiles, type: DirectoryOrCreate }
         - { name: workspace-profiles, configMap: { name: workspace-profiles } }
 ---
 apiVersion: v1

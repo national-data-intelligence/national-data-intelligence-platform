@@ -38,7 +38,7 @@ from .routes import (access_requests, alerts, api_tokens, artifacts, audit,
                       graduation, groups, marts,
                       mdm, me, ml, observability, perm_admin,
                       permissions as permissions_route,
-                      policy, projects, public_articles, queries,
+                      policy, profile, projects, public_articles, queries,
                       reports, sql_lab, topology, workspace)
 from .settings import settings
 
@@ -199,6 +199,9 @@ async def audit_all_requests(request: Request, call_next):
 
 
 app.include_router(me.router)
+# The country profile is UNAUTHENTICATED on purpose: it carries the masthead and
+# the map, which the public dashboard needs before anyone signs in.
+app.include_router(profile.router)
 app.include_router(marts.router)
 app.include_router(ct.router)
 app.include_router(exports.router)
