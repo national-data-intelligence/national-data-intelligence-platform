@@ -30,6 +30,22 @@ CLUSTER=nhdw
 NS=nhdw
 export PATH="$HOME/.local/bin:$PATH"
 
+# WHICH COUNTRY this boot seeds. The data layer of a profile decides which
+# entity model the generators read, and they resolve it themselves — this only
+# makes the choice explicit in the log, because a cold boot that silently seeded
+# the wrong country is very expensive to discover later.
+NHDW_PROFILE="${NHDW_PROFILE:-et-v3}"
+export NHDW_PROFILE
+if [ -z "${NHDW_ENTITY_BUILD:-}" ] && [ "$NHDW_PROFILE" != "et-v3" ]; then
+  _model=$(sed -n "s|^ *entity_model: *||p" "$REPO/bundle/profiles/$NHDW_PROFILE/profile.yaml" 2>/dev/null | head -1)
+  if [ -n "$_model" ]; then
+    _stem=$(basename "$_model" .yaml)
+    [ "$_stem" != "entity-model" ] \
+      && export NHDW_ENTITY_BUILD="$REPO/bundle/seeds/entity-model/_build-$_stem"
+  fi
+fi
+echo "▸ profile: $NHDW_PROFILE   entity build: ${NHDW_ENTITY_BUILD:-<default _build>}"
+
 REBUILD_IMAGES=0
 OFFLINE=0
 case "${1:-}" in
