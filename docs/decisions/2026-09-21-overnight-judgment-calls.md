@@ -240,3 +240,47 @@ the access-request test writes rows (it cleans them up through an EXIT trap).
 
 **Reverse.** Delete check 9 from `verify-system.sh`; both scripts keep working
 standalone.
+
+---
+
+## 13. Two masking defects found and fixed during live verification
+
+**Decided.** Fixed both at their root and made each one impossible to pass again.
+
+**What was wrong.**
+
+1. **Classified columns were never masked on the Supply Control Tower feed.** The
+   route passed the Trino-qualified `marts.bi_supply` to `columns_for_mart`, which
+   keys on the bare schema name that `ops_perm.column_classification` stores. The
+   lookup missed and returned `{}`. Because masking is a denylist, an empty result
+   means "nothing classified here", so the obligation was never requested and the
+   GPS went out in the clear to every identity, including a low-trust federated one.
+   The policy was never wrong — asked directly, OPA returns
+   `masked_columns=['lat','lng']` for that caller. Nothing ever asked.
+
+2. **`generalize` dropped every numeric column instead of coarsening it.** Trino
+   returns NUMERIC columns as `decimal.Decimal`, a type `_generalize` did not
+   handle, so it reported "cannot generalize" — and one ungeneralizable value
+   poisons the whole column by design. Fail-closed, nothing leaked, but the class
+   was dead for exactly the columns it exists to protect: a low-trust caller lost
+   the coordinates entirely rather than receiving them at ~11 km precision.
+
+**Why these survived.** The startup self-tests check role → masked set, and that
+half was always correct. The end-to-end test that would have caught defect 1
+existed but nothing ran it. It would NOT have caught defect 2: its catch-all
+accepted an absent value as "generalized", so a dropped column looked identical to
+a coarsened one.
+
+**What now prevents a repeat.** The schema normalisation moved into
+`columns_for_mart` itself, so no caller can silently fail open on the key; it warns
+when it has to normalise. `_generalize` handles `Decimal`. The e2e test demands a
+one-decimal number and fails on an exact OR an absent value, covers the generic
+mart reader as well as the Control Tower feed, and runs as `verify-system` check 9
+on every deploy and provision. Unit tests cover the lookup key and the Decimal
+path.
+
+**Alternative.** Fix only the call site in `ct.py`. Rejected — that leaves the next
+caller free to make the same mistake against a lookup that fails open silently.
+
+**Reverse.** Three commits under `6_access-points/api/nhdw-gateway/` and one in
+`bundle/scripts/verify-system.sh`; revert individually.
