@@ -106,6 +106,20 @@
   register: deploy_job_clear
   changed_when: "'deleted' in deploy_job_clear.stdout"
 
+# Adopt any chart-owned object a PRIOR non-Helm apply left behind (the
+# kustomize era, or a hand hotfix) into the Helm release. helm upgrade
+# refuses to import an object it does not own and aborts the whole deploy;
+# this stamps managed-by + release annotations onto colliding objects
+# first so the upgrade adopts them. Idempotent. A fresh rebuild died here
+# on seaweedfs-gate — this makes that self-healing.
+- name: Adopt pre-existing chart objects into the Helm release
+  ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/adopt-into-helm.sh"
+  environment:
+    NS: "{{ nhdw_namespace }}"
+    RELEASE: nhdw
+    NHDW_HOSTBASE: "{{ nhdw_host_base }}"
+  changed_when: false
+
 - name: Deploy / upgrade the NHDW Helm chart for topology {{ nhdw_topology }}
   ansible.builtin.command: >-
     {{ nhdw_helm }} upgrade --install nhdw {{ nhdw_chart_dir }}

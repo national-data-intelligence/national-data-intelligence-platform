@@ -253,7 +253,17 @@ up_dhis2() {
   DHCONF="$SRC/DHIS2/config/dhis.conf"
   if [ -d "$DHCONF" ]; then
     warn "dhis.conf is a directory (docker auto-created it before the file existed) — removing"
-    rmdir "$DHCONF" 2>/dev/null || rm -rf "$DHCONF"
+    # Docker creates this dir as ROOT, so a non-root runner cannot remove it
+    # without escalation. Try plain, then sudo; the real config is restored from
+    # git right after (the file is committed, so a fresh checkout has it).
+    rmdir "$DHCONF" 2>/dev/null || rm -rf "$DHCONF" 2>/dev/null \
+      || sudo rm -rf "$DHCONF" 2>/dev/null \
+      || { warn "could not remove the stray dhis.conf directory (root-owned; needs sudo)"; return 1; }
+    # Restore the committed file if the removal left nothing (git has it).
+    if [ ! -f "$DHCONF" ] && git -C "$REPO" show "HEAD:0_external/sources/DHIS2/config/dhis.conf" >/dev/null 2>&1; then
+      git -C "$REPO" checkout -- 0_external/sources/DHIS2/config/dhis.conf 2>/dev/null \
+        && log "restored dhis.conf from git"
+    fi
   fi
   if [ ! -f "$DHCONF" ]; then
     warn "dhis.conf missing at $DHCONF — DHIS2 cannot start without it"; return 1

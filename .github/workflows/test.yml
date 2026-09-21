@@ -59,6 +59,8 @@ jobs:
         run: python3 bundle/scripts/test_gen_exposures.py
       - name: country guard (a cold boot must not seed the wrong country)
         run: bash bundle/scripts/test-country-guard.sh
+      - name: rebuild guards (every deploy-hardening fix is present)
+        run: bash bundle/scripts/test-rebuild-guards.sh
       - name: PCT forecast model contract (elmis_consumption_forecast)
         run: |
           pip install --quiet mlflow==2.18.0 pandas==2.2.3 numpy==1.26.4 pyyaml==6.0.2
