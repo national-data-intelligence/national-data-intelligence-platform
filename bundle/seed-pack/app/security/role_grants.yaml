@@ -53,8 +53,6 @@
     - ct-kpis
     - ct-movement
     - ct-dispatch
-    - pct-kpis
-    - pct-map
     - rm-statboard
     - rm-stock-heatmap
     - rm-stockout-impact
@@ -229,8 +227,6 @@
     - ct-kpis
     - ct-movement
     - ct-dispatch
-    - pct-kpis
-    - pct-map
     - rm-statboard
     - rm-stock-heatmap
     - rm-stockout-impact
