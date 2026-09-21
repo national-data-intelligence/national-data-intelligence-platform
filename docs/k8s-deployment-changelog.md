@@ -188,3 +188,34 @@ task. Provision attempt #12: 50 tasks ok, 0 failed, regression gate green.
 This is the first end-to-end green run of the from-bare path; the twelve
 attempts that preceded it are the six provisioning defects logged above plus
 their follow-on ordering and ownership problems.
+
+## 2026-09-21 — a truncated init statement, unexecutable since 2026-09-10
+
+**Symptom.** A full-scope redeploy failed at the DDL tier:
+`✗ DDL apply failed for 3_storage/postgres/init/07_marts_schemas_extras.sql`,
+with `ERROR: syntax error at end of input`.
+
+**Root cause.** The file's last statement is incomplete. It ends
+
+```sql
+ALTER DEFAULT PRIVILEGES FOR ROLE vault_writer IN SCHEMA bi_mdm
+```
+
+with no `GRANT SELECT ON TABLES TO bi_reader;` — a truncation introduced with the
+`bi_mdm` schema in 7adcc71 (2026-09-10).
+
+**Why it went unnoticed for eleven days.** Two reasons. The DDL tier only runs when
+an init file changes or the deploy is full-scope, so ordinary deploys never touched
+it. And init `.sql` files execute on a FRESH volume only — every provision run this
+week reused the existing PGDATA, so the cold-boot path that would have hit it was
+never the path being exercised.
+
+**Blast radius, which is larger than a failed deploy.** `postgres:16-alpine` runs
+`/docker-entrypoint-initdb.d/*.sql` with `ON_ERROR_STOP=1`, and a failure aborts
+initialisation — the database never finishes coming up. Any cold boot onto a fresh
+volume since 2026-09-10 would have died at postgres init. It also means `bi_mdm`
+never received default SELECT privileges for `bi_reader`, so tables created there
+later are unreadable by the BI reader role until granted explicitly.
+
+**Fix.** Completed the statement. Verified by applying the file against the live
+database with `ON_ERROR_STOP=1`: clean exit, `ALTER DEFAULT PRIVILEGES` succeeds.
