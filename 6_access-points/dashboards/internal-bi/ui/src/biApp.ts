@@ -413,4 +413,4 @@ export function initBiApp(): any {
   return app;
 }
 
-export { REGIONS, PROGRAMMES, DISEASES, DISEASE_NAME, PERIOD_OPTS, COMMODITIES };
+export { REGIONS, PROGRAMMES, DISEASES, DISEASE_NAME, PERIOD_OPTS, COMMODITIES, scopeLabels };

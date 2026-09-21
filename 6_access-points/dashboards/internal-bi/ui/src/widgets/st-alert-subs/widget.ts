@@ -7,7 +7,7 @@
  * buried in Settings. Honest empty state when the user has none. No mock data. */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { authFetch } from '../../api/useAuth';
-import { DISEASE_NAME } from '../../biApp';
+import { DISEASE_NAME, scopeLabels } from '../../biApp';
 
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
@@ -34,7 +34,7 @@ async function draw(ctx: WidgetCtx) {
     const dot = paused ? theme.ink[2] : theme.status.good;
     return `<tr data-id="${esc(s.id)}" style="opacity:${paused ? '.6' : '1'}">
       <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dot};margin-right:.4rem"></span>${esc(diseaseLabel(s.disease))}</td>
-      <td>${s.geography === 'all' ? 'All Ethiopia' : esc(s.geography)}</td>
+      <td>${s.geography === 'all' ? esc(scopeLabels.allGeography) : esc(s.geography)}</td>
       <td class="num">≥ ${((s.threshold ?? 0) * 100).toFixed(0)}%</td>
       <td>${esc(cadenceLabel(s.cadence))}</td>
       <td>${s.fire_count ? `<span class="pill info">fired ${s.fire_count} times</span>` : '<span class="pill">—</span>'}</td>

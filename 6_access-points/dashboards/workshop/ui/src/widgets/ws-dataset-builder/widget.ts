@@ -79,7 +79,7 @@ async function draw(ctx: WidgetCtx) {
         <textarea name="sql" rows="4" style="display:none;font-family:${theme.fontMono};font-size:.8rem"
           placeholder="SELECT region, disease, SUM(cases) FROM bi_idsr.mart_idsr_disease_weekly GROUP BY 1,2"></textarea>
         <label><span>Title</span>
-          <input name="title" minlength="3" maxlength="120" placeholder="e.g. Weekly malaria counts, Oromia 2025" required></label>
+          <input name="title" minlength="3" maxlength="120" placeholder="e.g. Weekly malaria counts, 2025" required></label>
         <label><span>Description <span class="muted">· optional</span></span>
           <input name="description" placeholder="What is in this dataset and why?"></label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">

@@ -385,6 +385,39 @@ async def get_geo(name: str) -> Response:
     raise HTTPException(404, f"no geometry {name} in profile {key}")
 
 
+ASSET_TYPES = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".svg": "image/svg+xml", ".webp": "image/webp", ".ico": "image/x-icon",
+}
+
+
+@router.get("/asset/{name}")
+async def get_asset(name: str) -> Response:
+    """A branding file from the active profile — a ministry logo, typically.
+
+    Mirrors /geo: name-checked, path-joined safely, falling back to `_shared/`
+    for anything country-agnostic. A profile that declares no logo simply has no
+    file here and the dashboards render their own word-mark instead; shipping
+    one country's crest under another country's profile would be worse than
+    shipping none."""
+    if not re.fullmatch(r"[a-z0-9._-]{1,64}", name, re.I):
+        raise HTTPException(400, "bad asset name")
+    suffix = Path(name).suffix.lower()
+    if suffix not in ASSET_TYPES:
+        raise HTTPException(400, "not an image")
+    key = active_key()
+    for candidate in (_safe_join(PROFILE_DIR, key, "assets", name),
+                      _safe_join(PROFILE_DIR, "_shared", "assets", name)):
+        if candidate.is_file():
+            return Response(
+                content=candidate.read_bytes(),
+                media_type=ASSET_TYPES[suffix],
+                headers={"Cache-Control": "public, max-age=300",
+                         "ETag": f'W/"{key}-{name}-{candidate.stat().st_mtime_ns}"'},
+            )
+    raise HTTPException(404, f"no asset {name} in profile {key}")
+
+
 def catalog_disabled() -> list[tuple[str, str]]:
     """What the active profile turns off, as (kind, scope_id) pairs.
 

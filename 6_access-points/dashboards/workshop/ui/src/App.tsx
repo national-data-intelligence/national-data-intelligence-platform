@@ -17,6 +17,7 @@ import AuthSplash from './sections/AuthSplash';
 import { useAuth } from './api/useAuth';
 import { useDashboardSpec, type ResolvedPage } from './api/spec';
 import { host, registerHostNavigation } from './runtime/host';
+import { useProfile, logoUrl } from './hooks/useProfile';
 
 const SETTINGS_PAGE = 'workshop/settings';
 
@@ -33,6 +34,7 @@ const PAGE_ICONS: Record<string, string> = {
 
 export default function App() {
   const { user } = useAuth();
+  const profile = useProfile();
   const { spec, loaded, denied } = useDashboardSpec('workshop');
   const [active, setActive] = useState<string | null>(null);
 
@@ -76,9 +78,11 @@ export default function App() {
         <aside className="ws-side">
           <div className="ws-sidehead">
             <a href="/" title="Back to public site">
-              <img className="sidehead-logo" src="/static/assets/logo-fmoh.png" alt="" />
+              {logoUrl(profile)
+                ? <img className="sidehead-logo" src={logoUrl(profile)!} alt="" />
+                : null}
               <span className="sidehead-text">
-                <span className="title">NHDW</span>
+                <span className="title">{profile.platform?.abbr || 'NHDW'}</span>
                 <span className="subtitle">Workshop portal</span>
               </span>
             </a>

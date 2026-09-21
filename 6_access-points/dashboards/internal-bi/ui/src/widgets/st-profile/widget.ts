@@ -6,6 +6,7 @@
  * by Keycloak), so this is honestly READ-ONLY — no fake "Save profile" form. */
 import type { WidgetDef } from '../../runtime/types';
 import { authFetch } from '../../api/useAuth';
+import { scopeLabels } from '../../biApp';
 
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
@@ -39,7 +40,7 @@ const def: WidgetDef = {
     const geos: string[] = me.geographies || [];
     const progs: string[] = me.programs || [];
     const caps: string[] = perm.capabilities || [];
-    const geoLabel = geos.length ? '' : 'All Ethiopia (national)';
+    const geoLabel = geos.length ? '' : `${scopeLabels.allGeography} (national)`;
     const progLabel = progs.length ? '' : 'All programmes';
 
     ctx.el.innerHTML = `

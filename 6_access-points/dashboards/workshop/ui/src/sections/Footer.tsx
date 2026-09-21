@@ -5,13 +5,20 @@
  * the footer (ConductStrip, archived 2026-07-05) — now lives here as a compact,
  * low-key row so the guidance stays visible without dominating every page.
  */
+import { useProfile } from '../hooks/useProfile';
+
 export default function Footer() {
+  const profile = useProfile();
+  // The owner line is the deployment's, not one country's. It used to name
+  // Ethiopia's ministry and state outright, on every page of the portal.
+  const owner = [profile.ministry?.name, profile.country?.official_name]
+    .filter(Boolean).join(' · ');
   return (
     <footer className="foot">
       <div className="foot-inner">
         <div>
-          <strong>Community Workshop Portal · NHDW</strong><br />
-          Federal Ministry of Health · Federal Democratic Republic of Ethiopia<br />
+          <strong>Community Workshop Portal · {profile.platform?.abbr || 'NHDW'}</strong><br />
+          {owner ? <>{owner}<br /></> : null}
           <span className="foot-byline">For researchers, developers, partners, and the open public</span>
         </div>
         <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>

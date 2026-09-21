@@ -31,22 +31,39 @@ function initials(name: string): string {
   return name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'DA';
 }
 
+/* Friendly names for the role codes that are not country-specific. The scoped
+ * ones (a regional-health-bureau director, a programme director) are named by
+ * the deployment's own roles, which travel with the appsec layer of a profile —
+ * so they are NOT listed here. An unlisted code is humanised from the code
+ * itself rather than shown raw, which reads acceptably in any country and
+ * invents nothing. */
 const ROLE_TITLES: Record<string, string> = {
   'R-DEC':         'Decision Maker',
   'R-CONS-ANA':    'M&E Analyst',
-  'R-RHB-OROMIA':  'RHB Director · Oromia',
-  'R-PD-HIV':      'FMoH PD-HIV',
   'R-OPS-ADM':     'System Admin',
+  'R-SUPER':       'Super User',
+  'R-STEW':        'Data Steward',
 };
+
+/** 'R-RHB-LUSAKA' → 'RHB Lusaka'. Good enough to read, and true anywhere. */
+function humaniseRole(code: string): string {
+  return code.replace(/^R-/, '').split('-')
+    .map(part => (part.length <= 4 ? part : part[0] + part.slice(1).toLowerCase()))
+    .join(' ');
+}
 
 export default function Topbar() {
   const { app, state, setNotifPanel, setActive } = useBiApp();
   const { user, logout } = useAuth();
   const title = PAGE_TITLES[state.active] || '';
   const subtitle = PAGE_SUBTITLES[state.active] || '';
-  const displayName = user?.full_name || user?.username || 'Dr Abebe Bekele';
+  // Neutral fallbacks. These used to be an invented Ethiopian name and an
+  // Ethiopian job title, shown to anybody whose account lacked those fields —
+  // a demo placeholder that would be plainly wrong in another country, and a
+  // fabricated identity in any of them.
+  const displayName = user?.full_name || user?.username || 'Signed in';
   const displayRole = (user?.primary_role && ROLE_TITLES[user.primary_role]) ||
-                      user?.primary_role || 'FMoH HIV Director';
+                      (user?.primary_role ? humaniseRole(user.primary_role) : '');
   return (
     <header className="bi-topbar">
       <div className="tb-title">

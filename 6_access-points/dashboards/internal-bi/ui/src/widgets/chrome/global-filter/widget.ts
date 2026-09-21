@@ -15,7 +15,7 @@
  */
 import type { WidgetDef, WidgetCtx } from '../../../runtime/types';
 import type { ResolvedFilter } from '../../../api/spec';
-import { REGIONS, PROGRAMMES, DISEASES, PERIOD_OPTS, COMMODITIES } from '../../../biApp';
+import { REGIONS, PROGRAMMES, DISEASES, PERIOD_OPTS, COMMODITIES, scopeLabels } from '../../../biApp';
 import { getWidgetDef } from '../../../runtime/registry';
 
 // Spec filter id → the bus/biApp filter key it drives.
@@ -39,7 +39,10 @@ function catalog(filterId: string): Opt[] {
 }
 
 function labelFor(filterId: string, value: string): string {
-  if (value === 'all') return filterId === 'region' || filterId === 'geography' ? 'All Ethiopia' : 'All';
+  // The wildcard's name is a country fact, so it comes from the profile —
+  // the same `scopeLabels` biApp resolves from /gw/profile/copy/common.
+  if (value === 'all') return filterId === 'region' || filterId === 'geography'
+    ? scopeLabels.allGeography : 'All';
   const hit = catalog(filterId).find(o => o.value === value);
   return hit ? hit.label : value;
 }

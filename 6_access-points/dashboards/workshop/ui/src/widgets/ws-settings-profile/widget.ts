@@ -8,6 +8,7 @@
 import type { WidgetDef } from '../../runtime/types';
 import { authFetch } from '../../api/useAuth';
 import { esc } from '../_shared/helpers';
+import { allGeographyNow } from '../../hooks/useProfile';
 
 const chips = (vals: string[], accent: string, emptyLabel: string) =>
   vals && vals.length
@@ -52,7 +53,7 @@ const def: WidgetDef = {
         </div>
         <div style="display:flex;flex-direction:column;gap:.25rem">
           <span style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:${theme.ink[2]}">Geography scope</span>
-          <div>${geos.length ? chips(geos, theme.status.info, '') : `<span style="font-size:.9rem;color:${theme.ink[0]}">All Ethiopia (national)</span>`}</div>
+          <div>${geos.length ? chips(geos, theme.status.info, '') : `<span style="font-size:.9rem;color:${theme.ink[0]}">${esc(allGeographyNow())} (national)</span>`}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:.25rem">
           <span style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:${theme.ink[2]}">Programme scope</span>
