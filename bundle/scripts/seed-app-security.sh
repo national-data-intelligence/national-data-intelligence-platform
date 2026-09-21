@@ -100,6 +100,14 @@ else
   rm -rf "$CATTMP"
 
   kubectl -n "$NS" delete job security-seed --ignore-not-found --wait=true >/dev/null 2>&1
+  # Which cast this seed loads. The loader inside the Job resolves the users
+  # file itself, but the Job pod cannot see /opt/nhdw-profiles — so the HOST
+  # resolves it (shared resolver) and passes the answer down as NHDW_USERS_SEED,
+  # the loader's explicit override. Without this, a Zambian switch re-seeded the
+  # Ethiopian cast and looked entirely successful doing it.
+  USERS_SEED=$(bash "$REPO/bundle/scripts/resolve-users-seed.sh")
+  echo "  ▸ cast: $USERS_SEED"
+
   cat <<EOF | kubectl -n "$NS" apply -f - >/dev/null
 apiVersion: batch/v1
 kind: Job
@@ -126,6 +134,8 @@ spec:
             - { name: OPS_DB_NAME,   value: ${OPS_DB} }
             # #88: role YAMLs are mounted alongside the seed files in /opt/seed.
             - { name: NHDW_ROLES_DIR, value: /opt/seed }
+            # the host resolved the active profile's cast (see above)
+            - { name: NHDW_USERS_SEED, value: ${USERS_SEED} }
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef: { name: postgres-vault-secrets, key: POSTGRES_PASSWORD }

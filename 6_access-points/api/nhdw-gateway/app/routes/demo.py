@@ -226,21 +226,102 @@ async def swap_profile(body: SwapRequest = Body(...),
             _stage(job, "presentation", "done",
                    "copy, geography and branding now serve the new profile")
 
-        for heavy in ("appsec", "data"):
-            if heavy in ordered:
-                _stage(job, heavy, "skipped", _HEAVY_NOTE[heavy])
-
-        _stage(job, "verify", "running")
-        active = profile_route.active_key()
-        if active != body.profile:
-            raise RuntimeError(f"pointer says '{active}' after writing '{body.profile}'")
-        _stage(job, "verify", "done", f"serving {active}")
-        _finish(job, "succeeded" if ordered == ["presentation"] else "partial")
+        heavy = [l for l in ("appsec", "data") if l in ordered]
+        if heavy:
+            # The gateway cannot run these (no cluster shell, no docker socket)
+            # and is not supposed to — but it CAN write its one host mount. The
+            # request lands in swap-requests/, the host worker executes the same
+            # canonical scripts a cold boot runs, and progress comes back through
+            # swap-status/<job>.json, which _job_view merges. One orchestration
+            # path; the button just presses it.
+            _enqueue_swap(job["id"], body.profile, heavy)
+            for l in heavy:
+                _stage(job, l, "waiting", "queued for the host worker")
+            _stage(job, "verify", "running")
+            active = profile_route.active_key()
+            if active != body.profile:
+                raise RuntimeError(f"pointer says '{active}' after writing '{body.profile}'")
+            _stage(job, "verify", "done",
+                   f"presentation serves {active}; heavier layers run behind this job")
+            # deliberately NOT finished: the worker's status file completes it
+        else:
+            _stage(job, "verify", "running")
+            active = profile_route.active_key()
+            if active != body.profile:
+                raise RuntimeError(f"pointer says '{active}' after writing '{body.profile}'")
+            _stage(job, "verify", "done", f"serving {active}")
+            _finish(job, "succeeded")
     except Exception as exc:                                    # noqa: BLE001
         log.exception("demo: profile swap failed")
         _finish(job, "failed", str(exc)[:300])
 
     return _job_view(job)
+
+
+def _swap_dirs():
+    from .profile import STATE_DIR
+    req = STATE_DIR / "swap-requests"; st = STATE_DIR / "swap-status"
+    req.mkdir(parents=True, exist_ok=True); st.mkdir(parents=True, exist_ok=True)
+    return req, st
+
+
+def _enqueue_swap(job_id: str, profile: str, layers: list[str]) -> None:
+    import json as _json
+    req, st = _swap_dirs()
+    # one swap at a time: two concurrent pipeline runs interleave writes to the
+    # same warehouse, so a second request is refused rather than queued blind
+    for f in st.glob("*.json"):
+        try:
+            doc = _json.loads(f.read_text())
+        except Exception:                                       # noqa: BLE001
+            continue
+        if doc.get("state") == "running":
+            raise HTTPException(409, f"a profile swap is already running "
+                                     f"(job {doc.get('job_id')}) — wait for it")
+    payload = {"job_id": job_id, "profile": profile,
+               "layers": ",".join(layers), "requested_at": time.time()}
+    tmp = req / f".{job_id}.tmp"
+    tmp.write_text(_json.dumps(payload))
+    tmp.rename(req / f"{job_id}.json")
+
+
+_WORKER_STAGES = ("appsec", "keycloak-cast", "gateway-restart", "sources", "pipeline")
+
+
+def _merge_worker_status(job_id: str, view: dict[str, Any]) -> dict[str, Any]:
+    """Fold the host worker's status file into a job view. Works on a live job
+    AND with no in-memory job at all — the worker restarts this gateway during
+    the appsec stage, so the file is the durable record and the memory copy is
+    the cache."""
+    import json as _json
+    _, st = _swap_dirs()
+    f = st / f"{job_id}.json"
+    if not f.is_file():
+        return view
+    try:
+        doc = _json.loads(f.read_text())
+    except Exception:                                           # noqa: BLE001
+        return view
+    wstages = doc.get("stages") or {}
+    have = {s["name"] for s in view.get("stages", [])}
+    for name in _WORKER_STAGES:
+        w = wstages.get(name)
+        if not w:
+            continue
+        entry = {"name": name, "state": w.get("state"), "note": w.get("note"),
+                 "started_at": None, "finished_at": None}
+        if name in have:
+            view["stages"] = [entry if s["name"] == name else s for s in view["stages"]]
+        else:  # insert before the trailing verify stage
+            idx = next((i for i, s in enumerate(view["stages"]) if s["name"] == "verify"),
+                       len(view["stages"]))
+            view["stages"].insert(idx, entry)
+            have.add(name)
+    if doc.get("state") in ("succeeded", "failed"):
+        view["state"] = doc["state"]
+        view["note"] = doc.get("note") or view.get("note")
+        view["finished_at"] = doc.get("updated_at")
+    return view
 
 
 _HEAVY_NOTE = {
@@ -322,7 +403,20 @@ async def run_action(action_id: str,
 @router.get("/job/{job_id}")
 async def get_job(job_id: str) -> dict[str, Any]:
     job = _JOBS.get(job_id)
-    if job is None:
+    if job is not None:
+        return _merge_worker_status(job_id, _job_view(job))
+    # Not in memory — the worker restarts this gateway mid-swap, and the
+    # console keeps polling the same id. The status file is the durable record;
+    # rebuild an honest view from it alone.
+    skeleton = {"id": job_id, "kind": "profile-swap", "detail": "",
+                "state": "running", "note": "gateway restarted during the swap; "
+                "progress reconstructed from the host worker", "stages": [
+                    {"name": "verify", "state": "done", "note": None,
+                     "started_at": None, "finished_at": None}]}
+    merged = _merge_worker_status(job_id, skeleton)
+    if merged is skeleton and len(skeleton["stages"]) == 1 and \
+            skeleton["stages"][0]["name"] == "verify" and not (
+            _swap_dirs()[1] / f"{job_id}.json").is_file():
         raise HTTPException(404, "no such job (jobs are kept in memory and do not "
                                  "survive a gateway restart)")
-    return _job_view(job)
+    return merged

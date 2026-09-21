@@ -44,7 +44,31 @@
 - name: APP/SECURITY seed — ops DB, Keycloak, roles, OPA, program-demo (seed-pack, compat-gated)
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-app-security.sh"
   args: { chdir: "{{ nhdw_repo_root }}" }
+  environment:
+    NHDW_PROFILE: "{{ nhdw_profile | default('et-v3') }}"
+    NHDW_PROFILE_DIR: "{{ nhdw_profile_dir | default('/opt/nhdw-profiles') }}"
   changed_when: true
+
+# The host half of the demo console's Switch-profile button: the gateway drops
+# a request into /opt/nhdw-state/swap-requests and this service runs the SAME
+# canonical scripts the tasks above run, reporting stages back. Installed here
+# so a provisioned host can switch countries from the console without anyone
+# shelling in.
+- name: Install the profile-swap worker unit
+  ansible.builtin.copy:
+    src: "{{ nhdw_repo_root }}/bundle/systemd/nhdw-profile-swap.service"
+    dest: /etc/systemd/system/nhdw-profile-swap.service
+    remote_src: true
+    mode: "0644"
+  become: true
+
+- name: Enable + start the profile-swap worker
+  ansible.builtin.systemd:
+    name: nhdw-profile-swap
+    enabled: true
+    state: restarted
+    daemon_reload: true
+  become: true
 
 - name: Regenerate + load the OPA policy from the permission store (opa test gated, fail-closed)
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/regen-opa-policy.sh"

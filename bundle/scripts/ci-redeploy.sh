@@ -220,8 +220,11 @@ if touched "bundle/seed-pack/app/security/users.yaml" \
   kubectl -n "$NS" create configmap keycloak-seed-script \
     --from-file="$REPO/7_security/keycloak/scripts/setup-keycloak.py" \
     --dry-run=client -o yaml | kubectl -n "$NS" apply -f - >/dev/null
+  # the KEY stays users.yaml (the job mounts that path); the SOURCE is the
+  # active country's cast, resolved the same way everywhere else.
+  USERS_SEED=$(bash "$REPO/bundle/scripts/resolve-users-seed.sh")
   kubectl -n "$NS" create configmap keycloak-users-seed \
-    --from-file="$REPO/bundle/seed-pack/app/security/users.yaml" \
+    --from-file="users.yaml=$REPO/bundle/seed-pack/app/security/$USERS_SEED" \
     --dry-run=client -o yaml | kubectl -n "$NS" apply -f - >/dev/null
   # RENDER FIRST, delete only once a valid spec is in hand: a render failure
   # after the delete would leave the cluster with no seed Job at all (and the
