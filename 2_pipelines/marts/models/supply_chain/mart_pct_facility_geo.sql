@@ -15,6 +15,10 @@
       district_facility_mean  no usable point: mean of the usable points of the
                               facilities in its district (INFERRED — eLMIS districts
                               carry no coordinates of their own)
+      district_mean_point_rejected  a reported point more than 200 km from the median
+                              of its district's other points (the widest real district
+                              spread is 172 km) — junk or misplaced records; placed at
+                              the district mean instead (INFERRED)
       province_facility_mean  district has no usable point: mean of the province's
       none                    nothing usable
     Points outside Zambia that a sign fix does not recover are rejected, never
@@ -66,14 +70,29 @@ usable AS (
     FROM located l
 ),
 
+district_centre AS (
+    -- robust centre (median) of each district's reported points
+    SELECT district_code, percentile_cont(0.5) WITHIN GROUP (ORDER BY lat_ok) AS lat,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY lng_ok) AS lng
+    FROM usable WHERE point_basis IS NOT NULL GROUP BY 1
+),
+
+checked AS (
+    SELECT u.*,
+           (u.point_basis IS NOT NULL AND 2 * 6371 * asin(sqrt(
+                power(sin(radians(u.lat_ok - c.lat) / 2), 2)
+              + cos(radians(c.lat)) * cos(radians(u.lat_ok)) * power(sin(radians(u.lng_ok - c.lng) / 2), 2))) > 200) AS far
+    FROM usable u LEFT JOIN district_centre c USING (district_code)
+),
+
 district_mean AS (
     SELECT district_code, avg(lat_ok) AS lat, avg(lng_ok) AS lng
-    FROM usable WHERE point_basis IS NOT NULL GROUP BY 1
+    FROM checked WHERE point_basis IS NOT NULL AND NOT far GROUP BY 1
 ),
 
 province_mean AS (
     SELECT region_id, avg(lat_ok) AS lat, avg(lng_ok) AS lng
-    FROM usable WHERE point_basis IS NOT NULL GROUP BY 1
+    FROM checked WHERE point_basis IS NOT NULL AND NOT far GROUP BY 1
 ),
 
 reporting AS (
@@ -83,16 +102,17 @@ reporting AS (
 
 SELECT u.facility_code, u.facility_name, u.facility_type_code,
        u.district_code, u.district_name, u.region_id, u.region_name,
-       round(CASE WHEN u.point_basis IS NOT NULL THEN u.lat_ok
+       round(CASE WHEN u.point_basis IS NOT NULL AND NOT u.far THEN u.lat_ok
                   ELSE coalesce(dm.lat, pm.lat) END, 6) AS lat,
-       round(CASE WHEN u.point_basis IS NOT NULL THEN u.lng_ok
+       round(CASE WHEN u.point_basis IS NOT NULL AND NOT u.far THEN u.lng_ok
                   ELSE coalesce(dm.lng, pm.lng) END, 6) AS lng,
-       CASE WHEN u.point_basis IS NOT NULL THEN u.point_basis
+       CASE WHEN u.point_basis IS NOT NULL AND NOT u.far THEN u.point_basis
+            WHEN u.far AND dm.lat IS NOT NULL THEN 'district_mean_point_rejected'
             WHEN dm.lat IS NOT NULL THEN 'district_facility_mean'
             WHEN pm.lat IS NOT NULL THEN 'province_facility_mean'
             ELSE 'none' END AS coord_basis,
        (r.facility_code IS NOT NULL) AS reports_in_window
-FROM usable u
+FROM checked u
 LEFT JOIN district_mean dm ON dm.district_code = u.district_code
 LEFT JOIN province_mean pm ON pm.region_id = u.region_id
 LEFT JOIN reporting r      ON r.facility_code = u.facility_code

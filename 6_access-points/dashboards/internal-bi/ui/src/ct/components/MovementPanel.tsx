@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { WH_BY_ID, NODE_BY_ID, RUN_BY_ID, type Movement } from '../data/runtime';
+import { WH_BY_ID, NODE_BY_ID, RUN_BY_ID, CAN_DECIDE, setDecision, type Movement } from '../data/runtime';
+import { authFetch } from '../../api/useAuth';
+import { bumpView } from '../store';
 import { rankedShipments, type Slicer } from '../lib/select';
 import { IconArrowRight, IconChevronD, IconStockShort, IconRunout, IconCover,
   IconPallet, IconArrowDown, IconEquals, IconPlus, IconCheck } from '../icons';
@@ -27,9 +29,30 @@ function Step({ Icon, label, value, signedVal, total }:
 
 interface Props { movement: Movement; slicer: Slicer; onSelect: (id: string) => void }
 
+const DEMAND_BASIS: Record<string, string> = {
+  forecast: 'Forecast', elmis_amc: 'eLMIS AMC', forecast_and_amc: 'Forecast and eLMIS AMC',
+};
+
 export default function MovementPanel({ movement, slicer, onSelect }: Props) {
   const [shipOpen, setShipOpen] = useState(true);
   const [shipAll, setShipAll] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const verdict = movement.decision?.decision ?? null;
+  const decidedOn = movement.decision ? new Date(movement.decision.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const decide = async (d: 'approve' | 'reject' | 'undo') => {
+    setBusy(true); setErr(null);
+    try {
+      const r = d === 'undo'
+        ? await authFetch(`/gw/ct/decisions/${movement.decision!.id}/revert`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        : await authFetch(`/gw/ct/plan/lines/${encodeURIComponent(movement.id)}/decide`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: d }) });
+      if (!r.ok) { setErr(r.status === 403 ? 'Not permitted' : 'Not saved. Try again.'); return; }
+      const j = await r.json();
+      setDecision(movement.id, d === 'undo' ? null : { id: j.id, decision: j.decision, by: j.by, at: j.at });
+      bumpView();
+    } catch { setErr('Not saved. Try again.'); } finally { setBusy(false); }
+  };
   const w = WH_BY_ID[movement.fromId];
   const n = NODE_BY_ID[movement.toId];
   const why = movement.why;
@@ -45,10 +68,12 @@ export default function MovementPanel({ movement, slicer, onSelect }: Props) {
 
   return (
     <div className="ct-rail">
-      <div className="ct-selcard">
+      <div className={`ct-selcard${verdict === 'reject' ? ' rejected' : ''}`}>
         <div className="ct-sel-top">
           <span className="ct-eyebrow">Selected movement</span>
-          <span className="ct-sel-planned">Planned</span>
+          <span className={`ct-sel-planned ${!movement.planned ? 'warn' : verdict === 'approve' ? 'ok' : verdict === 'reject' ? 'off' : 'pending'}`}>
+            {!movement.planned ? 'Not covered' : verdict === 'approve' ? 'Approved' : verdict === 'reject' ? 'Rejected' : 'Planned'}
+          </span>
         </div>
 
         <div className="ct-sel-from">{w.name}</div>
@@ -70,7 +95,7 @@ export default function MovementPanel({ movement, slicer, onSelect }: Props) {
           </div>
           <div className="ct-trio-i">
             <IconRunout />
-            <span className="ct-trio-v">{movement.daysToStockout}d</span>
+            <span className="ct-trio-v">{movement.daysToStockout != null ? `${movement.daysToStockout}d` : 'n/a'}</span>
             <span className="ct-trio-l">Until stock out</span>
           </div>
           <div className="ct-trio-i">
@@ -81,11 +106,27 @@ export default function MovementPanel({ movement, slicer, onSelect }: Props) {
         </div>
 
         <div className="ct-facts">
-          {run && <div className="ct-fact"><span className="k">Delivery</span><span className="v">{run.id}, stop {movement.sequenceIndex} of {run.stops.length}</span></div>}
-          {stop && <div className="ct-fact"><span className="k">Delivery ETA</span><span className="v">{hhmm(stop.etaMin)}</span></div>}
-          <div className="ct-fact"><span className="k">Road distance</span><span className="v">{fmt(movement.laneKm)} km</span></div>
+          {run && <div className="ct-fact"><span className="k">{run.vehicleType == null ? 'Delivery stop' : 'Delivery'}</span><span className="v">{run.vehicleType == null ? `Stop ${movement.sequenceIndex} of ${run.stops.length}` : `${run.id}, stop ${movement.sequenceIndex} of ${run.stops.length}`}</span></div>}
+          {stop && stop.etaMin != null && <div className="ct-fact"><span className="k">Delivery ETA</span><span className="v">{hhmm(stop.etaMin)}</span></div>}
+          <div className="ct-fact"><span className="k">{run && run.vehicleType == null ? 'Straight-line distance' : 'Road distance'}</span><span className="v">{fmt(movement.laneKm)} km</span></div>
+          {movement.demandBasis && <div className="ct-fact"><span className="k">Demand basis</span><span className="v">{DEMAND_BASIS[movement.demandBasis] ?? movement.demandBasis}</span></div>}
           {overflow && <div className="ct-fact"><span className="k">Rerouted from</span><span className="v">{nearest.short}, +{fmt(movement.assignDeltaKm)} km</span></div>}
         </div>
+
+        {CAN_DECIDE && movement.planned && (
+          <div className="ct-decide">
+            {verdict
+              ? <>
+                  <span className="ct-decide-meta">{verdict === 'approve' ? 'Approved' : 'Rejected'} by {movement.decision!.by}, {decidedOn}</span>
+                  <button className="ct-decide-btn" disabled={busy} onClick={() => decide('undo')}>Revert</button>
+                </>
+              : <>
+                  <button className="ct-decide-btn primary" disabled={busy} onClick={() => decide('approve')}>Approve</button>
+                  <button className="ct-decide-btn" disabled={busy} onClick={() => decide('reject')}>Reject</button>
+                </>}
+            {err && <span className="ct-decide-err">{err}</span>}
+          </div>
+        )}
 
         <div className="ct-why-hdr">How this shipment was sized</div>
         <ol className="ct-steps">
@@ -113,7 +154,7 @@ export default function MovementPanel({ movement, slicer, onSelect }: Props) {
             const active = m.id === movement.id;
             return (
               <button key={m.id} className={`ct-ship${active ? ' active' : ''}`} onClick={() => onSelect(m.id)}>
-                <span className="ct-ship-prio">{m.daysToStockout}d</span>
+                <span className="ct-ship-prio">{m.daysToStockout != null ? `${m.daysToStockout}d` : 'n/a'}</span>
                 <span className="ct-ship-main">
                   <span className="ct-ship-fac">{dn.name}</span>
                   <span className="ct-ship-sub">{WH_BY_ID[m.fromId].short}, {m.drugShort}</span>

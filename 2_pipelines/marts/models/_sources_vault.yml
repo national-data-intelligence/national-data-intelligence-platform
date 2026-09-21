@@ -123,6 +123,14 @@ sources:
   # Model predictions + performance, read through the FDW seam in init
   # 41_ml_read.sql (same seam as the steward decisions and the DQ record).
   # Written only by the ML runner (ops_ml in nhdw_ops); read-only here.
+  - name: vault_plan
+    database: nhdw_vault
+    schema: nhdw_vault_plan
+    description: >
+      Read seam over the nhdw_ops plan decision log (init 43_pct_plan_read.sql) —
+      planner verdicts on Supply Control Tower plan lines, append-only and bitemporal.
+    tables:
+      - name: plan_decision
   - name: vault_ml
     schema: nhdw_vault_ml
     tables:

@@ -14,7 +14,7 @@
 .ct-scope .pct-reset { margin-left: auto; align-self: center; display: inline-flex; align-items: center; gap: 0.4rem; background: #fff; border: 1px solid var(--border-2); border-radius: var(--radius); padding: 0.5rem 0.8rem; font-size: 0.82rem; font-weight: 600; color: var(--info); cursor: pointer; }
 .ct-scope .pct-reset svg { width: 14px; height: 14px; }
 .ct-scope .pct-reset:hover { border-color: var(--info); }
-.ct-scope .pct-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+.ct-scope .pct-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
 .ct-scope .pct-kpi { position: relative; background: var(--paper); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); padding: 1.1rem 1.3rem; display: flex; align-items: center; gap: 1.05rem; min-height: 118px; }
 .ct-scope .pct-kpi-ico { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
 .ct-scope .pct-kpi-ico svg { width: 30px; height: 30px; display: block; }
@@ -186,6 +186,7 @@
   height: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden;
   padding-right: 4px;
   scrollbar-width: thin; scrollbar-color: var(--border-2) transparent;
+  mask-image: linear-gradient(#000 92%, transparent);
 }
 .ct-scope .ct-rail::-webkit-scrollbar { width: 7px; }
 .ct-scope .ct-rail::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
@@ -209,6 +210,23 @@
 .ct-scope .ct-sel-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
 .ct-scope .ct-sel-planned { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; font-weight: 600; color: var(--good); }
 .ct-scope .ct-sel-planned svg { width: 13px; height: 13px; }
+.ct-scope .ct-sel-planned.pending { color: var(--ink-3); }
+.ct-scope .ct-sel-planned.ok { color: var(--good); }
+.ct-scope .ct-sel-planned.off { color: var(--alert); }
+.ct-scope .ct-sel-planned.warn { color: var(--watch); }
+.ct-scope .ct-decide { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.9rem 0 0.2rem; }
+.ct-scope .ct-decide-btn {
+  flex: 1; display: inline-flex; justify-content: center; align-items: center; white-space: nowrap;
+  padding: 0.45rem 0.7rem; background: #fff; border: 1px solid var(--border-2);
+  border-radius: var(--radius); font-size: 0.82rem; font-weight: 600; color: var(--ink-2); cursor: pointer;
+}
+.ct-scope .ct-decide-btn.primary { background: var(--navy-800); border-color: var(--navy-800); color: #fff; }
+.ct-scope .ct-decide-btn:hover:not(:disabled) { border-color: var(--navy-500); }
+.ct-scope .ct-decide-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ct-scope .ct-decide-meta { flex: 2; font-size: 0.8rem; color: var(--ink-3); }
+.ct-scope .ct-decide-err { flex-basis: 100%; font-size: 0.76rem; color: var(--alert); }
+.ct-scope .ct-selcard.rejected .ct-sel-units { color: var(--ink-4); }
+.ct-scope .ct-selcard.rejected .ct-step.total { background: var(--paper-2); border-color: var(--border-2); }
 .ct-scope .ct-sel-from { font-size: 0.86rem; color: var(--ink-3); font-weight: 500; }
 .ct-scope .ct-sel-to { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; margin-top: 0.15rem; }
 .ct-scope .ct-sel-to h2 { font-size: 1.22rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
@@ -302,10 +320,10 @@
 .ct-scope .ct-itin-dep { display: flex; align-items: center; gap: 0.55rem; font-size: 0.8rem; font-weight: 600; color: var(--ink-2); }
 .ct-scope .ct-itin-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .ct-scope .ct-itin-dot.origin { background: var(--hub); }
-.ct-scope .ct-itin-stop { display: flex; align-items: center; gap: 0.6rem; padding-left: 0.15rem; }
+.ct-scope .ct-itin-stop { display: grid; grid-template-columns: 22px minmax(0, 340px) auto; align-items: center; gap: 0.6rem; padding-left: 0.15rem; }
 .ct-scope .ct-itin-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--hub); }
 .ct-scope .ct-itin-seq { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--route-sel); color: #fff; font-size: 0.7rem; font-weight: 700; display: grid; place-items: center; }
-.ct-scope .ct-itin-name { font-size: 0.82rem; font-weight: 500; color: var(--ink); min-width: 220px; }
+.ct-scope .ct-itin-name { font-size: 0.82rem; font-weight: 500; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ct-scope .ct-itin-meta { font-size: 0.76rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .ct-scope .ct-status { font-size: 0.8rem; color: var(--ink-2); font-weight: 500; }
 .ct-scope .ct-table-wrap { overflow-x: auto; }
@@ -332,6 +350,8 @@
 }
 .ct-scope .ct-wh-marker.dim { opacity: 0.32; }
 .ct-scope .ct-wh-marker.dim .pill { display: none; }
+.ct-scope .ct-wh-marker .pill::before { display: none; }
+.ct-scope .ct-labels-off .ct-wh-marker .pill { display: none; }
 .ct-scope .ct-truck {
   width: 24px; height: 24px; border-radius: 50%; background: #fff;
   border: 1.5px solid var(--node); color: var(--node);

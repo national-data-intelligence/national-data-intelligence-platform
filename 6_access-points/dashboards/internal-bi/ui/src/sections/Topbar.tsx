@@ -23,7 +23,7 @@ const PAGE_SUBTITLES: Record<string, string> = {
   overview: 'Key health-system indicators, action priorities, and system trust.',
   disease:  'Disease trends, risk distribution, response readiness, and active operations.',
   resource: 'Supply-chain and commodity readiness, and the service impact of stockouts.',
-  'control-tower': 'EPSS hub-to-facility movement planning, routing, and dispatch.',
+  'control-tower': 'Orders, delivery runs and stock risk from district stores to facilities.',
   service:  'Track quality, access, and outcomes across programmes and facilities.',
 };
 

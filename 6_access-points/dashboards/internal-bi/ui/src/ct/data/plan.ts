@@ -6,28 +6,31 @@
 // road-following (public/et-roads.geojson) when present, else straight-line.
 // Do not hand-edit; re-run:
 //   node ui/scripts/gen-plan-et.cjs
-export interface Warehouse { id: string; name: string; short: string; zone: string; lng: number; lat: number; hub?: boolean; vehicles: number; }
+export interface Warehouse { id: string; name: string; short: string; zone: string; lng: number; lat: number; hub?: boolean; vehicles: number | null;
+  locationBasis?: string | null; }
 export interface DeliveryNode { id: string; name: string; region: string; type: string; lng: number; lat: number;
-  lineCount: number; storeCap: number; }
+  lineCount: number; storeCap: number | null; regionId?: string | null; locationBasis?: string | null; }
 export interface Why { opening: number; signal: number; prePlan: number; inbound: number; postPlan: number; }
 export interface Movement {
   id: string; period: string; fromId: string; toId: string;
   drug: string; drugShort: string; commodityKey: string; units: number;
-  amc: number; mos: number; daysToStockout: number; priority: number;
-  laneKm: number; costUnits: number;
-  sequenceIndex: number; vehicleRunId: string | null; fillRate: number;
-  nearestHubId: string; altHubId: string; reason: 'nearest' | 'capacity-overflow';
-  assignDeltaKm: number; assignDeltaCost: number; baselineHubId: string; baselineKm: number;
+  amc: number; mos: number | null; daysToStockout: number | null; priority: number;
+  laneKm: number; costUnits: number | null;
+  sequenceIndex: number | null; vehicleRunId: string | null; fillRate: number | null;
+  nearestHubId: string; altHubId: string | null; reason: 'nearest' | 'capacity-overflow' | 'district';
+  assignDeltaKm: number; assignDeltaCost: number | null; baselineHubId: string; baselineKm: number;
   planned: boolean; repaired: boolean; capped: boolean; why: Why;
+  atRisk?: boolean; demandBasis?: string | null;
+  decision?: { id: string; decision: 'approve' | 'reject'; by: string; at: string } | null;
 }
 export interface StopLine { drugShort: string; units: number; }
 export interface VehicleStop { nodeId: string; seq: number; legKm: number; cumKm: number; dropUnits: number;
-  lines: StopLine[]; lineCount: number; etaMin: number; serviceMin: number; }
+  lines: StopLine[]; lineCount: number; etaMin: number | null; serviceMin: number | null; }
 export interface VehicleRun {
-  id: string; period: string; vehicleType: string; capacityUnits: number; originHubId: string;
-  stops: VehicleStop[]; path: [number, number][];
-  totalRoadKm: number; totalUnits: number; fillRate: number; costTotal: number; costPerUnit: number;
-  kmSavedVsBaseline: number; depart: string; eta: string; status: 'Dispatched' | 'Loading' | 'Planned' | 'Delivered';
+  id: string; period: string; vehicleType: string | null; capacityUnits: number | null; originHubId: string;
+  stops: VehicleStop[]; path: [number, number][] | null;
+  totalRoadKm: number; totalUnits: number; fillRate: number | null; costTotal: number | null; costPerUnit: number | null;
+  kmSavedVsBaseline: number; depart: string | null; eta: string | null; status: 'Dispatched' | 'Loading' | 'Planned' | 'Delivered';
 }
 export interface Period { id: string; label: string; }
 

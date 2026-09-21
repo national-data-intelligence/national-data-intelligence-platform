@@ -1,17 +1,23 @@
 id: internal-bi/control-tower/main
 page_id: internal-bi/control-tower
-title: Supply position
-eyebrow: Zambia eLMIS · tracer commodities
-description: Global Fund S8 availability against its 90% target, stock health, and where next month's shortages and orders are, facility by facility.
+title: Movement planning
 ordering: 10
 columns: 12
 dense: true
 widgets:
-- id: pct-kpis
+- id: ct-filters
   col_span: 12
-  row_span: 5
+  row_span: 1
   ordering: 0
-- id: pct-map
+- id: ct-kpis
   col_span: 12
-  row_span: 11
+  row_span: 2
   ordering: 1
+- id: ct-movement
+  col_span: 12
+  row_span: 10
+  ordering: 2
+- id: ct-dispatch
+  col_span: 12
+  row_span: 6
+  ordering: 3

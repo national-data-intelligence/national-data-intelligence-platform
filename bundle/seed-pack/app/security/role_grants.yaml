@@ -53,8 +53,6 @@
     - ct-kpis
     - ct-movement
     - ct-dispatch
-    - pct-kpis
-    - pct-map
     - rm-statboard
     - rm-stock-heatmap
     - rm-stockout-impact
@@ -158,8 +156,6 @@
     - dz-region-map
     - dz-signal-chart
     - dz-woreda-table
-    - pct-kpis
-    - pct-map
     - ov-brief
     - ov-benchmarks
     - ov-reliability-table
@@ -291,8 +287,6 @@
     - ct-kpis
     - ct-movement
     - ct-dispatch
-    - pct-kpis
-    - pct-map
     - rm-statboard
     - rm-stock-heatmap
     - rm-stockout-impact

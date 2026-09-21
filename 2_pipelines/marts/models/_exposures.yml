@@ -40,9 +40,10 @@ exposures:
     label: "ct-kpis (Internal BI widget)"
     maturity: high
     url: https://internal-bi.127.0.0.1.nip.io/
-    description: "Internal BI widget `ct-kpis` reads bi_supply.mart_ct_movements through the governed gateway (Trino + OPA)."
+    description: "Internal BI widget `ct-kpis` reads bi_supply.mart_ct_movements, bi_supply.mart_pct_kpi through the governed gateway (Trino + OPA)."
     depends_on:
       - ref('mart_ct_movements')
+      - ref('mart_pct_kpi')
     owner:
       name: platform
 
@@ -308,30 +309,6 @@ exposures:
     description: "Internal BI widget `ov-trust-silent` reads bi_facility.mart_facility_capacity through the governed gateway (Trino + OPA)."
     depends_on:
       - ref('mart_facility_capacity')
-    owner:
-      name: platform
-
-  - name: widget_pct_kpis
-    type: dashboard
-    label: "pct-kpis (Internal BI widget)"
-    maturity: high
-    url: https://internal-bi.127.0.0.1.nip.io/
-    description: "Internal BI widget `pct-kpis` reads bi_supply.mart_pct_kpi through the governed gateway (Trino + OPA)."
-    depends_on:
-      - ref('mart_pct_kpi')
-    owner:
-      name: platform
-
-  - name: widget_pct_map
-    type: dashboard
-    label: "pct-map (Internal BI widget)"
-    maturity: high
-    url: https://internal-bi.127.0.0.1.nip.io/
-    description: "Internal BI widget `pct-map` reads bi_supply.mart_pct_facility_geo, bi_supply.mart_pct_position, bi_supply.mart_pct_kpi through the governed gateway (Trino + OPA)."
-    depends_on:
-      - ref('mart_pct_facility_geo')
-      - ref('mart_pct_position')
-      - ref('mart_pct_kpi')
     owner:
       name: platform
 

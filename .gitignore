@@ -162,6 +162,9 @@ supply-control-tower.zip
 # matches nested copies, which silently emptied the one-off _deploy-once courier
 # — it staged its README and nothing else.
 /palladium-console/
+# The console deploys over ssh, not through this repo's CI. It is a separate
+# product with its own history and must not be tracked here.
+apps/palladium-console/
 
 # Private SSH material. Never commit — this repo is public.
 .ssh.rar

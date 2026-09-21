@@ -54,10 +54,14 @@ export function CTMovement() {
   const { slicer, selectedId, view, focusNonce } = useCT();
   useCTLoad();   // fetch mart-backed plan once; re-renders all CT widgets when it lands
   const filtered = filterMovements(slicer);
-  const selected = filtered.find(m => m.id === selectedId) || rankedShipments(slicer)[0] || MOVEMENTS[0];
+  const selected = filtered.find(m => m.id === selectedId) || rankedShipments(slicer)[0]
+    || MOVEMENTS.find(m => m.planned);
   const setView = (v: CTView) => setCT({ view: v });
   const onSelect = (id: string) => setCT({ selectedId: id });
 
+  if (!selected) {
+    return <Scope><section id="sec-network" className="ct-grid"><div className="ct-empty">No plan data available.</div></section></Scope>;
+  }
   return (
     <Scope>
       <section id="sec-network" className="ct-grid">
@@ -72,26 +76,26 @@ export function CTMovement() {
                   </button>
                 ))}
               </div>
-              {view !== 'flow' && (
-                <button className="ct-focusbtn" onClick={() => bumpFocus()}><IconFocus /> Focus view</button>
-              )}
             </div>
           </div>
           <div className="ct-legend">
             {view === 'routes' && (<>
-              <span className="lg"><span className="ln" /> Road route</span>
-              <span className="lg"><span className="wh" /> EPSS hub</span>
+              <span className="lg"><span className="ln" /> Delivery run</span>
+              <span className="lg"><span className="wh" /> District store</span>
               <span className="lg"><span className="dn" /> Facility</span>
+              <span className="spacer" />
+              <button className="ct-focusbtn" onClick={() => bumpFocus()}><IconFocus /> Focus view</button>
             </>)}
             {view === 'network' && (<>
               <span className="lg"><span className="ln" /> Supply lane (width is units)</span>
-              <span className="lg"><span className="wh" /> EPSS hub</span>
+              <span className="lg"><span className="wh" /> District store</span>
               <span className="lg"><span className="dn" /> Facility</span>
               <span className="spacer" />
               <span className="ct-frame">Direct lanes, not road routes</span>
+              <button className="ct-focusbtn" onClick={() => bumpFocus()}><IconFocus /> Focus view</button>
             </>)}
             {view === 'flow' && (<>
-              <span className="lg"><span className="dn" style={{ background: 'var(--ink-2)' }} /> EPSS hub</span>
+              <span className="lg"><span className="dn" style={{ background: 'var(--ink-2)' }} /> District store</span>
               <span className="lg"><span className="dn" /> Destination region</span>
               <span className="spacer" />
               <span className="ct-frame">Band width is units shipped</span>

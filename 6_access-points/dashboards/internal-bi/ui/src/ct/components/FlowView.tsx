@@ -4,16 +4,25 @@ import T from '../theme';
 import { WH_BY_ID, NODE_BY_ID } from '../data/runtime';
 import { filterMovements, type Slicer } from '../lib/select';
 
-// Network-flow view: ZAMMSA zonal store → zone → region, link width = units.
+// Network-flow view: store → destination region, link width = units. The largest
+// stores keep their own band; the rest share one, so the chart stays readable when a
+// plan has many small stores.
+const TOP_STORES = 12;
+const OTHER = 'Other district stores';
+
 function flowOption(slicer: Slicer): echarts.EChartsOption {
-  const movs = filterMovements(slicer);
+  const movs = filterMovements(slicer).filter(m => m.planned);
+  const byStore: Record<string, number> = {};
+  for (const m of movs) byStore[m.fromId] = (byStore[m.fromId] || 0) + m.units;
+  const top = new Set(Object.entries(byStore).sort((a, b) => b[1] - a[1]).slice(0, TOP_STORES).map(([id]) => id));
+  const storeName = (id: string) => (top.has(id) ? WH_BY_ID[id].short : OTHER);
   const agg: Record<string, number> = {};
   for (const m of movs) {
-    const w = WH_BY_ID[m.fromId], n = NODE_BY_ID[m.toId];
-    const key = `${w.name}||${n.region}`;
+    const n = NODE_BY_ID[m.toId];
+    const key = `${storeName(m.fromId)}||${n.region}`;
     agg[key] = (agg[key] || 0) + m.units;
   }
-  const whNames = Array.from(new Set(movs.map(m => WH_BY_ID[m.fromId].name)));
+  const whNames = Array.from(new Set(movs.map(m => storeName(m.fromId))));
   const regionSet = Array.from(new Set(movs.map(m => NODE_BY_ID[m.toId].region)));
   const nodes = [
     ...whNames.map(n => ({ name: n, itemStyle: { color: T.ink2 } })),

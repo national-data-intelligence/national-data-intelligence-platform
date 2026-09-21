@@ -1,6 +1,7 @@
 id: internal-bi/control-tower
-title: PCT — Supply Chain Control Tower
-ordering: 15
-filters: []
+title: Supply Control Tower
+ordering: 35
+filters:
+- region
 sections:
 - internal-bi/control-tower/main

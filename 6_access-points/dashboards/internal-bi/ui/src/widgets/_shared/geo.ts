@@ -36,7 +36,6 @@ let _ctxLoading: Promise<any> | null = null;
  *  new country instead of the one still sitting in module scope. */
 export function invalidateGeo(): void {
   _geo = null; _loading = null; _ctxGeo = null; _ctxLoading = null;
-  _profileCtx.clear();
 }
 
 /** Fetch + register the active profile's admin-1 geometry exactly once. */
@@ -89,38 +88,6 @@ export function loadRegionContextGeo(): Promise<any> {
     throw err;
   });
   return _ctxLoading;
-}
-
-/** A NAMED installed profile's admin-1 regions on the same faint world-land
- *  context as loadRegionContextGeo — for a page whose data belongs to one country
- *  (the Zambia PCT page) whatever profile the deployment is showing. Registered
- *  under its own map name, so it never replaces the active profile's map. */
-const _profileCtx = new Map<string, Promise<{ mapName: string; geo: any }>>();
-export function loadProfileContextGeo(profile: string): Promise<{ mapName: string; geo: any }> {
-  const hit = _profileCtx.get(profile);
-  if (hit) return hit;
-  const q = `?profile=${encodeURIComponent(profile)}`;
-  const p = Promise.all([
-    fetch(REGION_URL + q).then(r => {
-      if (!r.ok) throw new Error(`admin-1 geometry of ${profile} unavailable (${r.status})`);
-      return r.json();
-    }),
-    fetch(WORLD_URL).then(r => (r.ok ? r.json() : { features: [] })).catch(() => ({ features: [] })),
-  ]).then(([regions, world]) => {
-    const ctxFeats = ((world as any).features || []).map((f: any, i: number) => ({
-      ...f,
-      properties: { ...(f.properties || {}), __ctx: true, name: `ctx-${i}` },
-    }));
-    const geo: any = { type: 'FeatureCollection', features: [...ctxFeats, ...((regions as any).features || [])] };
-    const mapName = `${REGION_CTX_MAP}:${profile}`;
-    echarts.registerMap(mapName, geo);
-    return { mapName, geo };
-  }).catch(err => {
-    _profileCtx.delete(profile);
-    throw err;
-  });
-  _profileCtx.set(profile, p);
-  return p;
 }
 
 /** Loose key for matching a display name against a polygon name.

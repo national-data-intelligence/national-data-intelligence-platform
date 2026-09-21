@@ -1454,71 +1454,12 @@ FETCHERS["ov-national-kpis"] = Fetcher(
 
 
 
-# ── PCT — Supply Chain Control Tower (Zambia eLMIS) ──────────────────────────
-# Demo "today" is the latest month in the data (Aug 2018), never now().
-# pct-kpis: national numerator/denominator per KPI, category and month, so the
-# strip pools categories itself (S8: a disease score pools its categories) and
-# draws the S8 trend against its 90% target.
-FETCHERS["pct-kpis"] = Fetcher(
-    schema="bi_supply", table="mart_pct_kpi",
-    subject="PRD", data_class="DC.STK", geo_col="region_id",
-    sql=lambda t, w: (
-        f"SELECT kpi_code, coalesce(category, '') AS category, month_id, "
-        f"sum(numerator) AS numerator, sum(denominator) AS denominator, max(target) AS target "
-        f"FROM {t}{w} GROUP BY kpi_code, coalesce(category, ''), month_id "
-        f"ORDER BY kpi_code, category, month_id"))
-
-
-# pct-map: one row per facility — GPS from the declared geography mart (so the
-# lat/lng masking obligation applies), its next-month position summary, and its
-# province's S8 availability at the anchor month.
-def _pct_map_sql(t: str, w: str) -> str:
-    pos = 'marts.bi_supply."mart_pct_position"'
-    kpi = 'marts.bi_supply."mart_pct_kpi"'
-    return (
-        f"WITH g AS (SELECT * FROM {t}{w}), "
-        f"p AS (SELECT facility_code, count(*) AS n_products, "
-        f"count(*) FILTER (WHERE h1_risk = 'likely_short') AS n_likely_short, "
-        f"count(*) FILTER (WHERE h1_risk = 'critical_at_risk') AS n_critical_at_risk, "
-        f"count(*) FILTER (WHERE h1_risk = 'covered') AS n_covered, "
-        f"count(*) FILTER (WHERE h1_risk = 'no_demand_expected') AS n_no_demand, "
-        f"sum(planning_replenishment_units_excl_pipeline) AS planned_units, "
-        f"sum(planning_rate) FILTER (WHERE planning_basis = 'forecast_p50') AS forecast_rate, "
-        f"sum(amc) FILTER (WHERE planning_basis = 'forecast_p50') AS forecast_amc "
-        f"FROM {pos} GROUP BY facility_code), "
-        f"k AS (SELECT region_id, sum(numerator) AS s8_num, sum(denominator) AS s8_den "
-        f"FROM {kpi} WHERE kpi_code = 'osa_s8' "
-        f"AND month_id = (SELECT max(month_id) FROM {kpi}) GROUP BY region_id) "
-        f"SELECT g.facility_code, g.facility_name, g.facility_type_code, g.district_name, "
-        f"g.region_id, g.region_name, g.lat, g.lng, g.coord_basis, "
-        f"CASE WHEN p.facility_code IS NULL THEN 'no_report' "
-        f"WHEN p.n_likely_short > 0 THEN 'likely_short' "
-        f"WHEN p.n_critical_at_risk > 0 THEN 'critical_at_risk' "
-        f"WHEN p.n_covered > 0 THEN 'covered' "
-        f"WHEN p.n_no_demand > 0 THEN 'no_demand_expected' "
-        f"ELSE 'not_assessed' END AS h1_status, "
-        f"p.n_products, p.n_likely_short, p.n_critical_at_risk, p.n_covered, p.n_no_demand, "
-        f"p.planned_units, p.forecast_rate, p.forecast_amc, k.s8_num, k.s8_den, "
-        f"(SELECT max(month_id) FROM {kpi}) AS as_of_month "
-        f"FROM g LEFT JOIN p ON p.facility_code = g.facility_code "
-        f"LEFT JOIN k ON k.region_id = g.region_id "
-        f"ORDER BY g.region_id, g.facility_code")
-
-
-FETCHERS["pct-map"] = Fetcher(
-    schema="bi_supply", table="mart_pct_facility_geo",
-    subject="PRD", data_class="DC.STK", geo_col="region_id",
-    sql=_pct_map_sql)
-
 # Widgets whose fetcher reads more than its declared mart. The OPA decision and
 # the masking obligation come from the declared (first) mart only, so every
 # other mart listed must carry the same access attributes —
 # bundle/scripts/test_gen_exposures.py enforces it; gen-exposures.py reads this
 # for lineage.
-WIDGET_MARTS = {
-    "pct-map": [("bi_supply", "mart_pct_facility_geo"), ("bi_supply", "mart_pct_position"),
-                ("bi_supply", "mart_pct_kpi")],
-}
+WIDGET_MARTS: dict[str, list[tuple[str, str]]] = {}
 
 def widget_supports(widget_id: str) -> dict[str, bool] | None:
     """supports{} for the resolved dashboard spec: which global-filter dims the

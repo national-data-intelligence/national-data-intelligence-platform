@@ -181,23 +181,6 @@ export async function loadReference(timeoutMs = 4000): Promise<void> {
 
 // {code,name}: value is the mart programme_id CODE (uppercase), name is the label.
 // Mirrors biApp.ts PROGRAMMES so filter values ('MALARIA') match programme_id.
-/** A NAMED installed profile's regions (code → display name → polygon name) —
- *  the exact code join for a page whose data belongs to one country, whatever
- *  profile is active. Never falls back to the active profile's regions. */
-export interface ProfileRegion { code: string; name: string; geo_name: string; }
-const _profileRegions = new Map<string, Promise<ProfileRegion[]>>();
-export function loadProfileRegions(profile: string): Promise<ProfileRegion[]> {
-  const hit = _profileRegions.get(profile);
-  if (hit) return hit;
-  const p = fetch(`/gw/profile/reference?profile=${encodeURIComponent(profile)}`)
-    .then(r => { if (!r.ok) throw new Error(`reference of ${profile} unavailable (${r.status})`); return r.json(); })
-    .then(j => ((j && j.regions) || []).map((r: any) => ({
-      code: String(r.code), name: String(r.name), geo_name: String(r.geo_name || r.name) })))
-    .catch(err => { _profileRegions.delete(profile); throw err; });
-  _profileRegions.set(profile, p);
-  return p;
-}
-
 export const PROGRAMMES = [
   { code: 'HIV', name: 'HIV' },        { code: 'TB', name: 'TB' },
   { code: 'EPI', name: 'Immunization (EPI)' }, { code: 'MNCH', name: 'MNCH' },

@@ -384,6 +384,14 @@
   default_sensitivity: default
   description: "PCT forecast backtest accuracy (historical, not live) — fold ledger by split, comparator and demand class."
 # ── MDM augmentation (PCT dataflow design): golden records + discovered relationships ──
+- schema_name: bi_supply
+  table_name: mart_pct_plan_decisions
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: Planner verdicts on Supply Control Tower plan lines with their snapshots (decision log, init 42)
+# ── MDM augmentation (PCT dataflow design): golden records + discovered relationships ──
 - schema_name: bi_mdm
   table_name: mdm_commodity_match_candidates
   subject: PRD
