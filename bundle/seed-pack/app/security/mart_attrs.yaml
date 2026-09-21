@@ -355,6 +355,20 @@
   granularity: aggregate
   default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional
   description: "PCT demand base (Zambia eLMIS) — facility × product × month: adjusted demand, stock state, orders, labelled pipeline assumption."
+- schema_name: bi_supply
+  table_name: mart_pct_position
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional
+  description: "PCT projected position (Zambia eLMIS, AMC basis) — risk band, replenishment excl./incl. assumed pipeline, district redistribution, input flags."
+- schema_name: bi_supply
+  table_name: pct_policy_parameters
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "PCT planning parameters (seed) — each marked SOURCED or ASSUMPTION with its source; shown beside every recommendation."
 # ── MDM augmentation (PCT dataflow design): golden records + discovered relationships ──
 - schema_name: bi_mdm
   table_name: mdm_commodity_match_candidates

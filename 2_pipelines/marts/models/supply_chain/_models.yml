@@ -79,6 +79,17 @@ seeds:
     columns:
       - name: kpi_code
         tests: [not_null, unique]
+  - name: pct_policy_parameters
+    description: |
+      Planning parameters the position mart applies, each marked SOURCED or ASSUMPTION with its
+      source. Lead time is an assumption (no lead-time data in the archive); editable.
+    columns:
+      - name: parameter
+        tests: [not_null, unique]
+      - name: basis
+        tests:
+          - accepted_values:
+              arguments: { values: ['SOURCED', 'ASSUMPTION'] }
 
 models:
   - name: mart_supply_region_stock
@@ -528,4 +539,30 @@ models:
         tests:
           - dbt_utils.expression_is_true:
               arguments: { expression: "<= calculated_order OR approved_capped IS NULL" }
+
+  - name: mart_pct_position
+    description: |
+      PCT projected position — facility × tracer product × programme at the anchor month, on eLMIS AMC
+      (demand_basis = elmis_amc). Explicit policy per row (max / EOP from facility type; lead time and
+      review period from pct_policy_parameters). Replenishment excluding (primary) and including the
+      assumed pipeline; district redistribution; flags for missing inputs. No monetary value (eLMIS price
+      semantics unverifiable).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [facility_code, product_code, programme_id]
+    columns:
+      - name: risk_band
+        tests:
+          - not_null
+          - accepted_values:
+              arguments: { values: ['stocked_out', 'below_eop', 'within_policy', 'over_max', 'no_recent_demand', 'unknown'] }
+      - name: replenishment_units_excl_pipeline
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: ">= 0 OR replenishment_units_excl_pipeline IS NULL" }
+      - name: replenishment_units_incl_pipeline
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "<= replenishment_units_excl_pipeline OR replenishment_units_incl_pipeline IS NULL" }
 
