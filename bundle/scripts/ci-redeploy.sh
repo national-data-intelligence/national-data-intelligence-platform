@@ -89,6 +89,30 @@ if touched "bundle/seeds/ref-vocab/"; then
   bash "$REPO/bundle/scripts/seed-ref-vocab.sh" --no-build 2>&1 | tail -3 || { echo "  ✗ vocab reload failed"; exit 1; }
 fi
 
+# 2b. Country profiles → the hostPath the gateway mounts read-only.
+#     The gateway reads /opt/nhdw-profiles (hostPath, DirectoryOrCreate — see
+#     nhdw-gateway.yaml) because the geometry is far too large for a configMap
+#     and because a profile swap has to be a file write the gateway sees without
+#     a rollout. NOTHING shipped that directory: a profile edit committed here
+#     never reached the deployment, which is why a new profile asset 404'd while
+#     the code serving it was already live. The ACTIVE pointer is state, lives
+#     in a different directory (/opt/nhdw-state), and is deliberately untouched.
+if touched "bundle/profiles/"; then
+  PROFILE_DEST="${NHDW_PROFILE_DIR:-/opt/nhdw-profiles}"
+  log "sync country profiles → $PROFILE_DEST"
+  if mkdir -p "$PROFILE_DEST" 2>/dev/null || sudo mkdir -p "$PROFILE_DEST" 2>/dev/null; then
+    # --delete so a file removed upstream goes here too. Writable-by-us first,
+    # sudo second: the runner may or may not own the directory, and the whole
+    # script already treats sudo as available-but-not-guaranteed.
+    rsync -a --delete "$REPO/bundle/profiles/" "$PROFILE_DEST/" 2>/dev/null \
+      || sudo rsync -a --delete "$REPO/bundle/profiles/" "$PROFILE_DEST/" \
+      || { echo "  ✗ could not sync profiles to $PROFILE_DEST"; exit 1; }
+    echo "  profiles now: $(ls -1 "$PROFILE_DEST" 2>/dev/null | tr '\n' ' ')"
+  else
+    echo "  ✗ could not create $PROFILE_DEST"; exit 1
+  fi
+fi
+
 
 BUILT=(); RESTART=()
 for c in "${COMPONENTS[@]}"; do

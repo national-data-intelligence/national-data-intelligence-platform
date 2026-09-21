@@ -30,9 +30,10 @@ on:
       - '2_pipelines/mdm/**'
       - '3_storage/postgres/init/**'
       - 'bundle/seeds/ref-vocab/**'
-      # TEMPORARY — the demo console riding along to reach this runner.
-      # Remove with _deploy-once/ and the deploy-console job below.
-      - '_deploy-once/**'
+      - 'apps/palladium-console/**'
+      # Country profiles are a hostPath the gateway reads; nothing shipped them
+      # before, so a profile edit never reached the deployment.
+      - 'bundle/profiles/**'
   workflow_dispatch:
     inputs:
       scope:
@@ -107,7 +108,7 @@ jobs:
       - name: Sync the console into place and bring it up
         run: |
           set -euo pipefail
-          SRC="$GITHUB_WORKSPACE/_deploy-once/palladium-console"
+          SRC="$GITHUB_WORKSPACE/apps/palladium-console"
           DST="${CONSOLE_DIR:-$HOME/palladium-console}"
           mkdir -p "$DST"
           # --delete so a file removed upstream goes here too, but NEVER the
