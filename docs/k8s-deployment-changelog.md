@@ -8,6 +8,35 @@ Entries are newest-first.
 
 ---
 
+## 2026-09-21 · OpenMetadata sign-in failed after a Helm provisioning run
+
+**Symptom.** SSO into OpenMetadata returned to OM's `/callback` with
+`{"error":"Bad token response, error=unauthorized_client, description=Invalid
+client or Invalid client credentials"}`. Every other SSO client kept working.
+
+**Root cause.** In the Helm chart's `keycloak-seed-job.yaml`, the parity entry for
+`OPENMETADATA_OIDC_SECRET` had been inserted between `JUPYTERHUB_OIDC_SECRET` and
+its `valueFrom` line. YAML read JupyterHub's entry as valueless and gave
+OpenMetadata's entry two `valueFrom` keys, the last one — `jupyterhub-secrets` —
+winning. The seed Job a Helm provisioning run creates therefore wrote JupyterHub's
+secret onto the Keycloak `openmetadata` client, while the OM server kept presenting
+its own (`openmetadata-secrets`). The kustomize base was correct throughout.
+
+**How it was confirmed.** The live Job's env showed `OPENMETADATA_OIDC_SECRET ←
+jupyterhub-secrets`; sha256 fingerprints of the Keycloak client secret and
+`openmetadata-secrets/OIDC_CLIENT_SECRET` differed.
+
+**Fix.** The `valueFrom` line moved back under `JUPYTERHUB_OIDC_SECRET`. On the live
+cluster: the seed Job re-rendered from the base manifest with the host base stamped
+(`render-keycloak-seed-job.py --hostbase …`), rerun, then verified — both clients'
+Keycloak secrets match their deployment secrets, existing redirect URIs unchanged,
+OM sign-in completes in a browser.
+
+**Watch for.** Inserting a list entry into a two-line `- name:` / `valueFrom:` pair
+splits it silently; YAML accepts duplicate keys. Review env-list diffs as pairs.
+
+---
+
 ## 2026-09-21 · The from-bare provision path had never been run
 
 `provision.yml` (ansible `site.yml`) is what the working agreement calls the
