@@ -325,3 +325,69 @@ duplicate masters.
 recorded as the pre-MDM baseline. With zero live steward decisions the resolution
 logic is still deterministic; the corpus it runs over has grown. Use the new value
 as the baseline for future revert checks.
+
+---
+
+## 15. A truncated init statement — the find that justifies a real cold boot
+
+**Found.** `3_storage/postgres/init/07_marts_schemas_extras.sql` ends mid-statement:
+`ALTER DEFAULT PRIVILEGES FOR ROLE vault_writer IN SCHEMA bi_mdm` with no `GRANT`
+clause. Introduced with the `bi_mdm` schema on 2026-09-10; the file has been
+unexecutable since.
+
+**Why it matters more than a failed deploy step.** `postgres:16-alpine` runs
+`/docker-entrypoint-initdb.d/*.sql` with `ON_ERROR_STOP=1` and aborts
+initialisation on failure. Any cold boot onto a fresh volume since 2026-09-10 would
+have died at postgres init. It also left `bi_mdm` without default SELECT privileges
+for `bi_reader`.
+
+**Why eleven days of green runs missed it.** The DDL tier only runs when an init
+file changes or a deploy is full-scope, and init `.sql` executes on a FRESH volume
+only — every provision this week reused the existing PGDATA. The path that
+exercises these files was never the path under test. It surfaced the moment a
+full-scope deploy ran, and only because failed DDL now fails the run instead of
+scrolling past.
+
+**Fixed and swept.** Completed the statement, verified it applies with
+`ON_ERROR_STOP=1`, and checked all 19 init files — every other one ends on a
+terminated statement.
+
+---
+
+## 16. Made the true cold boot reachable through CI
+
+**Decided.** Added `fresh_volumes` to `provision.yml` (default false) rather than
+wiping the host by hand over ssh.
+
+**Why.** The defect above exists precisely because the fresh-volume path is not
+reachable through the pipeline, so it never gets tested. A destructive step that
+only exists as an ssh ritual is a step that does not get run. The standing rule is
+that remote changes go through CI/CD and extending CI when it cannot carry a change
+class IS the work — this is that case.
+
+**Guards.** Off by default; refuses to run without `run_seed` so it cannot leave an
+empty warehouse; scales workloads down before releasing volumes; the input
+description says it destroys all data.
+
+**Alternative.** Wipe by hand for this one test. Rejected — it leaves the gap open
+for the next person.
+
+**Reverse.** Remove the input from `provision.yml` and the three tasks at the top
+of the deploy role.
+
+---
+
+## 17. Fixed the ansible-lint drift and gated it
+
+**Decided.** Returned the playbook to `0 failures, 0 warnings` at the production
+profile and added `ansible-lint` to the CI test job.
+
+**Why.** It had been clean and had drifted to four findings, because nothing ran the
+linter. Two were over-long lines (the apt source cannot wrap, so its parts became
+variables); one was a register that could take the role prefix; the fourth,
+`nhdw_helm`, keeps its name — it is declared in `group_vars/all` and read by the
+`cni` and `deploy` roles, so a `provision_` prefix would rename a cross-role
+contract to satisfy a rule about role-local variables. That one carries a `noqa`
+with the reason written next to it.
+
+**Reverse.** Drop the lint step from `.github/workflows/test.yml`.
