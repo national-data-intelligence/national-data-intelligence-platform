@@ -424,3 +424,45 @@ what is lost is the SeaweedFS validation residue and the stale
 design — which is exactly the claim the test would be checking.
 
 **Reverse.** Nothing to undo. The destructive option exists and is off by default.
+
+---
+
+## 19. Three more latent defects, all on paths nothing ever ran
+
+**Found by making failures honest and then driving the system.** Each was invisible
+because its code path only executes during a cold boot or a full-scope deploy —
+both rare — and each was fatal on that path.
+
+1. **`23_perm_admin_grants.sql` and `32_permission_store.sql` wrote `ops_perm` into
+   the wrong database.** Both create or grant on `ops_perm`, which lives in
+   `nhdw_ops`; neither carried a `\connect`. Every init file starts a fresh psql
+   session against `POSTGRES_DB` (`nhdw_vault`), so 23 failed with
+   `schema "ops_perm" does not exist` and aborted initialisation.
+
+2. **The reference-vocabulary reload could never run.** `seed-ref-vocab.sh` fed a
+   multi-statement `psql -c` containing `COPY ... FROM STDIN`; psql sends a `-c`
+   string as one simple query and cannot hand the channel over to copy data, so
+   every load died with `unexpected COPY_IN result`. Fixing that exposed a second
+   layer: `csv.writer`'s default dialect writes CRLF, and `COPY` locks onto the
+   newline convention of the first row, rejecting the LF terminator.
+
+3. **The DQ detector could not raise a NEW flag.** `dq_flag_event.id` is a serial
+   and the grant covered the table but not its sequence. Updating an existing flag
+   worked (no history row is written then), so the failure only appeared on the
+   first genuinely new finding: `permission denied for sequence
+   dq_flag_event_id_seq`. Found by actually calling the detector — HTTP 500.
+
+**Each was fixed at the source and given a guard, not just a patch.** The
+`\connect` rule is written next to the lines that need it; the vocabulary CSVs are
+LF at the generator with the loader stripping CR and a test asserting it; the
+sequence grant sits beside the table grant, and the cold-boot test now asserts the
+property for EVERY table `ops_gateway` can insert into — swept both databases first
+and this was the only instance.
+
+**The thread connecting all of them.** Six defects today lived on cold-boot or
+full-scope paths. Ordinary deploys are a narrow slice of what the system does, and
+until this week a failure on the wide slice scrolled past instead of failing the
+run. The durable fix is not the six patches; it is that
+`bundle/scripts/test-coldboot-initdb.sh` runs the real init directory in CI on
+every push, `verify-system` check 9 drives the masking negative path on every
+deploy, and a failed DDL, seed or job now stops the run.
