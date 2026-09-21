@@ -55,6 +55,22 @@ wait_healthy() { # container timeout_s
   return 1
 }
 
+# COUNTRY GUARD. The seed-only-if-current contract compares a synth VERSION and
+# nothing else — so a packed dump full of Ethiopian rows, stamped with the
+# current version, makes every branch below skip synthesis and the warehouse
+# comes up Ethiopian no matter which profile was asked for. The marker records
+# what the script writes, never which country it wrote about.
+#
+# Until the marker carries the country, a non-default entity build forces a
+# re-synthesis: a packed dump is only trustworthy for the country it was packed
+# for, and we cannot currently tell which that was.
+COUNTRY_FORCES_SYNTH=0
+if [ -n "${NHDW_ENTITY_BUILD:-}" ] || { [ -n "${NHDW_PROFILE:-}" ] && [ "${NHDW_PROFILE}" != "et-v3" ]; }; then
+  COUNTRY_FORCES_SYNTH=1
+  echo "  ▸ profile ${NHDW_PROFILE:-?} requested — ignoring packed dumps and re-synthesizing"
+  echo "    (a packed dump records its synth version, not its country)"
+fi
+
 # The SYNTH_VERSION a synthesizer script declares (its data contract). Compared
 # against the marker the synthesizer stamps into the DB (dbo.SynthMeta /
 # openmrs.synth_meta): a restored pack made by an OLDER synthesizer no longer
@@ -146,7 +162,7 @@ up_ethioemr() {
   OBS=$(MYQ "SELECT COUNT(*) FROM openmrs.obs;")
   EMR_HAVE=$(MYQ "SELECT COALESCE(MAX(synth_version),0) FROM openmrs.synth_meta;")
   EMR_WANT=$(synth_ver "$SRC/EthioEMR/scripts/synthesize.py")
-  if [ "${OBS:-0}" -gt 0 ] && [ "${EMR_HAVE:-0}" = "${EMR_WANT:-1}" ]; then
+  if [ "$COUNTRY_FORCES_SYNTH" = "0" ] && [ "${OBS:-0}" -gt 0 ] && [ "${EMR_HAVE:-0}" = "${EMR_WANT:-1}" ]; then
     log "EthioEMR already carries current clinical data (obs=${OBS}, synth v${EMR_HAVE}) — skipping synthesize"
   elif [ "${OBS:-0}" -gt 0 ] && [ "${EMR_HAVE:-0}" = "0" ]; then
     warn "EthioEMR carries data (obs=${OBS}) but NO synth marker (pre-marker pack) — trusting it; re-pack to stamp"
@@ -176,7 +192,7 @@ up_hcmis_mbrana() {
   # so a pack that predates the dispatch loader re-synthesizes to add it.
   DISP_HAVE=$(SQLQ "SELECT ISNULL(MAX(SynthVersion),0) FROM HCMISWDM.dbo.DispatchSynthMeta")
   DISP_WANT=$(grep -oE 'DISPATCH_SYNTH_VERSION *= *[0-9]+' "$SRC/HCMISWDM/scripts/synthesize_dispatch.py" | head -1 | grep -oE '[0-9]+')
-  if [ "${FACTS:-0}" -gt 0 ] && [ "${WDM_HAVE:-0}" = "${WDM_WANT:-1}" ] && [ "${DISP_HAVE:-0}" = "${DISP_WANT:-1}" ]; then
+  if [ "$COUNTRY_FORCES_SYNTH" = "0" ] && [ "${FACTS:-0}" -gt 0 ] && [ "${WDM_HAVE:-0}" = "${WDM_WANT:-1}" ] && [ "${DISP_HAVE:-0}" = "${DISP_WANT:-1}" ]; then
     log "HCMISWDM already carries current facts (DailyRecord=${FACTS}, synth v${WDM_HAVE}, dispatch v${DISP_HAVE}) — skipping synthesize"
   else
     [ "${FACTS:-0}" -gt 0 ] && log "HCMISWDM synth-version drift (analytics have v${WDM_HAVE:-0}/want v${WDM_WANT:-1}, dispatch have v${DISP_HAVE:-0}/want v${DISP_WANT:-1}) — re-synthesizing"
@@ -188,7 +204,7 @@ up_hcmis_mbrana() {
   MBR=$(SQLQ "SELECT COUNT(*) FROM HCMISWCloud.mFlowUSSD.SOHLogs")
   MBR_HAVE=$(SQLQ "SELECT ISNULL(MAX(SynthVersion),0) FROM HCMISWCloud.dbo.SynthMeta")
   MBR_WANT=$(synth_ver "$SRC/mBrana/scripts/synthesize.py")
-  if [ "${MBR:-0}" -gt 0 ] && [ "${MBR_HAVE:-0}" = "${MBR_WANT:-1}" ]; then
+  if [ "$COUNTRY_FORCES_SYNTH" = "0" ] && [ "${MBR:-0}" -gt 0 ] && [ "${MBR_HAVE:-0}" = "${MBR_WANT:-1}" ]; then
     log "mBrana already carries current data (SOHLogs=${MBR}, synth v${MBR_HAVE}) — skipping synthesize"
   else
     [ "${MBR:-0}" -gt 0 ] && log "mBrana synth-version drift (have v${MBR_HAVE:-0}, want v${MBR_WANT:-1}) — re-synthesizing"
@@ -244,7 +260,7 @@ up_dhis2() {
   wait_http "http://admin:district@127.0.0.1:8080/api/system/info.json" "version" 900 \
     || { warn "DHIS2 never became ready (schema init can take >10 min)"; return 1; }
   # Skip the expensive seed if IDSR is already present (idempotent re-runs).
-  if curl -fs "http://admin:district@127.0.0.1:8080/api/dataElements.json?filter=code:like:IDSR&fields=id&paging=false" 2>/dev/null | grep -q '"id"'; then
+  if [ "$COUNTRY_FORCES_SYNTH" = "0" ] && curl -fs "http://admin:district@127.0.0.1:8080/api/dataElements.json?filter=code:like:IDSR&fields=id&paging=false" 2>/dev/null | grep -q '"id"'; then
     log "DHIS2 already seeded (IDSR data elements present) — skipping seed_ethiopia.py"
     return 0
   fi
