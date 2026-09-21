@@ -1,47 +1,91 @@
-"""elmis_consumption_forecast self-test (facility × product × month grain)."""
+"""elmis_consumption_forecast v2 self-test — the forecast contract's testable promises."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from train import FLAT_COLUMNS, ElmisConsumptionForecastModel, train  # noqa: E402
+import yaml
+
+HERE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(HERE))
+from train import (FLAT_COLUMNS, METHODS, ElmisConsumptionForecastModel,  # noqa: E402
+                   demand_class, eligible, f_holt_damped, train)
+
+MONTHS = [str(m) for m in pd.period_range("2017-09", periods=12, freq="M")]
 
 
-def _frame(n_months=12, soh=300.0, series=(("F001", "P01"), ("F001", "P02"), ("F002", "P01")), seed=7):
+def _frame(series=(("F001", "P01"), ("F001", "P02"), ("F002", "P01"), ("F003", "P03")), seed=7, gap_month=None):
     rng = np.random.default_rng(seed); rows = []
-    for fac, prod in series:
-        for i, m in enumerate(pd.period_range("2017-09", periods=n_months, freq="M")):
-            rows.append({"month_id": str(m), "facility_code": fac, "product_code": prod, "product_name": f"Product {prod}",
-                         "quantity_dispensed": float(max(120 + 3 * i + rng.normal(0, 10), 1)), "normalized_consumption": None,
-                         "stock_in_hand": soh, "amc": 125.0, "stockout_days": 0})
+    for k, (fac, prod) in enumerate(series):
+        for i, m in enumerate(MONTHS):
+            if gap_month is not None and m == gap_month:
+                continue
+            base = 120 + 3 * i if k != 3 else (0 if i % 3 else 60)      # series 4 is lumpy/intermittent
+            rows.append({"month_id": m, "facility_code": fac, "product_code": prod, "product_name": f"Product {prod}",
+                         "adjusted_demand": float(max(base + rng.normal(0, 10), 0)), "demand_censored": False,
+                         "stock_in_hand": 300.0, "amc": 125.0, "region_id": "50", "facility_type_code": "HC",
+                         "programme_name": "Antiretroviral Drugs"})
     return pd.DataFrame(rows)
 
 
-def test_train_returns_pyfunc_model():
-    import mlflow.pyfunc
-    assert isinstance(train(_frame(), {}), (ElmisConsumptionForecastModel, mlflow.pyfunc.PythonModel))
+def test_train_returns_model_with_metrics_and_evaluation():
+    m = train(_frame(), {})
+    assert "champion_rule_passed" in m.metrics and "holdout_wape" in m.metrics
+    assert {"fold_ledger", "per_class", "quantiles_scaled"} <= set(m.evaluation)
+    assert all(isinstance(v, float) for v in m.metrics.values())
 
 
-def test_flat_schema_one_row_per_series():
+def test_fold_ledger_is_expanding_and_holdout_once():
+    led = train(_frame(), {}).evaluation["fold_ledger"]
+    hold = [r for r in led if r["split"] == "holdout"]
+    assert len(hold) == 1 and hold[0]["as_of_month"] == MONTHS[-2] and hold[0]["target_month"] == MONTHS[-1]
+    tune = sorted(r["as_of_month"] for r in led if r["split"] == "tuning")
+    assert tune and tune[-1] < hold[0]["as_of_month"]
+
+
+def test_no_leakage_future_spike_does_not_change_past_forecast():
+    """A forecast made at an origin must not move when a LATER month changes."""
+    y = np.array([100, 110, 105, 120, 115, 125, 130, np.nan, np.nan, np.nan, np.nan, np.nan], float)
+    p = ElmisConsumptionForecastModel().p
+    before = {m: fn(y[:7], p) for m, fn in __import__("train").FORECASTERS.items()}
+    y2 = y.copy(); y2[9] = 1e6                                   # a spike after the origin
+    after = {m: fn(y2[:7], p) for m, fn in __import__("train").FORECASTERS.items()}
+    assert before == after
+    assert demand_class(y[:7]) == demand_class(y2[:7]) and eligible(y[:7], 6) == eligible(y2[:7], 6)
+
+
+def test_gaps_are_gaps_not_zeros():
+    y_gap = np.array([100, 100, np.nan, 100, 100, 100], float)
+    y_zero = np.array([100, 100, 0.0, 100, 100, 100], float)
+    p = ElmisConsumptionForecastModel().p
+    assert f_holt_damped(y_gap, p) != f_holt_damped(y_zero, p)
+    assert abs(f_holt_damped(y_gap, p) - 100) < 1e-6          # a gap does not drag the level down
+
+
+def test_censored_actuals_are_not_scored():
+    df = _frame()
+    df.loc[df.month_id == MONTHS[-1], "demand_censored"] = True    # every holdout actual censored
+    bt = ElmisConsumptionForecastModel().backtest(df)
+    assert (bt.split == "holdout").sum() == 0
+
+
+def test_predict_contract_keys_and_flat_schema():
+    contract = yaml.safe_load(open(HERE / "forecast_contract.yaml"))
     out = train(_frame(), {}).predict(None, _frame())
-    for c in FLAT_COLUMNS:
+    for c in ["district", "year", "week"]:
         assert c in out.columns
-    assert len(out) == 3 and set(out["district"]) == {"F001|P01", "F001|P02", "F002|P01"}
-    r = out.iloc[0]
-    assert r["pred_cases_mean"] > 0 and 1 <= int(r["week"]) <= 53 and r["method"] == "holt_damped"
-    assert 0.0 <= r["alarm_prob"] <= 1.0 and "alarm_flag" not in out.columns
-
-
-def test_short_series_mean_fallback_and_stockout():
-    out = train(_frame(2, soh=0.0), {}).predict(None, _frame(2, soh=0.0))
-    assert set(out["method"]) == {"mean"} and (out["status"] == "stockout").all() and (out["alarm_prob"] >= 0.5).all()
-
-
-def test_holdout_mase_reported():
-    m = ElmisConsumptionForecastModel(); res = m.holdout_mase(_frame(12), 3)
-    assert res["holdout_series"] == 3 and res["mase_vs_naive1"] is not None
+    for k in contract["attrs"]:
+        assert k in out.columns, k
+    assert (out.horizon == 1).all() and (out.as_of_month == MONTHS[-1]).all()
+    assert (out.p10 <= out.p50).all() and (out.p50 <= out.p90).all() and (out.p10 >= 0).all()
+    assert out.pred_cases_lwr95.isna().all() and out.pred_cases_upr95.isna().all()   # Gaussian band retired
+    assert out.method.isin(METHODS).all()
 
 
 if __name__ == "__main__":
-    test_train_returns_pyfunc_model(); test_flat_schema_one_row_per_series(); test_short_series_mean_fallback_and_stockout(); test_holdout_mase_reported(); print("ok")
+    for name, fn in list(globals().items()):
+        if name.startswith("test_"):
+            fn()
+    print("ok")
