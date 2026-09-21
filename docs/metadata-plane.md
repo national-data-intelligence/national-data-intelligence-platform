@@ -101,7 +101,12 @@ Internal BI). The standard, binding for any future access point:
    `WIDGET_MARTS` beside its queries. `bundle/scripts/test_gen_exposures.py`
    (CI) fails when a catalog widget has no binding — unless it is listed as
    reading no mart, with the reason — and when a route declaration names a
-   mart its route never queries.
+   mart its route never queries. A registry fetcher that joins marts beyond
+   its declared one lists them all (declared mart first) in `fetchers.py`'s own
+   `WIDGET_MARTS`, so lineage carries every mart it reads; because the OPA
+   decision and the masking obligation come from the declared mart only, every
+   joined mart must carry the declared mart's access attributes
+   (`mart_attrs.yaml`) — the same test fails otherwise.
 
 **The full chain and what produces each hop:** source system → lake raw view
 (ingestor emitters) → ClickHouse staging model (dbt connector, staging project

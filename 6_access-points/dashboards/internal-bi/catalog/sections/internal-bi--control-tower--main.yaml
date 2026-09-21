@@ -1,25 +1,17 @@
 id: internal-bi/control-tower/main
 page_id: internal-bi/control-tower
-title: Movement planning
-eyebrow: EPSS distribution
-description: Hub-to-facility movement plan, routing, and dispatch for the current period.
+title: Supply position
+eyebrow: Zambia eLMIS · tracer commodities
+description: Global Fund S8 availability against its 90% target, stock health, and where next month's shortages and orders are, facility by facility.
 ordering: 10
 columns: 12
 dense: true
 widgets:
-- id: ct-filters
+- id: pct-kpis
   col_span: 12
-  row_span: 1
+  row_span: 5
   ordering: 0
-- id: ct-kpis
+- id: pct-map
   col_span: 12
-  row_span: 2
+  row_span: 11
   ordering: 1
-- id: ct-movement
-  col_span: 12
-  row_span: 10
-  ordering: 2
-- id: ct-dispatch
-  col_span: 12
-  row_span: 6
-  ordering: 3
