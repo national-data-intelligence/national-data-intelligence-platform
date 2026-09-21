@@ -246,6 +246,18 @@ up_elmis() {
 up_dhis2() {
   step "DHIS2 — the slow one (Liquibase schema init, ~5-10 min) + Ethiopia + IDSR seed"
   ensure_env "$SRC/DHIS2"
+  # dhis.conf is a bind-mounted FILE. If docker ever started dhis2-web before the
+  # file existed (it was gitignored and absent on a fresh checkout), docker
+  # created a DIRECTORY at that path — and every recreate since crash-loops with
+  # "dhis.conf (Is a directory)". Repair it: a directory here is never valid.
+  DHCONF="$SRC/DHIS2/config/dhis.conf"
+  if [ -d "$DHCONF" ]; then
+    warn "dhis.conf is a directory (docker auto-created it before the file existed) — removing"
+    rmdir "$DHCONF" 2>/dev/null || rm -rf "$DHCONF"
+  fi
+  if [ ! -f "$DHCONF" ]; then
+    warn "dhis.conf missing at $DHCONF — DHIS2 cannot start without it"; return 1
+  fi
   compose "$SRC/DHIS2" up -d >/dev/null 2>&1 || { warn "dhis2 compose up failed"; return 1; }
   # PACKED-STATE restore: if pack.sh exported a pg dump and the DB has no data
   # values yet, restore it (then bounce the web app so caches/migrations realign).

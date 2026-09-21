@@ -22,7 +22,12 @@ _workspace/
 secrets/
 **/secrets.yaml
 **/secrets.yml
+# dhis.conf may hold DB + encryption secrets, so it is ignored by default —
+# EXCEPT the DHIS2 source replica's committed demo config, which carries
+# only placeholder values and MUST ship (docker auto-creates it as a
+# DIRECTORY on first mount otherwise, and DHIS2 crash-loops forever).
 dhis.conf
+!0_external/sources/DHIS2/config/dhis.conf
 standalone_admin_password.txt
 # Airflow config can embed connection secrets
 airflow.cfg
