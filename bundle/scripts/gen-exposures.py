@@ -22,8 +22,10 @@ import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 FETCHERS = REPO / "6_access-points/api/nhdw-gateway/app/fetchers.py"
-# Route modules that serve widgets outside the registry (declare WIDGET_MARTS).
-ROUTE_MODULES = [REPO / "6_access-points/api/nhdw-gateway/app/routes/ct.py"]
+# Modules that declare a module-level WIDGET_MARTS: route modules serving widgets
+# outside the registry, and the registry itself for fetchers that read more than
+# their declared mart.
+ROUTE_MODULES = [REPO / "6_access-points/api/nhdw-gateway/app/routes/ct.py", FETCHERS]
 MARTS = REPO / "2_pipelines/marts"
 # The one supplied host base, same contract as everywhere else (ingress, OIDC
 # redirect URIs, the keycloak seed, the wildcard certificate). A deployment on a
@@ -91,16 +93,23 @@ def widget_bindings() -> dict[str, tuple[str, str]]:
     return out
 
 
-def route_widget_bindings() -> dict[str, list[tuple[str, str]]]:
-    """Widgets served by a dedicated route instead of the registry declare their
-    marts in a module-level `WIDGET_MARTS` literal in that route module."""
+def module_widget_marts(module: pathlib.Path) -> dict[str, list[tuple[str, str]]]:
+    """The module-level `WIDGET_MARTS` literal of one module (empty if none)."""
     out: dict[str, list[tuple[str, str]]] = {}
-    for route in ROUTE_MODULES:
-        for node in ast.parse(route.read_text()).body:
-            if (isinstance(node, ast.Assign) and any(
-                    isinstance(t, ast.Name) and t.id == "WIDGET_MARTS" for t in node.targets)):
-                for widget, marts in ast.literal_eval(node.value).items():
-                    out[widget] = [tuple(m) for m in marts]
+    for node in ast.parse(module.read_text()).body:
+        if (isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "WIDGET_MARTS" for t in node.targets)):
+            for widget, marts in ast.literal_eval(node.value).items():
+                out[widget] = [tuple(m) for m in marts]
+    return out
+
+
+def route_widget_bindings() -> dict[str, list[tuple[str, str]]]:
+    """Widgets whose marts are declared in a `WIDGET_MARTS` literal: widgets served
+    by a dedicated route, and registry widgets whose fetcher joins other marts."""
+    out: dict[str, list[tuple[str, str]]] = {}
+    for module in ROUTE_MODULES:
+        out.update(module_widget_marts(module))
     return out
 
 

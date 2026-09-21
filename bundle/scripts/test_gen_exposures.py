@@ -9,8 +9,12 @@ lineage anywhere. Pure-python, repo files only:
               FETCHERS["x"] = Fetcher(...), alias FETCHERS["a"] = FETCHERS["b"]),
               yields a binding
   aliases     an alias resolves to its target's binding
-  routes      every mart a route-served widget declares in WIDGET_MARTS is
-              actually queried by that route module (declaration cannot drift)
+  routes      every mart a widget declares in a module's WIDGET_MARTS is
+              actually queried by that module (declaration cannot drift)
+  parity      a registry widget that joins other marts lists its declared mart
+              first, and every mart it lists carries the declared mart's access
+              attributes (mart_attrs.yaml) — OPA decides and masks on the
+              declared mart only
   catalog     every Internal BI catalog widget is bound, or listed in
               READS_NO_MART with the reason — a new widget without a binding
               fails here instead of silently missing from lineage
@@ -60,13 +64,31 @@ def test_aliases() -> None:
 
 
 def test_routes() -> None:
-    for route in gen.ROUTE_MODULES:
-        src = route.read_text()
-        for widget, marts in gen.route_widget_bindings().items():
+    for module in gen.ROUTE_MODULES:
+        src = module.read_text()
+        for widget, marts in gen.module_widget_marts(module).items():
             for _, table in marts:
-                assert re.search(rf"\.{table}\b", src), \
-                    f"{route.name}: {widget} declares {table} but the route never queries it"
-    print(f"  ✓ routes: {len(gen.route_widget_bindings())} route-served widgets, declarations match queries")
+                assert re.search(rf'\.{table}\b|\."{table}"|table="{table}"', src), \
+                    f"{module.name}: {widget} declares {table} but the module never queries it"
+    print(f"  ✓ routes: {len(gen.route_widget_bindings())} widgets with declared marts, declarations match queries")
+
+
+def test_parity() -> None:
+    attrs_doc = yaml.safe_load((REPO / "bundle/seed-pack/app/security/mart_attrs.yaml").read_text())
+    rows = attrs_doc if isinstance(attrs_doc, list) else attrs_doc.get("mart_attrs", [])
+    attrs = {(r["schema_name"], r["table_name"]):
+             (r["subject"], r["data_class"], r.get("granularity"), r.get("default_sensitivity", "default"))
+             for r in rows}
+    registry = gen.widget_bindings()
+    joined = gen.module_widget_marts(gen.FETCHERS)
+    for widget, marts in joined.items():
+        assert marts[0] == registry.get(widget), \
+            f"{widget}: WIDGET_MARTS must list the fetcher's declared mart first ({registry.get(widget)})"
+        for mart in marts:
+            assert mart in attrs, f"{widget}: {mart} has no mart_attrs row"
+            assert attrs[mart] == attrs[marts[0]], \
+                f"{widget}: {mart} access attributes {attrs[mart]} differ from the declared mart's {attrs[marts[0]]}"
+    print(f"  ✓ parity: {len(joined)} joining widget(s), every joined mart shares the declared mart's access attributes")
 
 
 def test_catalog() -> None:
@@ -82,6 +104,6 @@ def test_catalog() -> None:
 
 
 if __name__ == "__main__":
-    for t in (test_registry, test_aliases, test_routes, test_catalog):
+    for t in (test_registry, test_aliases, test_routes, test_parity, test_catalog):
         t()
     print("gen-exposures contract: OK")

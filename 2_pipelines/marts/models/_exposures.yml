@@ -311,6 +311,30 @@ exposures:
     owner:
       name: platform
 
+  - name: widget_pct_kpis
+    type: dashboard
+    label: "pct-kpis (Internal BI widget)"
+    maturity: high
+    url: https://internal-bi.127.0.0.1.nip.io/
+    description: "Internal BI widget `pct-kpis` reads bi_supply.mart_pct_kpi through the governed gateway (Trino + OPA)."
+    depends_on:
+      - ref('mart_pct_kpi')
+    owner:
+      name: platform
+
+  - name: widget_pct_map
+    type: dashboard
+    label: "pct-map (Internal BI widget)"
+    maturity: high
+    url: https://internal-bi.127.0.0.1.nip.io/
+    description: "Internal BI widget `pct-map` reads bi_supply.mart_pct_facility_geo, bi_supply.mart_pct_position, bi_supply.mart_pct_kpi through the governed gateway (Trino + OPA)."
+    depends_on:
+      - ref('mart_pct_facility_geo')
+      - ref('mart_pct_position')
+      - ref('mart_pct_kpi')
+    owner:
+      name: platform
+
   - name: widget_pub_hero
     type: dashboard
     label: "pub-hero (Internal BI widget)"

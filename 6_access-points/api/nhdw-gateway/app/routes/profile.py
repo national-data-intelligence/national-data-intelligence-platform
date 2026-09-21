@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 
 log = logging.getLogger("gateway.profile")
 router = APIRouter(prefix="/api/profile", tags=["profile"])
@@ -128,6 +128,19 @@ def set_active(key: str) -> None:
     (STATE_DIR / "ACTIVE").write_text(key + "\n", encoding="utf-8")
     invalidate()
     log.info("profile: active profile is now %s", key)
+
+
+def requested_key(profile: str | None) -> str:
+    """The profile a request names, else the active one. A page whose data belongs
+    to one country (the Zambia PCT page) asks for that country's geometry and
+    reference by key, whatever profile the deployment is showing; only installed
+    profiles are served."""
+    if profile is None:
+        return active_key()
+    if not re.fullmatch(r"[a-z0-9-]{1,32}", profile) or profile not in {
+            p["key"] for p in list_profiles()}:
+        raise HTTPException(404, f"no profile '{profile}' installed")
+    return profile
 
 
 def _safe_join(base: Path, *parts: str) -> Path:
@@ -365,12 +378,12 @@ async def get_copy(surface: str) -> dict[str, Any]:
 
 
 @router.get("/geo/{name}")
-async def get_geo(name: str) -> Response:
+async def get_geo(name: str, profile: str | None = Query(None)) -> Response:
     """A boundary file. Served from the profile, falling back to `_shared/` so
     country-agnostic geometry (the world land mask) is stored once."""
     if not re.fullmatch(r"[a-z0-9._-]{1,64}\.geojson", name, re.I):
         raise HTTPException(400, "bad geometry name")
-    key = active_key()
+    key = requested_key(profile)
     for candidate in (_safe_join(PROFILE_DIR, key, "geo", name),
                       _safe_join(PROFILE_DIR, "_shared", name)):
         if candidate.is_file():
@@ -482,7 +495,7 @@ async def get_catalog_layer() -> dict[str, Any]:
 
 
 @router.get("/reference")
-async def get_reference() -> dict[str, Any]:
+async def get_reference(profile: str | None = Query(None)) -> dict[str, Any]:
     """Regions, programmes, diseases and commodities — the tables the SPAs used
     to declare THREE times each (reference.ts, biApp.ts, and again with
     coordinates in the Control Tower's plan.ts) while the warehouse already held
@@ -490,7 +503,7 @@ async def get_reference() -> dict[str, Any]:
 
     Served from the profile's entity model, so there is one source and the SPA
     copies can be deleted."""
-    key = active_key()
+    key = requested_key(profile)
 
     def produce() -> dict[str, Any]:
         built = _read_reference(key)
