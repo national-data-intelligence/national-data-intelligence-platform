@@ -45,6 +45,16 @@ CREATE TABLE IF NOT EXISTS console.project (
     demo_url     text,
     agent_url    text,
     agent_token  text,
+    -- The project's documentation. These are the Overview tab, one column per
+    -- section: the creation form collects exactly these and the Overview renders
+    -- exactly these, so neither side can grow a field the other does not know
+    -- about. Add a section here and you must add it to BOTH, or the next reader
+    -- finds a heading with nothing behind it.
+    what_it_is   text,   -- what the thing actually is, in a few sentences
+    who_for      text,   -- whose problem it solves, and who watches the demo
+    what_to_show text,   -- the story to walk through: the moments worth showing
+    how_built    text,   -- what it is made of
+    caveats      text,   -- what is mock, missing, or not to be promised
     owner_sub    text REFERENCES console.person(kc_sub),
     archived     boolean NOT NULL DEFAULT false,
     created_at   timestamptz NOT NULL DEFAULT now(),
@@ -65,7 +75,8 @@ CREATE TABLE IF NOT EXISTS console.resource (
     project_id   uuid NOT NULL REFERENCES console.project(id) ON DELETE CASCADE,
     kind         text NOT NULL
                    CONSTRAINT resource_kind_chk
-                   CHECK (kind IN ('deck', 'doc', 'video', 'image', 'link', 'other')),
+                   CHECK (kind IN ('deck', 'doc', 'video', 'image', 'link', 'code',
+                                   'note', 'other')),
     title        text NOT NULL,
     note         text,
     -- exactly one of these is set: a stored object, or an external link
@@ -180,6 +191,40 @@ ALTER TABLE console.resource ADD COLUMN IF NOT EXISTS preview_key text;
 -- shelf beside the deck, not filed under "other".
 DO $$ BEGIN
     ALTER TABLE console.resource DROP CONSTRAINT IF EXISTS resource_kind_chk;
+    -- 'note' is a file attached to a note. It lives in this table so it gets the
+    -- same store, rendition and range-serving as everything else, but it is NOT
+    -- shelf material: the Resources tab filters it out, because a shelf is what
+    -- you chose to show a client and an attachment is an aside to a colleague.
     ALTER TABLE console.resource ADD CONSTRAINT resource_kind_chk
-        CHECK (kind IN ('deck', 'doc', 'video', 'image', 'link', 'code', 'other'));
+        CHECK (kind IN ('deck', 'doc', 'video', 'image', 'link', 'code',
+                        'note', 'other'));
 END $$;
+
+
+-- ── notes ───────────────────────────────────────────────────────────────────
+-- What somebody learned about a project and wants the next presenter to know.
+-- A note is text, an attached file, or both: `body` carries the text, and the
+-- file rides the SAME resource table as everything else a project holds, so it
+-- gets the existing upload, rendition, range-serving and deletion paths rather
+-- than a second, poorer copy of them.
+CREATE TABLE IF NOT EXISTS console.note (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id  uuid NOT NULL REFERENCES console.project(id) ON DELETE CASCADE,
+    body        text,
+    resource_id uuid REFERENCES console.resource(id) ON DELETE SET NULL,
+    author_sub  text REFERENCES console.person(kc_sub),
+    author_name text NOT NULL,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    -- A note with neither words nor a file is not a note.
+    CONSTRAINT note_has_content_chk
+        CHECK (coalesce(btrim(body), '') <> '' OR resource_id IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS note_project_idx ON console.note (project_id, created_at DESC);
+
+-- Columns added after the first deployments; the tables above are created once
+-- and never dropped, so new columns arrive here.
+ALTER TABLE console.project ADD COLUMN IF NOT EXISTS what_it_is   text;
+ALTER TABLE console.project ADD COLUMN IF NOT EXISTS who_for      text;
+ALTER TABLE console.project ADD COLUMN IF NOT EXISTS what_to_show text;
+ALTER TABLE console.project ADD COLUMN IF NOT EXISTS how_built    text;
+ALTER TABLE console.project ADD COLUMN IF NOT EXISTS caveats      text;

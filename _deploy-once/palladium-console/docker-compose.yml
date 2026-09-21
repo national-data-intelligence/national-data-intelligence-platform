@@ -43,8 +43,8 @@ services:
       # everywhere.
       CONSOLE_VERIFY_TLS: ${CONSOLE_VERIFY_TLS:-true}
       CONSOLE_INSECURE_HOSTS: ${CONSOLE_INSECURE_HOSTS:-}
-      # Single sign-on, when configured. Absent → the developer sign-in, which
-      # itself refuses to run unless CONSOLE_ENV=dev.
+      # Single sign-on, when configured. Absent → console passwords, where the
+      # first account to register becomes a console admin.
       KEYCLOAK_PUBLIC_BASE: ${KEYCLOAK_PUBLIC_BASE:-}
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-moh-staff}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-demo-console}

@@ -691,6 +691,36 @@ async def list_projects(user: User = Depends(current_user)) -> dict:
     return {"projects": out}
 
 
+# The documentation sections, in the order they are written and shown. ONE
+# list: the create form renders a field per entry, the Overview renders a
+# section per entry, and the PATCH route accepts exactly these. A section added
+# here appears in all three; a section that exists in only one of them cannot,
+# which is the whole point — a heading with no source behind it is how a page
+# starts lying.
+DOC_SECTIONS = [
+    ("what_it_is",   "What it is",
+     "What the thing actually is, in a few sentences."),
+    ("who_for",      "Who it is for",
+     "Whose problem it solves, and who tends to be in the room."),
+    ("what_to_show", "What to show",
+     "The walk-through: the moments worth showing, in order."),
+    ("how_built",    "How it is built",
+     "What it is made of — the parts worth naming."),
+    ("caveats",      "What to be careful about",
+     "What is mock, missing, or must not be promised."),
+]
+DOC_FIELDS = [k for k, _, _ in DOC_SECTIONS]
+
+
+@app.get("/api/doc-sections")
+async def doc_sections(user: User = Depends(current_user)) -> dict:
+    """The one list, served to the browser. The create form builds a field per
+    entry and the Overview builds a section per entry from THIS — neither has
+    its own copy, so they cannot come to disagree about what a project says."""
+    return {"sections": [{"key": k, "label": lab, "hint": h}
+                         for k, lab, h in DOC_SECTIONS]}
+
+
 class ProjectIn(BaseModel):
     slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,48}$")
     name: str = Field(min_length=2, max_length=120)
@@ -701,6 +731,12 @@ class ProjectIn(BaseModel):
     demo_url: str | None = None
     agent_url: str | None = None
     agent_token: str | None = None
+    # documentation — the Overview tab
+    what_it_is: str | None = None
+    who_for: str | None = None
+    what_to_show: str | None = None
+    how_built: str | None = None
+    caveats: str | None = None
 
 
 @app.post("/api/projects")
@@ -713,10 +749,12 @@ async def create_project(body: ProjectIn, user: User = Depends(current_user)) ->
             row = await c.fetchrow("""
                 INSERT INTO console.project
                     (slug, name, client, summary, chip, colour, demo_url, agent_url,
-                     agent_token, owner_sub)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
+                     agent_token, owner_sub,
+                     what_it_is, who_for, what_to_show, how_built, caveats)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *
             """, body.slug, body.name, body.client, body.summary, body.chip.upper(),
-                 body.colour, body.demo_url, body.agent_url, body.agent_token, user.sub)
+                 body.colour, body.demo_url, body.agent_url, body.agent_token, user.sub,
+                 *(getattr(body, f) for f in DOC_FIELDS))
         except asyncpg.UniqueViolationError:
             raise HTTPException(409, f"a project with slug '{body.slug}' already exists")
         await c.execute("""
@@ -736,9 +774,12 @@ async def get_project(project_id: str, user: User = Depends(current_user)) -> di
         row = await c.fetchrow("SELECT * FROM console.project WHERE id=$1", project_id)
         if not row:
             raise HTTPException(404, "no such project")
+        # kind='note' is excluded: those are attachments belonging to a note,
+        # shown on the note itself. A shelf is curated material, not everything
+        # that has ever been uploaded.
         resources = await c.fetch(
-            "SELECT * FROM console.resource WHERE project_id=$1 ORDER BY ordering, created_at",
-            project_id)
+            "SELECT * FROM console.resource WHERE project_id=$1 AND kind <> 'note' "
+            "ORDER BY ordering, created_at", project_id)
         activity = await c.fetch("""
             SELECT at, person_name, verb, detail, result FROM console.activity
             WHERE project_id=$1 ORDER BY at DESC LIMIT 25
@@ -760,6 +801,145 @@ async def get_project(project_id: str, user: User = Depends(current_user)) -> di
     p["hold"] = ({"by": hold["person_name"], "until": hold["held_until"].isoformat(),
                   "reason": hold["reason"]} if hold else None)
     return p
+
+
+class ProjectPatch(BaseModel):
+    """What a maintainer may change after a project exists.
+
+    The documentation fields are here for the same reason they are on ProjectIn:
+    a project created before a section existed, or created in a hurry, has to be
+    fillable — otherwise the Overview has headings that can never be answered
+    and the creation form becomes the only chance anyone gets."""
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    client: str | None = None
+    summary: str | None = None
+    chip: str | None = Field(default=None, max_length=3)
+    colour: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    demo_url: str | None = None
+    what_it_is: str | None = None
+    who_for: str | None = None
+    what_to_show: str | None = None
+    how_built: str | None = None
+    caveats: str | None = None
+
+
+@app.patch("/api/projects/{project_id}")
+async def patch_project(project_id: str, body: ProjectPatch,
+                        user: User = Depends(current_user)) -> dict:
+    await require_role(user, project_id, "maintainer")
+    fields = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
+    if not fields:
+        raise HTTPException(400, "nothing to change")
+    if "chip" in fields and fields["chip"]:
+        fields["chip"] = fields["chip"].upper()
+    # Empty string clears a section; None means "not sent", which model_dump
+    # with exclude_unset already keeps out of here.
+    for k, v in list(fields.items()):
+        if isinstance(v, str) and not v.strip():
+            fields[k] = None
+
+    cols = ", ".join(f"{k} = ${i}" for i, k in enumerate(fields, start=2))
+    pool = await db()
+    async with pool.acquire() as c:
+        row = await c.fetchrow(
+            f"UPDATE console.project SET {cols}, updated_at = now() "
+            f"WHERE id = $1 RETURNING *", project_id, *fields.values())
+    if not row:
+        raise HTTPException(404, "no such project")
+    changed = ", ".join(sorted(fields))
+    await log_activity(user=user, verb="edited project", detail=changed,
+                       project={"id": row["id"], "name": row["name"]})
+    return _project_row(row)
+
+
+# ── notes ───────────────────────────────────────────────────────────────────
+# What somebody learned and wants the next presenter to know. Text, a file, or
+# both — the file goes through the same store as every other resource.
+
+def _note_row(r: asyncpg.Record) -> dict:
+    d = {"id": str(r["id"]), "body": r["body"], "author_name": r["author_name"],
+         "created_at": r["created_at"].isoformat(), "file": None}
+    if r["resource_id"]:
+        d["file"] = {"id": str(r["resource_id"]), "title": r["file_title"],
+                     "mime": r["file_mime"], "size_bytes": r["file_size"],
+                     "previewable": bool(r["file_preview"])
+                                    or r["file_mime"] in INLINE_TYPES}
+    return d
+
+
+NOTE_SELECT = """
+    SELECT n.*, r.title AS file_title, r.mime AS file_mime,
+           r.size_bytes AS file_size, r.preview_key AS file_preview
+    FROM console.note n
+    LEFT JOIN console.resource r ON r.id = n.resource_id
+"""
+
+
+@app.get("/api/projects/{project_id}/notes")
+async def list_notes(project_id: str, user: User = Depends(current_user)) -> dict:
+    await require_role(user, project_id, "viewer")
+    pool = await db()
+    async with pool.acquire() as c:
+        rows = await c.fetch(NOTE_SELECT + " WHERE n.project_id=$1 "
+                             "ORDER BY n.created_at DESC", project_id)
+    return {"notes": [_note_row(r) for r in rows]}
+
+
+@app.post("/api/projects/{project_id}/notes")
+async def add_note(project_id: str, body: str = Form(""),
+                   file: UploadFile | None = File(None),
+                   user: User = Depends(current_user)) -> dict:
+    """A note is text, a file, or both — so this is multipart even when there is
+    no file, and refuses only the case where there is neither."""
+    await require_role(user, project_id, "presenter")
+    text = (body or "").strip()
+    has_file = file is not None and bool(file.filename)
+    if not text and not has_file:
+        raise HTTPException(400, "a note needs words, a file, or both")
+
+    resource_id = None
+    if has_file:
+        stored = await _store_upload(project_id, file, title=file.filename or "note",
+                                     kind="note", user=user)
+        resource_id = stored["id"]
+
+    pool = await db()
+    async with pool.acquire() as c:
+        row = await c.fetchrow("""
+            INSERT INTO console.note (project_id, body, resource_id, author_sub,
+                                      author_name)
+            VALUES ($1,$2,$3,$4,$5) RETURNING id
+        """, project_id, text or None, resource_id, user.sub,
+             user.full_name or user.username)
+        full = await c.fetchrow(NOTE_SELECT + " WHERE n.id=$1", row["id"])
+        project = await c.fetchrow("SELECT id, name FROM console.project WHERE id=$1",
+                                   project_id)
+    await log_activity(user=user, verb="added a note",
+                       detail=(text[:60] or (file.filename if has_file else "")),
+                       project={"id": project["id"], "name": project["name"]})
+    return _note_row(full)
+
+
+@app.delete("/api/notes/{note_id}")
+async def delete_note(note_id: str, user: User = Depends(current_user)) -> dict:
+    """Your own note, or anyone's if you maintain the project. A note is somebody
+    speaking to the next presenter; a passer-by does not get to edit that."""
+    pool = await db()
+    async with pool.acquire() as c:
+        row = await c.fetchrow(
+            "SELECT n.*, p.name AS project_name FROM console.note n "
+            "JOIN console.project p ON p.id = n.project_id WHERE n.id=$1", note_id)
+        if not row:
+            raise HTTPException(404, "no such note")
+        if row["author_sub"] != user.sub:
+            await require_role(user, str(row["project_id"]), "maintainer")
+        else:
+            await require_role(user, str(row["project_id"]), "viewer")
+        await c.execute("DELETE FROM console.note WHERE id=$1", note_id)
+    await log_activity(user=user, verb="removed a note",
+                       detail=(row["body"] or "")[:60],
+                       project={"id": row["project_id"], "name": row["project_name"]})
+    return {"ok": True}
 
 
 # ── the demo contract, proxied ──────────────────────────────────────────────
@@ -1026,6 +1206,24 @@ async def upload_resource(project_id: str, request: Request,
     path the browser reports kept as the note — which is how the shelf stays a
     flat list of things people can open rather than a tree nobody navigates."""
     await require_role(user, project_id, "maintainer")
+    stored = await _store_upload(project_id, file, title=title, note=note,
+                                 kind=kind, user=user)
+    pool = await db()
+    async with pool.acquire() as c:
+        project = await c.fetchrow("SELECT id, name FROM console.project WHERE id=$1",
+                                   project_id)
+    await log_activity(user=user, verb="added resource", detail=stored["title"],
+                       project={"id": project["id"], "name": project["name"]})
+    return {k: stored[k] for k in ("id", "mime", "size_bytes", "previewable")}
+
+
+async def _store_upload(project_id: str, file: UploadFile, *, title: str = "",
+                        note: str = "", kind: str = "", user: User) -> dict:
+    """Take one uploaded file to rest: on disk, rendered if it can be, and a row
+    in console.resource. Both the resources shelf and a note's attachment come
+    through here, so an attachment gets the same size limit, the same PDF
+    rendition and the same range-serving as anything else — rather than a second
+    path that quietly does less."""
     raw = await file.read()
     if len(raw) > MAX_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(413, f"that file is over the {MAX_UPLOAD_MB}MB limit")
@@ -1061,11 +1259,8 @@ async def upload_resource(project_id: str, request: Request,
             RETURNING id
         """, project_id, kind or guessed, title.strip() or safe, note.strip() or None,
              key, mime, len(raw), preview_key, user.sub)
-        project = await c.fetchrow("SELECT id, name FROM console.project WHERE id=$1",
-                                   project_id)
-    await log_activity(user=user, verb="added resource", detail=title.strip() or safe,
-                       project={"id": project["id"], "name": project["name"]})
-    return {"id": str(row["id"]), "mime": mime, "size_bytes": len(raw),
+    return {"id": str(row["id"]), "title": title.strip() or safe, "mime": mime,
+            "size_bytes": len(raw),
             "previewable": bool(preview_key) or mime in INLINE_TYPES}
 
 

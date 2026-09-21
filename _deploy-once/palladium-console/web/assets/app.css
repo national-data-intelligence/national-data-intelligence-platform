@@ -31,10 +31,10 @@
      rather than as a default grey. */
   --paper:         #ffffff;
   --canvas-art:    url('/assets/canvas-art.png');
-  /* A 90%-TRANSPARENT wash of paper over the drawing: it takes the artwork's
-     edge off so nothing competes with a table sitting on top of it, while
-     leaving the texture plainly there. Ten percent paper, not ninety. */
-  --canvas-veil:   linear-gradient(rgba(255,255,255,.10), rgba(255,255,255,.10));
+  /* A 70%-TRANSPARENT wash of paper over the drawing: enough to keep the
+     artwork from competing with a table sitting on top of it, not so much that
+     the texture disappears. Thirty percent paper. */
+  --canvas-veil:   linear-gradient(rgba(255,255,255,.30), rgba(255,255,255,.30));
   --paper-2:       #fafbfc;
   --fill:          #f4f5f8;
   --fill-2:        #eceef3;
@@ -120,7 +120,7 @@
     --ground-scrim: radial-gradient(112% 92% at 50% 42%, transparent 30%, rgba(0,0,0,.62) 100%);
     --paper:       #16181c;   --paper-2:     #1b1e23;
     --canvas-art:  url('/assets/canvas-art-dark.png');
-    --canvas-veil: linear-gradient(rgba(22,24,28,.10), rgba(22,24,28,.10));
+    --canvas-veil: linear-gradient(rgba(22,24,28,.30), rgba(22,24,28,.30));
     --fill:        #20242a;   --fill-2:      #282d35;
     --line:        #282d34;   --line-2:      #333941;
     --field:       #1c2128;
@@ -156,7 +156,7 @@
   --ground-scrim: radial-gradient(112% 92% at 50% 42%, transparent 30%, rgba(0,0,0,.62) 100%);
   --paper:       #16181c;   --paper-2:     #1b1e23;
   --canvas-art:  url('/assets/canvas-art-dark.png');
-  --canvas-veil: linear-gradient(rgba(22,24,28,.10), rgba(22,24,28,.10));
+  --canvas-veil: linear-gradient(rgba(22,24,28,.30), rgba(22,24,28,.30));
   --fill:        #20242a;   --fill-2:      #282d35;
   --line:        #282d34;   --line-2:      #333941;
   --field:       #1c2128;
@@ -195,10 +195,21 @@
    on top of the app. */
 [hidden] { display: none !important; }
 
+/* The app is a fixed frame: the card fills the window and the CONTENT inside it
+   scrolls. So the page itself must not scroll, ever.
+   The gutter is padding on the body rather than a margin on the card, and the
+   card is 100% of what that leaves. Sized the other way — a margin on a card
+   that is `100dvh - 2 * gutter` tall — the two units have to agree exactly, and
+   `dvh` against the body's `%` plus a `clamp()` gutter's subpixel rounding is
+   how the whole page ends up scrolling by a pixel or two. */
 html, body { height: 100%; }
+html { overflow: hidden; }
 
 body {
   margin: 0;
+  padding: var(--gutter);
+  box-sizing: border-box;
+  overflow: hidden;
   font-family: var(--font-ui);
   font-size: 14px;
   line-height: 1.5;
@@ -271,26 +282,47 @@ a { color: inherit; text-decoration: none; }
 
 .shell {
   position: relative; z-index: 1;
-  height: calc(100dvh - var(--gutter) * 2);
-  margin: var(--gutter);
+  height: 100%;
   background: var(--paper);
   border-radius: var(--r-app);
-  /* The same stack as the sign-in board, and for the same two reasons: the
-     shared token's 0 0 0 1px spread ring reads as a drawn border along the
-     sidebar edge where the card is dark on dark, and the ground is dark enough
-     that only light separates the card from it. */
+  /* Depth only — no light. The white halo that suits the sign-in board (a
+     small object adrift on a large dark field) reads as a glow around the app
+     card, which fills the window and needs no help being found. Still no
+     `0 0 0 1px` spread ring: on a dark card it draws as a border. */
   box-shadow:
-    0 3px 8px rgba(0,0,0,.55),
-    0 20px 46px -12px rgba(0,0,0,.7),
-    0 0 52px -4px rgba(255,255,255,.22),
-    0 0 150px -22px rgba(255,255,255,.32);
+    0 3px 8px rgba(0,0,0,.42),
+    0 18px 44px -14px rgba(0,0,0,.6),
+    0 50px 110px -40px rgba(0,0,0,.7);
   /* The sidebar is a full-height column, so the shell splits left-to-right and
      the topbar belongs to the content beside it. */
   display: grid;
   grid-template-columns: var(--sidew) minmax(0, 1fr);
   overflow: hidden;
 }
-.main { display: grid; grid-template-rows: var(--topbarh) minmax(0, 1fr); min-width: 0; min-height: 0; }
+.main {
+  display: grid; grid-template-rows: var(--topbarh) minmax(0, 1fr);
+  min-width: 0; min-height: 0;
+  /* the fade below is positioned against this */
+  position: relative;
+}
+
+/* The bottom edge, when there is more below it.
+   On .main rather than on .canvas so it does not move with the content it is
+   fading, and it sits above the content but takes no pointer events — a fade
+   that swallowed a click on the row under it would be worse than a hard edge.
+   The class is set only when something is actually below the fold. */
+.main::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 68px;
+  background: linear-gradient(to bottom,
+    color-mix(in srgb, var(--paper) 0%, transparent) 0%,
+    color-mix(in srgb, var(--paper) 62%, transparent) 55%,
+    var(--paper) 100%);
+  pointer-events: none;
+  opacity: 0; transition: opacity .18s ease;
+  border-radius: 0 0 var(--r-app) 0;
+}
+.main:has(.canvas.has-more)::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .main::after { transition: none; } }
 
 /* ── topbar ─────────────────────────────────────────────────────────────── */
 
@@ -401,9 +433,12 @@ kbd {
 /* ── body: dark sidebar + white canvas ──────────────────────────────────── */
 
 .side {
-  /* Top-to-bottom and very slight: enough that the column has depth and does
-     not read as a flat swatch, not enough to notice as a gradient. */
-  background: linear-gradient(176deg, var(--side) 0%, var(--side-2) 62%, var(--side-3) 100%);
+  /* Diagonal, bottom-right to top-left, and it holds its darkest value for
+     most of that run — the lightening only arrives near the top-left corner,
+     behind the mark. Stops at 0/62/88/100 rather than an even ramp are what
+     make it late: an even ramp reads as a wash over the whole column. */
+  background: linear-gradient(to top left,
+              var(--side-3) 0%, var(--side-3) 62%, var(--side-2) 88%, var(--side) 100%);
   /* No radius, deliberately. The card already clips to its own arc
      (`.shell { overflow: hidden }`), so a square corner here is cut to exactly
      the right shape. Rounding the sidebar as well drew a SECOND arc on top of
@@ -810,6 +845,10 @@ td strong { color: var(--ink); font-weight: 600; }
 .phead-sub { margin: 3px 0 0; color: var(--ink-2); font-size: 13px; }
 .phead-act { margin-left: auto; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .phead-facts { display: flex; gap: 32px; flex-wrap: wrap; }
+/* The checks popover anchors to the status cell. Without this it would resolve
+   against the shell, which clips — and land somewhere unrelated to the thing it
+   is explaining. */
+.phead-facts > div { position: relative; }
 .phead-facts .v { display: block; margin-top: 5px; font-weight: 600; font-size: 13.5px; color: var(--ink); }
 .phead-facts .v.mono { font-weight: 500; }
 
@@ -1026,11 +1065,14 @@ td strong { color: var(--ink); font-weight: 600; }
 
 /* ── sign in ────────────────────────────────────────────────────────────── */
 
-.signin { position: relative; z-index: 1; min-height: 100dvh; display: grid; place-items: center; padding: var(--gutter); }
+/* The body already carries the gutter, so this fills what is left rather than
+   padding again inside it — two gutters would clip the board now that the page
+   cannot scroll. */
+.signin { position: relative; z-index: 1; height: 100%; display: grid; place-items: center; }
 
 .login {
   width: min(1000px, 100%);
-  height: min(628px, calc(100dvh - var(--gutter) * 2));
+  height: min(628px, 100%);
   background: var(--paper); border-radius: var(--r-app);
   /* The dark drop that gives it weight, plus a faint WHITE halo. The artwork
      half is nearly as dark as the ground behind it, so without the halo the
@@ -1184,4 +1226,139 @@ td strong { color: var(--ink); font-weight: 600; }
   .toasts { right: 12px; left: 12px; bottom: 12px; align-items: stretch; }
   .signin { padding: 0; }
   .login { border-radius: 0; height: 100dvh; grid-template-rows: 120px minmax(0, 1fr); }
+}
+
+/* ── the back link ───────────────────────────────────────────────────────── */
+/* Every sub-page opens from somewhere. The browser's own back button is not an
+   answer: a person who arrived by pasting a link has no history to go back to,
+   and one who has clicked around has too much. This says where it goes. */
+.backlink {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-bottom: 2px; padding: 5px 11px 5px 7px;
+  border-radius: var(--r-pill);
+  color: var(--ink-2); font-size: 13px; font-weight: 600;
+  text-decoration: none; transition: background .14s ease, color .14s ease;
+}
+.backlink:hover { background: var(--fill); color: var(--ink); }
+.backlink svg { width: 16px; height: 16px; }
+
+.field-sep {
+  display: flex; align-items: center; gap: 10px;
+  margin: 20px 0 12px; color: var(--ink-3);
+  font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+}
+.field-sep::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+.field-l textarea {
+  width: 100%; padding: 11px 13px;
+  font: inherit; font-size: 14px; line-height: 1.55; color: var(--ink);
+  background: var(--field); border: 0; border-radius: var(--r-box);
+  box-shadow: var(--field-shadow); resize: vertical; min-height: 64px;
+  transition: box-shadow .16s ease;
+}
+.field-l textarea:hover { box-shadow: var(--field-shadow-h); }
+.field-l textarea:focus { outline: 2px solid var(--field-focus); outline-offset: 1px; }
+
+/* ── notes ───────────────────────────────────────────────────────────────── */
+.note-in {
+  width: 100%; padding: 12px 14px;
+  font: inherit; font-size: 14.5px; line-height: 1.58; color: var(--ink);
+  background: var(--field); border: 0; border-radius: var(--r-box);
+  box-shadow: var(--field-shadow); resize: vertical;
+  transition: box-shadow .16s ease;
+}
+.note-in:hover { box-shadow: var(--field-shadow-h); }
+.note-in:focus { outline: 2px solid var(--field-focus); outline-offset: 1px; }
+.note-act { display: flex; align-items: center; gap: 10px; margin-top: 11px; }
+/* A label wrapping a hidden input IS the button — a styled button beside a file
+   input is two controls for one action. */
+.file-btn { cursor: pointer; }
+
+.row.note { align-items: flex-start; }
+.note-body { margin-top: 5px; color: var(--ink); font-size: 14px; line-height: 1.6; max-width: 72ch; }
+.note-body p { margin: 0 0 8px; }
+.note-body p:last-child { margin-bottom: 0; }
+.note-file {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  margin-top: 10px; padding: 8px 10px;
+  background: var(--fill); border-radius: var(--r-box);
+}
+.note-file .nf-t { font-weight: 600; font-size: 13.5px; color: var(--ink); }
+.row-ic.sm { width: 26px; height: 26px; }
+.row-ic.sm svg { width: 15px; height: 15px; }
+
+/* ── the documentation page ──────────────────────────────────────────────── */
+/* The Overview is a document, so it is set like one: a single column of prose
+   at a measure a person can read without losing the line, the sections listed
+   down the side the way documentation lists them, and nothing else on the page.
+   It carried a component checklist and an event log once; two scrolling tables
+   of machine output are not how you explain what a thing is. */
+.docpage {
+  display: grid; grid-template-columns: minmax(0, 1fr) 188px; gap: 40px;
+  align-items: start;
+}
+@media (max-width: 1080px) { .docpage { grid-template-columns: minmax(0, 1fr); } }
+
+.doc-art { max-width: 72ch; padding-bottom: 28px; }
+
+.doc-top { padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.doc-kicker {
+  margin: 0 0 8px; color: var(--ink-3);
+  font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+}
+.doc-lede {
+  margin: 0; max-width: 62ch;
+  font-size: 17.5px; line-height: 1.58; color: var(--ink);
+  font-weight: 450; letter-spacing: -.005em; text-wrap: pretty;
+}
+.doc-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+.doc-s { padding: 30px 0; border-top: 1px solid var(--line); scroll-margin-top: 18px; }
+.doc-s:first-of-type { border-top: 0; }
+.doc-h {
+  margin: 0 0 12px; font-family: var(--font-display);
+  font-size: 19px; font-weight: 650; letter-spacing: -.012em; color: var(--ink);
+}
+.doc-b { color: var(--ink); font-size: 15.5px; line-height: 1.72; }
+.doc-b p { margin: 0 0 14px; }
+.doc-b p:last-child { margin-bottom: 0; }
+
+.doc-s.empty-s .doc-h { color: var(--ink-3); }
+.doc-s.empty-s .doc-b {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 14px;
+}
+
+/* The section rail — the docs-page convention, and it earns its place here:
+   five sections is exactly the length at which a reader wants to jump. */
+.doc-rail { position: sticky; top: 6px; padding-top: 4px; }
+@media (max-width: 1080px) { .doc-rail { display: none; } }
+.doc-rail-h {
+  margin: 0 0 10px; color: var(--ink-3);
+  font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+}
+.doc-rail-l {
+  display: block; padding: 6px 0 6px 13px;
+  border-left: 2px solid var(--line);
+  color: var(--ink-2); font-size: 13px; line-height: 1.4;
+  transition: color .14s ease, border-color .14s ease;
+}
+.doc-rail-l:hover { color: var(--ink); border-color: var(--ink-3); }
+/* An unwritten section is still listed, greyed — the rail is the table of
+   contents, and a table of contents that hides the gaps hides the work. */
+.doc-rail-l.un { color: var(--ink-3); opacity: .68; }
+
+.empty-doc { grid-template-columns: minmax(0, 1fr); }
+
+/* ── the component checks, beside the status they explain ───────────────── */
+.checks-toggle {
+  margin-left: 9px; padding: 3px 9px; border: 0; border-radius: var(--r-pill);
+  background: var(--fill); color: var(--ink-2); cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 600;
+}
+.checks-toggle:hover { background: var(--fill-2); color: var(--ink); }
+.checks-pop {
+  position: absolute; z-index: 20; margin-top: 8px;
+  min-width: 320px; max-width: 460px; max-height: 320px; overflow: auto;
+  background: var(--paper); border-radius: var(--r-box);
+  box-shadow: var(--shadow-lift); padding: 4px 0;
 }

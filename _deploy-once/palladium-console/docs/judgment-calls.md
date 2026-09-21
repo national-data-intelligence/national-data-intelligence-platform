@@ -547,3 +547,132 @@ the old renderer had no caller.
 feature that was on screen and working — a test watching a shape nothing emits
 tells you nothing, and eventually tells you something false. The check now
 watches `[data-act="run-action"]`, which is what ships.
+
+---
+
+## 29. The Overview is documentation first, health second
+
+**Decided.** The Overview opens with a five-section write-up of the project —
+what it is, who it is for, what to show, how it is built, what to be careful
+about — and the health check sits below it.
+
+**Why.** A console that only said whether a thing was running assumed the reader
+already knew what the thing was. Somebody handed a project an hour before a
+meeting does not, and that is exactly the person this console exists for.
+
+**Why five fixed sections rather than free text.** Free text gets written once,
+by whoever set the project up, in whatever shape suited them that day. Fixed
+sections mean every project reads alike and the gaps are visible: the page shows
+`2/5 sections written` and names the three nobody has answered.
+
+---
+
+## 30. Creation and presentation read the same list
+
+**Decided.** `DOC_SECTIONS` lives once, in `app/main.py`, and is served at
+`/api/doc-sections`. The create form builds a field per entry; the Overview
+builds a section per entry; the PATCH route accepts exactly those keys.
+
+**Why.** This was the owner's instruction stated as a general rule, and it is
+the right one: a presentation component without a data source behind it is how a
+page starts lying. With one list, a section cannot exist on the page with no way
+to fill it, and cannot be collected at creation with nowhere to appear. Adding a
+section is one edit; there is no second place to forget.
+
+---
+
+## 31. A note's attachment is not shelf material
+
+**Decided.** Note attachments are rows in `console.resource` with
+`kind = 'note'`, and the Resources query excludes that kind.
+
+**Why.** The same table means an attachment gets the same size limit, the same
+PDF rendition, the same range-serving and the same deletion path — writing a
+second, poorer file path for notes would have been the real mistake. But the
+Resources tab is *curated*: it is what you chose to show a client. An aside to a
+colleague appearing there would make the shelf noisy and the choice meaningless.
+One table, two audiences, one filter.
+
+---
+
+## 32. The back link says where it goes
+
+**Decided.** A sub-page carries "‹ All projects", not a bare arrow, and not
+reliance on the browser's back button.
+
+**Why.** Browser back is not an answer: somebody who arrived by a pasted link
+has no history, and somebody who has clicked around has too much of it. A named
+destination is the same for both.
+
+---
+
+## 33. The app card loses the glow
+
+**Decided.** The white halo stays on the sign-in board and is gone from the app
+card, which now carries depth only.
+
+**Why.** The halo suits a small object adrift on a large dark field — which is
+what the sign-in board is. The app card fills the window; it does not need help
+being found, and light around something that large reads as a glow rather than
+as a shadow. The sidebar gradient does the separating instead: diagonal,
+bottom-right to top-left, holding its darkest value until near the corner.
+
+---
+
+## 34. The Overview is documentation and nothing else
+
+**Decided.** The component checklist and the event log are gone from the
+Overview. What is left is a document: a kicker, a lede, five sections of prose
+at a readable measure, and an "On this page" rail beside it.
+
+**Why.** Two scrolling tables of machine output are not how you explain what a
+thing is, and they were the first thing on a page whose entire job is to
+explain. The owner's word for it was "terrible", which is fair.
+
+**Where the information went** — neither list was deleted outright, because both
+are real. The component detail now hangs off the **status** in the header, which
+is the thing it explains and where status was already shown; it appears only
+when there are checks to show. The event log belongs to **Admin**, which is
+where the estate's history is read, and it was already there.
+
+---
+
+## 35. The page cannot scroll; the content inside it can
+
+**Decided.** `html, body { overflow: hidden }`, the gutter is **padding on the
+body**, and the card is `height: 100%` of what remains.
+
+**Why the change of mechanism, not just an overflow rule.** The card was sized
+`100dvh - 2 * gutter` with a matching *margin*. That only lands exactly if `dvh`
+and the body's `%` agree and a `clamp()` gutter divides evenly — and when they
+disagree by a pixel, the whole application scrolls by a pixel. Padding on the
+frame and `100%` inside it cannot disagree with itself.
+
+**Watch for.** `.signin` had its own `100dvh` and its own gutter; with the body
+padding it would have been double-inset and clipped, since the page can no
+longer scroll to reveal what overflows. It is `height: 100%` with no padding of
+its own now. Anything else full-height added later has the same obligation.
+
+---
+
+## 36. The bottom edge fades, but only while there is more below it
+
+**Decided.** The content area fades into the card's paper over its last 68px
+when something is below the fold, and does not otherwise.
+
+**Why both halves.** A hard edge on a scrolling page ends a sentence mid-word
+against the card and reads as chopped rather than as scrollable. But a permanent
+wash is the same lie in reverse: it tells a reader who has reached the end that
+there is more to come. The fade has to mean something, so it is conditional.
+
+**Why a MutationObserver rather than a call in each renderer.** `paint()` runs
+*before* a tab fills its body — every tab paints a shell and then loads into it
+— so measuring there measures the wrong page. Calling it at the end of each
+renderer works until somebody adds the eleventh renderer and forgets, and then
+one page has a hard edge for no reason anybody can see. Watching the subtree
+cannot be forgotten.
+
+**Why on `.main` and not `.canvas`.** On the scrolling element it would move
+with the content it is meant to be fading. It also takes no pointer events — a
+fade that swallowed a click on the row beneath it would be worse than the edge
+it replaced.

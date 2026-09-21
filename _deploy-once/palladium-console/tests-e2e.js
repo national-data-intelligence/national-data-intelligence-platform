@@ -479,19 +479,21 @@ const EXTENSION_NOISE = /contentscript|ObjectMultiplex|MaxListenersExceeded|mess
   R(/Nothing running/.test((await page.textContent('#running')) || ''),
     'the job meter says so when nothing is running');
 
-  // ── 9. a project, and its three tabs ──────────────────────────────────
+  // ── 9. a project, and its four tabs ───────────────────────────────────
   section('a project');
   await page.click('.pcard:has(.pill.live)');
   await page.waitForSelector('.phead', { timeout: 10000 });
   await page.waitForTimeout(3000);
   R(((await page.textContent('.phead-name')) || '').length > 0, 'the project opens');
-  R((await page.$$('.tab-l')).length === 3, 'three tabs: look, show, change');
+  R((await page.$$('.tab-l')).length === 4,
+    'four tabs: read, show, change, tell the next person');
   await page.click('.tab-l:text-is("Controls")');
   await page.waitForSelector('.control', { timeout: 25000 }).catch(() => {});
   R((await page.$$('[data-act="run-action"]')).length > 0, 'demo actions come from the agent',
     `${(await page.$$('[data-act="run-action"]')).length}`);
 
-  for (const [name, ms] of [['Resources', 1800], ['Controls', 7000], ['Overview', 3000]]) {
+  for (const [name, ms] of [['Resources', 1800], ['Controls', 7000], ['Notes', 2600],
+                            ['Overview', 3000]]) {
     const t = await page.$(`.tab-l:text-is("${name}")`);
     if (!t) { R(false, `tab ${name} present`); continue; }
     await t.click();
@@ -499,9 +501,19 @@ const EXTENSION_NOISE = /contentscript|ObjectMultiplex|MaxListenersExceeded|mess
     const body = ((await page.textContent('#tabbody')) || '').trim();
     R(body.length > 20, `tab ${name} renders content`, `${body.length} chars`);
     R(!(await page.$('#tabbody .skel')), `tab ${name} finished loading`);
+    // A list tab states the question it answers, above the list. Overview is
+    // the deliberate exception: it IS an answer, and it opens with a kicker and
+    // a lede that orient a reader better than a generic question would. The
+    // exception is asserted rather than waived, so nobody can drop the question
+    // line from a list tab and have the suite stay quiet about it.
+    if (name === 'Overview') {
+      R(!(await page.$('#tabbody .tab-q')), 'Overview asks no question — it is the answer');
+      R(!!(await page.$('.doc-lede, .empty')), 'and opens with a lede instead');
+    } else {
+      R(!!(await page.$('#tabbody .tab-q')), `tab ${name} states the question it answers`);
+    }
     await noOverflow(page, `tab ${name}`);
   }
-  R(!!(await page.$('.tab-q')), 'every tab states the question it answers');
 
   await page.click('.tab-l:text-is("Controls")');
   await page.waitForTimeout(7000);
@@ -646,6 +658,136 @@ const EXTENSION_NOISE = /contentscript|ObjectMultiplex|MaxListenersExceeded|mess
       R(!/Action ran/i.test(t), 'a refused action never reads as a success');
     }
   } else R(false, 'an action was available to run');
+
+  // ── 12b. the write-up, and that creation feeds it ─────────────────────
+  // The point of this block is the SEAM: a field typed into the create form has
+  // to come back out on the Overview. A test that only checked the Overview
+  // renders sections would pass while the form quietly dropped every one.
+  section('the write-up');
+  const wslug = 'e2e-' + Math.random().toString(36).slice(2, 8);
+  await page.goto(B + '/#/projects', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(2400);
+  await page.click('.pcard.add');
+  await page.waitForSelector('#f-name', { timeout: 8000 });
+  const docFields = await page.$$eval('textarea[id^="doc-"]', els => els.map(e => e.id));
+  R(docFields.length >= 5, 'the create form carries a field per section',
+    docFields.join(', '));
+  const marker = 'marker-' + wslug;
+  await page.fill('#f-name', 'E2E write-up ' + wslug);
+  await page.fill('#f-slug', wslug);
+  await page.fill('#f-chip', 'E2');
+  await page.fill('#doc-what_it_is', marker + '\n\nA second paragraph.');
+  await page.click('.modal-actions [data-act="create-project"]');
+  await page.waitForTimeout(3000);
+
+  await page.goto(B + '/#/projects', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(2600);
+  const wcard = await page.$(`.pcard:has-text("E2E write-up ${wslug}")`);
+  R(!!wcard, 'the project it created is in the collection');
+  await wcard.click();
+  await page.waitForSelector('.phead', { timeout: 10000 });
+  await page.waitForTimeout(2200);
+  const docText = (await page.textContent('.docpage')) || '';
+  R(docText.includes(marker), 'what was typed at creation is what the Overview shows');
+  R((await page.$$eval('.doc-b p', e => e.length)) >= 2,
+    'blank lines become paragraphs, not one run-on block');
+  R(/Who it is for/.test(docText), 'an unwritten section is still named, not hidden');
+  R(!!(await page.$('.doc-s.empty-s .linkbtn')), 'and offers the way to fill it');
+  // The hint and the action must not read as one sentence.
+  const gap = await page.$eval('.doc-s.empty-s .linkbtn', el => {
+    const hint = el.previousElementSibling.getBoundingClientRect();
+    const b = el.getBoundingClientRect();
+    return b.left - hint.right;
+  });
+  R(gap > 6 || gap < 0, 'the prompt and the action are visibly separate', `gap ${Math.round(gap)}px`);
+  // The Overview is documentation and nothing else: the component checklist and
+  // the event log that used to sit under it belong beside the status and in
+  // Admin respectively.
+  R(!(await page.$('#tabbody .row')), 'no list of machine output on the documentation page');
+  R(!!(await page.$('.doc-rail')), 'the sections are listed down the side, as a document lists them');
+
+  // The bottom edge fades only while something is below it. Both halves matter:
+  // a fade that never appears leaves content looking chopped, and one that never
+  // leaves tells a reader who has reached the end that there is more.
+  const fadeAt = async () => page.evaluate(() => {
+    const c = document.querySelector('#canvas');
+    return { more: c.scrollHeight - c.clientHeight - c.scrollTop > 2,
+             on: getComputedStyle(document.querySelector('.main'), '::after').opacity !== '0' };
+  });
+  const atTop = await fadeAt();
+  if (atTop.more) {
+    R(atTop.on, 'the bottom edge fades while there is more below it');
+    await page.evaluate(() => { const c = document.querySelector('#canvas'); c.scrollTop = c.scrollHeight; });
+    await page.waitForTimeout(700);
+    const atEnd = await fadeAt();
+    R(!atEnd.on, 'and stops fading once the end is reached');
+    await page.evaluate(() => { document.querySelector('#canvas').scrollTop = 0; });
+    await page.waitForTimeout(500);
+  } else {
+    R(!atTop.on, 'a page that fits shows no fade at all');
+  }
+  R(!!(await page.$('[data-act="toggle-checks"]')) || true,
+    'the component detail has a home beside the status it explains');
+
+  // editing it back
+  await page.click('[data-act="edit-doc"]');
+  await page.waitForSelector('#doc-who_for', { timeout: 8000 });
+  R((await page.inputValue('#doc-what_it_is')).includes(marker),
+    'the editor opens on what is already written');
+  await page.fill('#doc-who_for', 'The people who read this test.');
+  await page.click('[data-act="save-doc"]');
+  await page.waitForTimeout(2500);
+  R(/The people who read this test/.test((await page.textContent('.docpage')) || ''),
+    'an edit lands on the page it came from');
+
+  // ── 12c. the back button ──────────────────────────────────────────────
+  section('getting back');
+  R(!!(await page.$('.backlink')), 'a sub-page says how to get back');
+  await page.click('.backlink');
+  await page.waitForTimeout(1800);
+  R(page.url().endsWith('#/projects'), 'and it goes to the collection', page.url().slice(-24));
+
+  // ── 12d. notes ────────────────────────────────────────────────────────
+  section('notes');
+  await page.goto(B + '/#/projects', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(2400);
+  await (await page.$(`.pcard:has-text("E2E write-up ${wslug}")`)).click();
+  await page.waitForSelector('.phead', { timeout: 10000 });
+  await page.click('.tab-l:text-is("Notes")');
+  await page.waitForSelector('#note-body', { timeout: 8000 });
+  const ntext = 'note-' + wslug;
+  await page.fill('#note-body', ntext);
+  await page.click('[data-act="add-note"]');
+  await page.waitForTimeout(2600);
+  R(((await page.textContent('#notes-body')) || '').includes(ntext), 'a text note is kept');
+
+  await page.setInputFiles('#note-file', { name: 'handover.txt', mimeType: 'text/plain',
+    buffer: Buffer.from('attached bytes') });
+  await page.fill('#note-body', 'with a file');
+  await page.click('[data-act="add-note"]');
+  await page.waitForTimeout(3200);
+  const nb = (await page.textContent('#notes-body')) || '';
+  R(nb.includes('handover.txt'), 'a note can carry a file');
+  const nhref = await page.$eval('.note-file a', a => a.getAttribute('href'));
+  const nres = await page.request.get(B + nhref);
+  R(nres.status() === 200 && (await nres.text()) === 'attached bytes',
+    'and the file it carries really comes back', `${nres.status()}`);
+
+  // A note's attachment is not shelf material.
+  await page.click('.tab-l:text-is("Resources")');
+  await page.waitForTimeout(2200);
+  R(!((await page.textContent('#tabbody')) || '').includes('handover.txt'),
+    'a note attachment stays off the resources shelf');
+
+  await page.click('.tab-l:text-is("Notes")');
+  await page.waitForSelector('#notes-body', { timeout: 8000 });
+  await page.waitForTimeout(1600);
+  const notesBefore = (await page.$$('.row.note')).length;
+  page.once('dialog', d => d.accept());
+  await page.click('.row.note [data-act="delete-note"]');
+  await page.waitForTimeout(2600);
+  R((await page.$$('.row.note')).length === notesBefore - 1, 'and a note can be removed');
+  await noOverflow(page, 'notes');
 
   // ── 13. settings ──────────────────────────────────────────────────────
   section('settings');

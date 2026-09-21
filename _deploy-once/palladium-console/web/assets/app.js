@@ -56,6 +56,9 @@ const ICON = {
   upload: '<path d="M12 20V8m0 0 4.5 4.5M12 8 7.5 12.5M5 4h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
   folder: '<path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h2.7l1.6 2H17.5A2.5 2.5 0 0 1 20 10.5v6A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/>',
   close:  '<path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  back:   '<path d="M15 5.5 8.5 12l6.5 6.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  note:   '<path d="M6 3h9l3 3v15H6zM15 3v3h3M9 11h6M9 15h4" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" fill="none"/>',
+  pencil: '<path d="M4 20h4l10-10-4-4L4 16zM14 6l4 4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="none"/>',
 };
 const svg = (name, cls = '') =>
   `<svg viewBox="0 0 24 24" class="${cls}" aria-hidden="true">${ICON[name] || ''}</svg>`;
@@ -142,6 +145,36 @@ function route() {
 }
 
 function paint(html) { $('#canvas').innerHTML = html; }
+
+/* The content area scrolls inside a card with a hard bottom edge, so a page
+ * that continues below the fold ends mid-word against that edge and reads as
+ * chopped rather than as scrollable. A soft fade over the last inch says
+ * "there is more" without a scrollbar having to.
+ *
+ * It appears ONLY when something is actually below the fold. A permanent wash
+ * over the last line of a document that has ended is the same lie in reverse —
+ * it would suggest more text to someone who has reached the end. */
+function edgeFade() {
+  const c = $('#canvas');
+  if (!c) return;
+  const more = c.scrollHeight - c.clientHeight - c.scrollTop > 2;
+  c.classList.toggle('has-more', more);
+}
+
+/* Watched rather than called from each renderer.
+ *
+ * `paint()` runs BEFORE a tab fills its body — every tab paints a shell and
+ * then loads into it — so measuring there measures the wrong page. Calling
+ * edgeFade() at the end of each renderer would work until somebody adds the
+ * eleventh renderer and forgets, and then one page has a hard edge for no
+ * reason anybody can see. Watching the subtree cannot be forgotten. */
+function watchEdge() {
+  const c = $('#canvas');
+  if (!c) return;
+  new MutationObserver(() => requestAnimationFrame(edgeFade))
+    .observe(c, { childList: true, subtree: true, characterData: true });
+  edgeFade();
+}
 
 /** A skeleton with a caption. A bare shimmer tells the operator nothing, and a
  *  slow round trip to a project on another host is exactly when they want to
@@ -487,10 +520,24 @@ function trackJob(projectId, job) {
  * tabs saying what one screen already says.
  */
 const TABS = [
-  ['overview',  'Overview',  'Is it up, and what is it showing?'],
+  ['overview',  'Overview',  'What is this, and is it up?'],
   ['resources', 'Resources', 'What material do I show?'],
   ['controls',  'Controls',  'What can I change, and what can I press?'],
+  ['notes',     'Notes',     'What should the next person know?'],
 ];
+
+/* The documentation sections, fetched once from the server — the SAME list the
+ * create form builds its fields from and the Overview builds its sections from.
+ * Neither keeps its own copy: a section that existed in one and not the other
+ * is exactly how a page ends up with a heading nothing can ever fill. */
+let DOC_SECTIONS = [];
+async function docSections() {
+  if (!DOC_SECTIONS.length) {
+    try { ({ sections: DOC_SECTIONS } = await api('/api/doc-sections')); }
+    catch { DOC_SECTIONS = []; }
+  }
+  return DOC_SECTIONS;
+}
 
 /** Is the view this async answer belongs to still the one on screen? */
 const stillOn = (tab, projectId) => state.tab === tab && state.project?.id === projectId;
@@ -513,6 +560,7 @@ async function viewProject(id, tab) {
   // gave a project a masthead it does not need — you already know which one you
   // opened, and the slab pushed everything that matters below it.
   paint(`
+    <a class="backlink" href="#/projects">${svg('back')} All projects</a>
     <div class="phead">
       <span class="phead-chip" style="--tabc:${esc(p.colour)}">${esc(p.chip)}</span>
       <div style="min-width:0">
@@ -529,7 +577,17 @@ async function viewProject(id, tab) {
       </div>
     </div>
     <div class="phead-facts">
-      <div><span class="lbl">Status</span><span class="v" data-status="${p.id}">${statusPill(state.statuses[p.id])}</span></div>
+      <div><span class="lbl">Status</span>
+        <span class="v" data-status="${p.id}">${statusPill(state.statuses[p.id])}</span>
+        <!-- The component detail used to be a checklist panel filling the
+             Overview. It is real information and it is kept — but beside the
+             status it explains, not in front of the documentation. -->
+        <button class="checks-toggle" data-act="toggle-checks" type="button"
+          aria-expanded="false" hidden>what was checked</button>
+        <div class="checks-pop" id="checks-pop" hidden>
+          <div class="checks-body" id="checks-body"></div>
+        </div>
+      </div>
       <div><span class="lbl">Showing</span><span class="v mono" data-profile="${p.id}">${
         esc(state.statuses[p.id]?.active_profile || '—')}</span></div>
       ${p.hold ? `<div><span class="lbl">Held</span><span class="v">${esc(p.hold.by)} until ${
@@ -540,58 +598,128 @@ async function viewProject(id, tab) {
     <div id="tabbody"></div>`);
 
   refreshStatus(p.id);
-  ({ overview: tabOverview, resources: tabResources, controls: tabControls }
-    [tab] || tabOverview)(p);
+  renderChecks(p.id);
+  ({ overview: tabOverview, resources: tabResources, controls: tabControls,
+     notes: tabNotes }[tab] || tabOverview)(p);
 }
 
 /** The question each tab answers, stated above its content. */
 const tabQuestion = (key) =>
   `<p class="tab-q">${esc((TABS.find(t => t[0] === key) || [])[2] || '')}</p>`;
 
-/* Overview holds ONLY what no other tab answers: what you can press, and what
- * the agent actually checked when it said it was up. */
-function tabOverview(p) {
-  const recent = p.activity.slice(0, 6);
-  $('#tabbody').innerHTML = `
-    ${tabQuestion('overview')}
-    <div class="split">
-      <div class="panel">
-        <div class="panel-h"><span class="lbl">What was checked</span>
-          <span class="dim" style="font-size:12px" id="hc-count">checking…</span></div>
-        <div class="panel-b tight" id="checks-body">
-          <div class="skel" style="height:44px;margin:8px"></div>
+/* Overview is DOCUMENTATION. Nothing else.
+ *
+ * It used to carry a component checklist and an event log beside the write-up,
+ * and those two lists did the damage you would expect: a page whose job is to
+ * explain a project opened with two scrolling tables of machine output. The
+ * status lives in the header where it was already shown, the component detail
+ * hangs off it, and the event log belongs to Admin, which is where the estate's
+ * history is read.
+ *
+ * What is left reads like a document: a column of prose at a measure a person
+ * can actually read, with the sections listed down the side the way any
+ * documentation page lists them. */
+async function tabOverview(p) {
+  const sections = await docSections();
+  if (!stillOn('overview', p.id)) return;
+  const canEdit = ['maintainer', 'admin'].includes(p.my_role);
+  const written = sections.filter(sec => (p[sec.key] || '').trim());
+
+  if (!written.length) {
+    $('#tabbody').innerHTML = `
+      <div class="docpage empty-doc">
+        <div class="empty inset">
+          <div class="eh">Nobody has written this one up yet</div>
+          <div class="ed">Five short sections — what it is, who it is for, what to
+            show, how it is built, and what to be careful about — are what somebody
+            handed this project an hour before a meeting actually needs.</div>
+          ${canEdit
+            ? `<button class="btn pri" data-act="edit-doc" type="button">Write it now</button>`
+            : `<div class="ed dim">Your role is <b>${esc(p.my_role)}</b> — maintainers
+               and above can write it.</div>`}
         </div>
-      </div>
-      <div class="panel">
-        <div class="panel-h"><span class="lbl">Lately</span>
-          <span class="dim" style="font-size:12px">the last few things that happened here</span></div>
-        <div class="panel-b tight">${recent.length
-          ? recent.map(activityRow).join('')
-          : `<div class="row"><div class="row-main"><div class="row-m">Nothing has happened here yet.</div></div></div>`}</div>
-      </div>
+      </div>`;
+    return;
+  }
+
+  const updated = p.updated_at
+    ? new Date(p.updated_at).toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' })
+    : '';
+
+  $('#tabbody').innerHTML = `
+    <div class="docpage">
+      <article class="doc-art">
+        <header class="doc-top">
+          <!-- No title here. The project's name is in the page header two
+               inches above; repeating it opens the document by telling the
+               reader something they have just read. The lede carries the
+               opening instead, which is what a lede is for. -->
+          <p class="doc-kicker">${esc(p.client || 'Internal')}${
+            updated ? ` · updated ${esc(updated)}` : ''}</p>
+          ${p.summary ? `<p class="doc-lede">${esc(p.summary)}</p>` : ''}
+          <div class="doc-tools">
+            ${p.demo_url ? `<a class="btn sm" href="${esc(p.demo_url)}" target="_blank"
+              rel="noopener">Open the demo ${svg('out')}</a>` : ''}
+            ${canEdit ? `<button class="btn sm" data-act="edit-doc" type="button">
+              ${svg('pencil')} Edit</button>` : ''}
+            <span class="dim" style="font-size:12.5px">${written.length} of ${
+              sections.length} sections written</span>
+          </div>
+        </header>
+
+        ${sections.map(sec => {
+          const v = (p[sec.key] || '').trim();
+          return v
+            ? `<section class="doc-s" id="s-${sec.key}">
+                 <h3 class="doc-h">${esc(sec.label)}</h3>
+                 <div class="doc-b">${para(v)}</div>
+               </section>`
+            : `<section class="doc-s empty-s" id="s-${sec.key}">
+                 <h3 class="doc-h">${esc(sec.label)}</h3>
+                 <div class="doc-b">
+                   <span class="doc-hint">${esc(sec.hint)}</span>
+                   ${canEdit
+                     ? `<button class="linkbtn" data-act="edit-doc" type="button">Write this section</button>`
+                     : `<span class="doc-hint">— not written yet.</span>`}
+                 </div>
+               </section>`;
+        }).join('')}
+      </article>
+
+      <nav class="doc-rail" aria-label="On this page">
+        <p class="doc-rail-h">On this page</p>
+        ${sections.map(sec => `<a href="#s-${sec.key}" class="doc-rail-l${
+          (p[sec.key] || '').trim() ? '' : ' un'}"
+          data-jump="s-${sec.key}">${esc(sec.label)}</a>`).join('')}
+      </nav>
     </div>`;
-  renderChecks(p.id);
 }
+
+/** Written text, kept as the person typed it: blank lines start paragraphs and
+ *  single newlines are line breaks. No markdown — this is a notes field, and a
+ *  half-rendered asterisk reads worse than the asterisk. */
+const para = (text) => esc(text).trim().split(/\n\s*\n/)
+  .map(b => `<p>${b.replace(/\n/g, '<br>')}</p>`).join('');
 
 /** The health payload's component list, rendered honestly: each check says what
  *  it looked at and what it found, so "Live" is never a bare claim. */
 function renderChecks(id) {
-  const body = $('#checks-body'), count = $('#hc-count');
+  const body = $('#checks-body'), toggle = $('[data-act="toggle-checks"]');
   const st = state.statuses[id];
   if (!body) return;
   if (!st) {
-    if (stillOn('overview', id)) setTimeout(() => renderChecks(id), 700);
+    if (state.project?.id === id) setTimeout(() => renderChecks(id), 700);
     return;
   }
   const parts = Array.isArray(st.components) ? st.components : [];
-  if (count) count.textContent = parts.length ? `${parts.filter(c => c.ok).length}/${parts.length} ok` : '—';
-  if (!parts.length) {
-    body.innerHTML = `<div class="row"><div class="row-main"><div class="row-m">${
-      st.state === 'no-agent'
-        ? 'No agent on this project, so there is nothing to probe. It works as a resource folder.'
-        : 'The agent reported no component checks.'}</div></div></div>`;
-    return;
+  // A project with no agent has nothing to have checked — an empty disclosure
+  // saying so is worse than no disclosure.
+  if (toggle) {
+    toggle.hidden = !parts.length;
+    toggle.textContent = parts.length
+      ? `${parts.filter(c => c.ok).length}/${parts.length} checks ok` : '';
   }
+  if (!parts.length) return;
   body.innerHTML = parts.map(c => `<div class="row">
     <span class="row-ic" style="background:var(--${c.ok ? 'live' : 'bad'}-soft);color:var(--${c.ok ? 'live' : 'bad'})">
       ${svg(c.ok ? 'check' : 'warn')}</span>
@@ -685,6 +813,95 @@ function activityRow(a) {
       <div class="row-t">${esc(a.person_name || 'someone')} ${esc(a.verb.replace(/-/g, ' '))}${a.detail ? ` — ${esc(a.detail)}` : ''}</div>
       <div class="row-m">${ago(a.at)}${a.project_name ? ' · ' + esc(a.project_name) : ''}${a.result !== 'ok' ? ` · ${esc(a.result)}` : ''}</div>
     </div>
+  </div>`;
+}
+
+/* Notes — what somebody learned and wants the next presenter to know.
+ *
+ * Text, a file, or both, in one composer, because the distinction is not one a
+ * person holds in their head: they have something to say and sometimes a file
+ * that says part of it. The file goes through the same store as every other
+ * resource, so it previews and downloads like everything else. */
+async function tabNotes(p) {
+  const canWrite = ['presenter', 'maintainer', 'admin'].includes(p.my_role);
+  $('#tabbody').innerHTML = `
+    ${tabQuestion('notes')}
+    ${canWrite ? `
+      <div class="panel">
+        <div class="panel-h"><span class="lbl">Add a note</span>
+          <span class="dim" style="font-size:12px">text, a file, or both</span></div>
+        <div class="panel-b">
+          <textarea id="note-body" class="note-in" rows="3"
+            placeholder="What went wrong, what to say, what the client asked for…"></textarea>
+          <div class="note-act">
+            <label class="btn sm file-btn">
+              ${svg('upload')} Attach a file
+              <input id="note-file" type="file" hidden>
+            </label>
+            <span class="dim" id="note-fname" style="font-size:12.5px"></span>
+            <span style="flex:1"></span>
+            <button class="btn sm pri" data-act="add-note" type="button">Add note</button>
+          </div>
+        </div>
+      </div>`
+    : `<div class="panel"><div class="panel-b"><div class="row"><div class="row-main">
+        <div class="row-m">Your role is <b>${esc(p.my_role)}</b> — presenters and above
+        can add notes. You can read them.</div></div></div></div></div>`}
+    <div class="panel">
+      <div class="panel-h"><span class="lbl">Notes</span>
+        <span class="dim" style="font-size:12px" id="note-count">reading…</span></div>
+      <div class="panel-b tight" id="notes-body">
+        <div class="skel" style="height:44px;margin:8px"></div>
+      </div>
+    </div>`;
+
+  const fi = $('#note-file');
+  if (fi) fi.onchange = () => {
+    const f = fi.files?.[0];
+    $('#note-fname').textContent = f ? `${f.name} · ${humanSize(f.size)}` : '';
+  };
+
+  let notes = [];
+  try { ({ notes } = await api(`/api/projects/${p.id}/notes`)); }
+  catch (e) {
+    if (!stillOn('notes', p.id)) return;
+    $('#notes-body').innerHTML = `<div class="row"><div class="row-main"><div class="row-m">
+      Could not read the notes — ${esc(e.message)}.</div></div></div>`;
+    return;
+  }
+  if (!stillOn('notes', p.id)) return;
+  $('#note-count').textContent = notes.length ? `${notes.length}` : 'none yet';
+  $('#notes-body').innerHTML = notes.length
+    ? notes.map(n => noteRow(n, p)).join('')
+    : `<div class="row"><div class="row-main"><div class="row-m">No notes yet. The first
+       one is usually the most useful: what surprised you.</div></div></div>`;
+}
+
+function noteRow(n, p) {
+  const mine = n.author_name === (state.user?.full_name || state.user?.username);
+  const canRemove = mine || ['maintainer', 'admin'].includes(p.my_role);
+  const when = new Date(n.created_at);
+  return `<div class="row note">
+    <span class="row-ic">${svg(n.file && !n.body ? 'doc' : 'note')}</span>
+    <div class="row-main">
+      <div class="row-t">${esc(n.author_name)}
+        <span class="dim" style="font-weight:500">· ${esc(when.toLocaleString([], {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))}</span></div>
+      ${n.body ? `<div class="note-body">${para(n.body)}</div>` : ''}
+      ${n.file ? `<div class="note-file">
+        <span class="row-ic sm">${svg('doc')}</span>
+        <span class="nf-t">${esc(n.file.title)}</span>
+        <span class="dim">${humanSize(n.file.size_bytes)}</span>
+        ${n.file.previewable
+          ? `<button class="btn sm" data-act="view-resource" data-id="${esc(n.file.id)}"
+               type="button">${svg('eye')} View</button>` : ''}
+        <a class="btn sm" href="/api/resources/${esc(n.file.id)}/file?download=1">
+          ${svg('down')} Download</a>
+      </div>` : ''}
+    </div>
+    <div class="row-act">${canRemove
+      ? `<button class="iconbtn" data-act="delete-note" data-id="${esc(n.id)}"
+           type="button" title="Remove this note">${svg('trash')}</button>` : ''}</div>
   </div>`;
 }
 
@@ -1026,6 +1243,13 @@ function modal(html) {
 }
 function closeModal() { $('#modal').hidden = true; $('#modal-box').innerHTML = ''; }
 
+/** One documentation field. The create form and the editor both call this, so
+ *  a section reads and behaves identically wherever it is being written. */
+const docField = (sec, value) =>
+  `<label class="field-l" for="doc-${sec.key}"><span class="t">${esc(sec.label)}</span>
+    <textarea id="doc-${sec.key}" rows="3" placeholder="${esc(sec.hint)}">${esc(value || '')}</textarea>
+   </label>`;
+
 const fieldL = (id, label, attrs = '', hint = '') =>
   `<label class="field-l" for="${id}"><span class="t">${label}</span>
     <input id="${id}" ${attrs}>${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
@@ -1033,9 +1257,12 @@ const fieldL = (id, label, attrs = '', hint = '') =>
 /* ── actions ────────────────────────────────────────────────────────────── */
 
 const handlers = {
-  'new-project': () => modal(`
+  'new-project': async () => {
+    const sections = await docSections();
+    modal(`
     <h3>Add a project</h3>
-    <p>A project needs a name and a slug. Everything else can be filled in later.</p>
+    <p>A project needs a name and a slug. Everything else can be filled in later —
+      including the write-up, which is what its Overview shows.</p>
     ${fieldL('f-name', 'Name', 'placeholder="National Health Data Warehouse"')}
     ${fieldL('f-slug', 'Slug', 'placeholder="nhdw"', 'Lowercase, used in links. Cannot change later.')}
     ${fieldL('f-client', 'Client', 'placeholder="Ministry of Health · Ethiopia"')}
@@ -1050,10 +1277,16 @@ const handlers = {
       'Where the demo contract answers. Leave blank for a resource-folder-only project.')}
     ${fieldL('f-token', 'Agent token', 'type="password" placeholder="X-Demo-Token"',
       'Stays on the server and is never sent back to a browser.')}
+
+    <div class="field-sep"><span>The write-up</span></div>
+    <p class="hint" style="margin:-4px 0 12px">These are the Overview, section for
+      section. Write what you can now; a maintainer can finish it later.</p>
+    ${sections.map(sec => docField(sec, '')).join('')}
+
     <div class="modal-actions">
       <button class="btn" data-act="close" type="button">Cancel</button>
       <button class="btn pri" data-act="create-project" type="button">Add project</button>
-    </div>`),
+    </div>`); },
 
   'create-project': async () => {
     const body = {
@@ -1064,6 +1297,9 @@ const handlers = {
       demo_url: $('#f-demo').value.trim() || null,
       agent_url: $('#f-agent').value.trim() || null,
       agent_token: $('#f-token').value.trim() || null,
+      // The write-up, read from the very fields the section list built.
+      ...Object.fromEntries(DOC_SECTIONS.map(sec =>
+        [sec.key, $(`#doc-${sec.key}`)?.value.trim() || null])),
     };
     if (!body.name || !/^[a-z0-9][a-z0-9-]{1,48}$/.test(body.slug)) {
       toast('Check the form', 'A name and a lowercase slug are required.', 'bad'); return;
@@ -1072,6 +1308,72 @@ const handlers = {
       await api('/api/projects', { method: 'POST', body });
       closeModal(); toast('Project added', body.name, 'ok'); route();
     } catch (e) { toast('Could not add the project', e.message, 'bad'); }
+  },
+
+  'toggle-checks': (el) => {
+    const pop = $('#checks-pop');
+    if (!pop) return;
+    const open = pop.hidden;
+    pop.hidden = !open;
+    el.setAttribute('aria-expanded', String(open));
+  },
+
+  'edit-doc': async () => {
+    const p = state.project;
+    if (!p) return;
+    const sections = await docSections();
+    modal(`
+      <h3>The write-up</h3>
+      <p>What the Overview shows. Leave a section empty and the Overview says so
+        rather than pretending it is not there.</p>
+      ${sections.map(sec => docField(sec, p[sec.key])).join('')}
+      <div class="modal-actions">
+        <button class="btn" data-act="close" type="button">Cancel</button>
+        <button class="btn pri" data-act="save-doc" type="button">Save</button>
+      </div>`);
+  },
+
+  'save-doc': async () => {
+    const p = state.project;
+    const body = Object.fromEntries(DOC_SECTIONS.map(sec =>
+      [sec.key, $(`#doc-${sec.key}`)?.value.trim() || '']));
+    try {
+      const updated = await api(`/api/projects/${p.id}`, { method: 'PATCH', body });
+      Object.assign(state.project, updated);
+      closeModal(); toast('Saved', 'The write-up is updated.', 'ok');
+      if (state.tab === 'overview') tabOverview(state.project);
+    } catch (e) { toast('Could not save it', e.message, 'bad'); }
+  },
+
+  'add-note': async () => {
+    const p = state.project;
+    const text = $('#note-body')?.value.trim() || '';
+    const file = $('#note-file')?.files?.[0] || null;
+    if (!text && !file) {
+      toast('Nothing to add', 'A note needs words, a file, or both.', 'bad'); return;
+    }
+    const btn = $('[data-act="add-note"]');
+    if (btn) { btn.disabled = true; btn.textContent = file ? 'Uploading…' : 'Saving…'; }
+    const fd = new FormData();
+    fd.append('body', text);
+    if (file) fd.append('file', file, file.name);
+    try {
+      const r = await fetch(`/api/projects/${p.id}/notes`, { method: 'POST', body: fd });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
+      toast('Note added', file ? file.name : text.slice(0, 40), 'ok');
+      if (state.tab === 'notes') tabNotes(p);
+    } catch (e) { toast('Could not add the note', e.message, 'bad'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = 'Add note'; } }
+  },
+
+  'delete-note': async (el) => {
+    const id = el.dataset.id;
+    if (!confirm('Remove this note?')) return;
+    try {
+      await api(`/api/notes/${id}`, { method: 'DELETE' });
+      toast('Note removed', '', 'ok');
+      if (state.tab === 'notes') tabNotes(state.project);
+    } catch (e) { toast('Could not remove it', e.message, 'bad'); }
   },
 
   'add-resource': () => modal(`
@@ -1821,6 +2123,15 @@ async function boot() {
 /* ── events ─────────────────────────────────────────────────────────────── */
 
 addEventListener('hashchange', route);
+
+// Scroll and resize both change whether anything is below the fold. Passive,
+// and the work is two reads and a class toggle.
+document.addEventListener('scroll', (e) => {
+  if (e.target instanceof Element && e.target.id === 'canvas') edgeFade();
+}, { capture: true, passive: true });
+addEventListener('resize', edgeFade, { passive: true });
+addEventListener('DOMContentLoaded', watchEdge);
+if (document.readyState !== 'loading') watchEdge();
 
 document.addEventListener('click', async (e) => {
   const act = e.target.closest('[data-act]');

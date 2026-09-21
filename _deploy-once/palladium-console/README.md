@@ -24,20 +24,57 @@ A project that never implements these still works here as a resource folder with
 a health tile. That is deliberate: it is the difference between a console that
 launches now and one that waits on every team.
 
+## What a project page shows
+
+Four tabs, each answering one question and nothing else:
+
+| | |
+|---|---|
+| **Overview** | What is this, and is it up? |
+| **Resources** | What material do I show? |
+| **Controls** | What can I change, and what can I press? |
+| **Notes** | What should the next person know? |
+
+Overview **is** the write-up and nothing else — five fixed sections set as a
+document: what it is, who it is for, what to show, how it is built, what to be
+careful about. They are fixed so every project reads alike and the gaps are
+visible: the page says how many of the five are written and names the ones that
+are not.
+
+It carried a component checklist and an event log once. Neither belonged on a
+page whose job is to explain a project: the component detail now hangs off the
+status in the header, and the estate's history is read in Admin.
+
+Those five sections are defined **once**, as `DOC_SECTIONS` in `app/main.py`,
+and served at `/api/doc-sections`. The creation form builds a field per section
+from that list and the Overview builds a section per entry from the same one.
+Keep it that way: a heading the form cannot fill, or a field the page never
+shows, is how a page starts lying about what is known.
+
 ## Running it
 
     export CONSOLE_DB_DSN=postgresql://user:pass@host:5432/demo_console
-    export CONSOLE_ENV=dev                 # enables the developer sign-in
     uvicorn app.main:app --port 8080
 
-With Keycloak instead of the developer sign-in:
+People sign in with a console password. The **first account to register becomes
+a console admin**; after that, an admin grants access. There is no developer
+sign-in — if nobody can get in (an OIDC deployment that has since dropped OIDC,
+or accounts made by a sign-in that no longer exists), run this on the host:
+
+    docker compose exec app python -m app.adminctl list
+    docker compose exec app python -m app.adminctl invite
+
+which prints a single-use link rather than setting a password. It needs shell
+access on the host, which is a higher bar than any password.
+
+With Keycloak as well:
 
     export KEYCLOAK_PUBLIC_BASE=https://keycloak.example
     export KEYCLOAK_REALM=moh-staff
     export KEYCLOAK_CLIENT_ID=demo-console
     export KEYCLOAK_CLIENT_SECRET=...
     export CONSOLE_PUBLIC_URL=https://console.example
-    export CONSOLE_ENV=prod                # developer sign-in refuses outright
+    export CONSOLE_ENV=prod
 
 The schema applies itself on boot and is idempotent.
 
