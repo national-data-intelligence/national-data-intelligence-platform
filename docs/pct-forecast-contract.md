@@ -81,6 +81,12 @@ is never used for selection** (zero demand makes it meaningless).
 ## 8. Decision policy
 - P50 = expected demand. **P90 for critical tracers** (the Global Fund S8 categories:
   HIV antiretrovirals, HIV diagnostics, malaria diagnostics).
+- **How they are applied (clarified by decision #28, measured on the holdout):** order
+  sizes use **P50** as the monthly rate in eLMIS's max/min policy; **lumpy series stay
+  on eLMIS AMC** (P50 under-covered their volume by 45%). **P90 is the one-month
+  stockout-risk test** for critical tracers (stock below P90 = at risk before the next
+  delivery) — it is never multiplied into an order: as a sizing rate it would have
+  raised August 2018 replenishment from 2.78M to 7.07M units.
 - If the champion rule fails, or a series is excluded, the position stays on eLMIS
   AMC, labelled.
 - Every approved plan line snapshots the forecast run, quantile policy, inputs and
