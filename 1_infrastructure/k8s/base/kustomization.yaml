@@ -128,6 +128,7 @@ configMapGenerator:
       - ../../../3_storage/postgres/init/41_ml_read.sql
       - ../../../3_storage/postgres/init/42_pct_plan.sql
       - ../../../3_storage/postgres/init/43_pct_plan_read.sql
+      - ../../../3_storage/postgres/init/99_init_complete.sql
 
 
   - name: keycloak-seed-script

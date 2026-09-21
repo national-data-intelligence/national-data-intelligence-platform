@@ -46,6 +46,29 @@ if [ -z "${NHDW_ENTITY_BUILD:-}" ] && [ "$NHDW_PROFILE" != "et-v3" ]; then
 fi
 echo "▸ profile: $NHDW_PROFILE   entity build: ${NHDW_ENTITY_BUILD:-<default _build>}"
 
+# SECRETS PARITY. The local gitignored secrets.yaml drifts: the template gains a
+# key with a new component and nobody re-copies. An empty env var then aborts
+# postgres initdb at that script, the container restarts half-initialized, and
+# the failure surfaces hundreds of seconds later as a missing schema. Checking
+# key parity here costs nothing and names the missing key before anything runs.
+if [ -f "$OVERLAY/secrets.yaml" ] && [ -f "$OVERLAY/secrets.yaml.template" ]; then
+  MISSING_KEYS=$(python3 - "$OVERLAY" <<'PYEOF'
+import re, sys, pathlib
+o = pathlib.Path(sys.argv[1])
+keys = lambda f: set(re.findall(r'^[ ]{2}([A-Z][A-Z0-9_]+):', f.read_text(), re.M))
+print('\n'.join(sorted(keys(o / 'secrets.yaml.template') - keys(o / 'secrets.yaml'))))
+PYEOF
+)
+  if [ -n "$MISSING_KEYS" ]; then
+    echo "✗ secrets.yaml is missing keys the template declares:"
+    echo "$MISSING_KEYS" | sed 's/^/    /'
+    echo "  Copy each from secrets.yaml.template and set a value. Refusing to"
+    echo "  boot: an empty secret aborts postgres init midway, which is worse."
+    exit 1
+  fi
+  echo "▸ secrets: key parity with the template — OK"
+fi
+
 REBUILD_IMAGES=0
 OFFLINE=0
 case "${1:-}" in
@@ -308,7 +331,25 @@ for i in $(seq 1 30); do
   [ "$(kubectl -n "$NS" get pod postgres-vault-0 -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || true)" = "true" ] && break
   sleep 5
 done
-echo "  postgres-vault ready"
+# Ready is not initialized. A failed init script aborts the initdb sequence;
+# the container then restarts onto the existing volume, skips the remaining
+# scripts forever, and answers probes while missing half its schemas. The
+# sentinel (99_init_complete.sql, sorts last) exists only if every script ran.
+for i in $(seq 1 24); do
+  SENTINEL=$(kubectl -n "$NS" exec postgres-vault-0 -- psql -U vault_admin -d nhdw_vault -tAc \
+    "SELECT count(*) FROM public.initdb_sentinel" 2>/dev/null || echo 0)
+  [ "${SENTINEL:-0}" = "1" ] && break
+  sleep 5
+done
+if [ "${SENTINEL:-0}" != "1" ]; then
+  echo "  ✗ postgres answers but the initdb sentinel is missing — an init script"
+  echo "    failed and the remaining ones never ran. Read:"
+  echo "      kubectl -n $NS logs postgres-vault-0 --previous | grep -B2 -iE 'fatal|error'"
+  echo "    Fix the cause (a missing secret, usually), then wipe the volume so"
+  echo "    init re-runs:  kubectl -n $NS delete pod postgres-vault-0 && kubectl -n $NS delete pvc -l app=postgres-vault"
+  exit 1
+fi
+echo "  postgres-vault ready AND fully initialized (sentinel present)"
 kubectl -n "$NS" wait --for=condition=complete job/keycloak-seed --timeout=420s 2>/dev/null \
   && echo "  keycloak-seed complete" || echo "  ! keycloak-seed not complete (inspect: kubectl -n $NS logs job/keycloak-seed)"
 
