@@ -107,6 +107,13 @@ BEGIN
         GRANT SELECT ON ops_governance.dq_threshold TO ops_gateway;
         GRANT SELECT, INSERT, UPDATE ON ops_governance.dq_flag TO ops_gateway;
         GRANT SELECT, INSERT ON ops_governance.dq_flag_event TO ops_gateway;
+        -- INSERT on the table is not enough: dq_flag_event.id is a serial, so
+        -- the writer also needs its sequence. Without this the detector can
+        -- UPDATE an existing flag fine (no history row is written when a flag
+        -- already exists) but dies the moment it raises a NEW one —
+        -- "permission denied for sequence dq_flag_event_id_seq" — which is the
+        -- one case the detector exists for.
+        GRANT USAGE, SELECT ON SEQUENCE ops_governance.dq_flag_event_id_seq TO ops_gateway;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ops_reader') THEN
         GRANT SELECT ON ops_governance.dq_threshold, ops_governance.dq_flag_event TO ops_reader;

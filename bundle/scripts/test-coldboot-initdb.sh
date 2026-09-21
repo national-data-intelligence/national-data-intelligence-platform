@@ -107,6 +107,26 @@ done
 [ "$(q nhdw_vault "SELECT count(*) FROM pg_default_acl a JOIN pg_namespace n ON n.oid=a.defaclnamespace WHERE n.nspname='bi_mdm'")" -ge 1 ] \
   && pass "bi_mdm default privileges granted" || fail "bi_mdm has NO default privileges (07 truncated again?)"
 
+# A serial column needs BOTH the table grant and its sequence grant. Granting
+# only the table looks right and fails at runtime on the first INSERT — which is
+# how the DQ detector ended up able to update existing flags but not raise a new
+# one. This asks the question for every such table at once rather than for the
+# one that happened to break.
+gap="$(q nhdw_ops "
+WITH seqs AS MATERIALIZED (
+  SELECT s.oid AS seqoid, t.oid AS toid, tn.nspname||'.'||t.relname AS tbl
+  FROM pg_class s
+  JOIN pg_depend d ON d.objid = s.oid AND d.classid = 'pg_class'::regclass
+                  AND d.refclassid = 'pg_class'::regclass
+  JOIN pg_class t ON t.oid = d.refobjid AND t.relkind = 'r'
+  JOIN pg_namespace tn ON tn.oid = t.relnamespace
+  WHERE s.relkind = 'S')
+SELECT string_agg(DISTINCT tbl, ', ') FROM seqs
+WHERE has_table_privilege('ops_gateway', toid, 'INSERT')
+  AND NOT has_sequence_privilege('ops_gateway', seqoid, 'USAGE')")"
+[ -z "$gap" ] && pass "every ops_gateway-writable table can use its sequence" \
+              || fail "ops_gateway can INSERT but not use the sequence for: $gap"
+
 echo
 [ "$FAIL" = 0 ] && echo "== cold-boot initdb: ALL GREEN ==" || echo "== cold-boot initdb: FAILURES above =="
 exit "$FAIL"
