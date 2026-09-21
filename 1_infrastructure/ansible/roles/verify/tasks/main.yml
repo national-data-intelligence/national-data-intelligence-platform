@@ -47,4 +47,9 @@
 - name: Run the canonical regression gate (verify-system.sh — same as bootstrap step 7.9)
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/verify-system.sh"
   args: { chdir: "{{ nhdw_repo_root }}" }
+  environment:
+    # the script probes https://gateway.$NHDW_HOSTBASE and defaults to the DEV
+    # base — without this it checks 127.0.0.1.nip.io on a re-homed deployment
+    # and reports a dead gateway that is actually serving fine
+    NHDW_HOSTBASE: "{{ nhdw_host_base }}"
   changed_when: false
