@@ -45,14 +45,15 @@ TABLE_FQN = "nhdw-vault.nhdw_vault.{schema}.{table}"
 _CTX = ssl.create_default_context(); _CTX.check_hostname = False; _CTX.verify_mode = ssl.CERT_NONE
 
 
-def widget_bindings() -> dict[str, tuple[str, str]]:
-    # gen-exposures.py owns the fetchers.py parser; its name has a dash, so
-    # load it by path rather than duplicating the AST walk here.
+def widget_bindings() -> dict[str, list[tuple[str, str]]]:
+    # gen-exposures.py owns the widget-binding parser (registry + route-declared
+    # WIDGET_MARTS); its name has a dash, so load it by path rather than
+    # duplicating the AST walk here.
     spec = importlib.util.spec_from_file_location(
         "gen_exposures", REPO / "bundle/scripts/gen-exposures.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.widget_bindings()
+    return mod.widget_mart_bindings()
 
 
 def load_yaml(path: pathlib.Path) -> dict:
@@ -124,7 +125,8 @@ def main() -> int:
         "description": "Internal BI — the governed dashboard SPA. Pages and "
                        "widgets are published by the access-point emission "
                        "standard (sync-om-dashboards.py); lineage derives from "
-                       "the gateway fetcher registry."})
+                       "the gateway's widget bindings (fetcher registry + "
+                       "route-declared WIDGET_MARTS)."})
 
     tables: dict[str, str] = {}   # fqn -> id cache
     for page in pages:
@@ -146,21 +148,23 @@ def main() -> int:
         for w in page["widgets"]:
             if w["id"] not in bindings:
                 continue
-            schema, table = bindings[w["id"]]
-            fqn = TABLE_FQN.format(schema=schema, table=table)
-            if fqn not in tables:
-                got = om.call("GET", f"/v1/tables/name/{urllib.parse.quote(fqn, safe='')}")
-                tables[fqn] = (got or {}).get("id", "")
-            if not tables[fqn]:
-                continue
-            chart = om.call("GET", f"/v1/charts/name/{urllib.parse.quote(SERVICE + '.' + w['id'], safe='')}")
-            for ent_type, ent in (("chart", chart), ("dashboard", dash)):
-                if ent and ent.get("id"):
-                    om.call("PUT", "/v1/lineage", {"edge": {
-                        "fromEntity": {"id": tables[fqn], "type": "table"},
-                        "toEntity": {"id": ent["id"], "type": ent_type},
-                        "lineageDetails": {"description":
-                            f"widget {w['id']} reads {schema}.{table} through the governed gateway"}}})
+            chart = None
+            for schema, table in bindings[w["id"]]:
+                fqn = TABLE_FQN.format(schema=schema, table=table)
+                if fqn not in tables:
+                    got = om.call("GET", f"/v1/tables/name/{urllib.parse.quote(fqn, safe='')}")
+                    tables[fqn] = (got or {}).get("id", "")
+                if not tables[fqn]:
+                    continue
+                if chart is None:
+                    chart = om.call("GET", f"/v1/charts/name/{urllib.parse.quote(SERVICE + '.' + w['id'], safe='')}")
+                for ent_type, ent in (("chart", chart), ("dashboard", dash)):
+                    if ent and ent.get("id"):
+                        om.call("PUT", "/v1/lineage", {"edge": {
+                            "fromEntity": {"id": tables[fqn], "type": "table"},
+                            "toEntity": {"id": ent["id"], "type": ent_type},
+                            "lineageDetails": {"description":
+                                f"widget {w['id']} reads {schema}.{table} through the governed gateway"}}})
     print(f"done — warnings: {om.warnings} (each was skipped, never fatal)")
     return 0
 

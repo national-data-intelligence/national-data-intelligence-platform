@@ -16,6 +16,7 @@ with 0 replicas).
 | Ingestion DAG | `5_orchestrator/dags/openmetadata_ingestion.py` | daily 05:00; five connectors (postgres, clickhouse, datalake, dbt, airflow); every task best-effort — a failed connector never fails the run |
 | Bootstrap | `bundle/scripts/seed-openmetadata.sh` | waits for OM, validates the bot token, triggers the DAG once |
 | Lineage emitters | `2_pipelines/ingestor/*/src/lineage.py` | source-system → raw-view hop; silent no-op unless `OM_LINEAGE_API`/`OM_LINEAGE_JWT` are set; never touches the `_manifest.json` sidecars |
+| Bridge emitter | `2_pipelines/vault/bridge/lineage.py` | ClickHouse `nhdw_staging.stg_*` → Postgres `nhdw_landing.stg_*` — the one hop no dbt project can infer (the copy happens in the bridge); same env-gated, fail-safe contract as the ingestor emitters |
 | dbt exposures | `bundle/scripts/gen-exposures.py` → `2_pipelines/marts/models/_exposures.yml` | the marts→widget hop, derived from the gateway's `fetchers.py` registry (parsed read-only); rerun after widget changes, then rebuild the marts image |
 | Classification sync | `bundle/scripts/sync-om-classification.py` | one-way OM tags → `ops_perm.column_classification` + a committed seed file; `managed_by='openmetadata'` rows only, can never overwrite `seed`/`steward` rows; dry-run by default, writing needs `--apply` **and** `OM_CLASS_SYNC_ENABLED=true`; skips cleanly while the governance table does not exist yet |
 | Dashboard connector | `bundle/scripts/sync-om-dashboards.py` | the access-point emission standard (below): pages → OM dashboards, widgets → OM charts, mart→widget lineage edges; runs at seed time (step 4 of `seed-openmetadata.sh`) and after widget/page changes |
@@ -92,6 +93,24 @@ Internal BI). The standard, binding for any future access point:
    catalog-only — an access point must work identically with OM at 0 replicas.
 6. **Idempotent** (createOrUpdate PUTs) with a `--dry-run` flag, and wired
    into `seed-openmetadata.sh` so a reseed converges the catalog.
+
+7. **Every widget declares its marts where it is served.** Registry-served
+   widgets bind in `fetchers.py` (any of its three forms: the dict literal,
+   `FETCHERS["x"] = Fetcher(...)`, or an alias). A widget served by its own
+   route (the Control Tower's `routes/ct.py`) declares a pure-literal
+   `WIDGET_MARTS` beside its queries. `bundle/scripts/test_gen_exposures.py`
+   (CI) fails when a catalog widget has no binding — unless it is listed as
+   reading no mart, with the reason — and when a route declaration names a
+   mart its route never queries.
+
+**The full chain and what produces each hop:** source system → lake raw view
+(ingestor emitters) → ClickHouse staging model (dbt connector, staging project
+on the `nhdw-staging` service) → Postgres landing (bridge emitter) → raw and
+business vault → marts (dbt connector, vault + marts projects on `nhdw-vault`)
+→ page and widget (dashboard connector). An emitter only writes when its
+movement runs; after enabling one on an existing deployment, backfill by
+calling the same emitter function for the already-landed tables (what an ingest
+or sync run would emit, with no data movement).
 
 Run it after adding/moving widgets or pages, together with
 `gen-exposures.py`: the exposures keep the hop in the *dbt manifest*

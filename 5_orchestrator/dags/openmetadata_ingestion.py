@@ -138,14 +138,19 @@ source:
             _secret_env("SRC_KEY", "seaweedfs-secrets", "ADMIN_ACCESS_KEY"),
             _secret_env("SRC_SECRET", "seaweedfs-secrets", "ADMIN_SECRET_KEY"),
         ],
-        # one dbt pass per project; runs sequentially inside a single pod
+        # one dbt pass per project; runs sequentially inside a single pod. Each
+        # project's lineage lands on the service that HOLDS its models: staging
+        # builds in ClickHouse (nhdw-staging), vault + marts in Postgres
+        # (nhdw-vault). Mapping staging to nhdw-vault silently dropped every
+        # raw-view → staging-model edge (no matching tables there).
         "script_override": """
 set -e
 for PRJ in staging vault marts; do
+if [ "$PRJ" = staging ]; then SVC=nhdw-staging; else SVC=nhdw-vault; fi
 cat > /tmp/dbt-$PRJ.yaml <<CFG
 source:
   type: dbt
-  serviceName: nhdw-vault
+  serviceName: $SVC
   sourceConfig:
     config:
       type: DBT

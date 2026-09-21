@@ -33,6 +33,21 @@ _SCHEMA = "marts.bi_supply"
 _BARE_SCHEMA = _SCHEMA.split(".", 1)[1]
 _OPA_ATTRS = {"data_class": "DC.STK", "granularity": "aggregate", "sensitivity": "default"}
 
+# Widget → mart bindings for the CT widgets, which this route serves instead of
+# the fetchers.py registry. Declaration only (serving reads the queries below);
+# bundle/scripts/gen-exposures.py parses it statically so dbt exposures and the
+# OpenMetadata dashboard connector see these widgets. Must be a pure literal, and
+# must list every mart the queries in ct_plan() read for that widget
+# (bundle/scripts/test_gen_exposures.py enforces the second rule).
+WIDGET_MARTS = {
+    "ct-filters":  [("bi_supply", "mart_ct_nodes"), ("bi_supply", "mart_ct_movements"),
+                    ("bi_supply", "mart_ct_plan_stats")],
+    "ct-kpis":     [("bi_supply", "mart_ct_movements")],
+    "ct-movement": [("bi_supply", "mart_ct_movements"), ("bi_supply", "mart_ct_nodes")],
+    "ct-dispatch": [("bi_supply", "mart_ct_vehicle_runs"), ("bi_supply", "mart_ct_movements"),
+                    ("bi_supply", "mart_ct_nodes")],
+}
+
 
 # ── coercion helpers (Trino returns Decimal/int/str; plan.ts wants number/bool) ─
 def _f(v):
