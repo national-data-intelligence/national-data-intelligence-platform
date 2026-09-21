@@ -34,7 +34,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from . import mart_attrs, metrics, opa, ops_db
 from .routes import (access_requests, alerts, api_tokens, artifacts, audit,
-                      chat, classification, ct, datasets, docs, dq, exports,
+                      chat, classification, ct, datasets, demo, docs, dq, exports,
                       graduation, groups, marts,
                       mdm, me, ml, observability, perm_admin,
                       permissions as permissions_route,
@@ -202,6 +202,9 @@ app.include_router(me.router)
 # The country profile is UNAUTHENTICATED on purpose: it carries the masthead and
 # the map, which the public dashboard needs before anyone signs in.
 app.include_router(profile.router)
+# Demo control: /health is open so a console can show status before sign-in;
+# everything that mutates requires DEMO_CONTROL_TOKEN.
+app.include_router(demo.router)
 app.include_router(marts.router)
 app.include_router(ct.router)
 app.include_router(exports.router)

@@ -45,6 +45,11 @@ log = logging.getLogger("gateway.profile")
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
 PROFILE_DIR = Path(os.environ.get("NHDW_PROFILE_DIR", "/opt/nhdw-profiles"))
+# Which profile is live is STATE, not content, so it lives in its own writable
+# directory. Profile content stays mounted read-only — the gateway serves
+# profiles and must never be able to edit one, but it does have to be able to
+# switch between them.
+STATE_DIR = Path(os.environ.get("NHDW_PROFILE_STATE_DIR", "/opt/nhdw-state"))
 _DEFAULT_PROFILE = os.environ.get("NHDW_PROFILE", "et-v3")
 
 # Cache with a short TTL rather than forever: a profile swap writes files on the
@@ -74,17 +79,55 @@ def invalidate() -> None:
 
 
 def active_key() -> str:
-    """Which profile is live. The ACTIVE pointer file beats the env var so a swap
-    does not require redeploying the gateway."""
-    pointer = PROFILE_DIR / "ACTIVE"
-    try:
-        if pointer.is_file():
-            name = pointer.read_text(encoding="utf-8").strip()
-            if name:
-                return name
-    except OSError as exc:                                      # noqa: BLE001
-        log.warning("profile: ACTIVE unreadable (%s) — falling back to env", exc)
+    """Which profile is live.
+
+    Precedence: the writable state dir, then a pointer shipped alongside the
+    profiles, then the env var. A swap writes the first, so it takes effect
+    without redeploying the gateway."""
+    for pointer in (STATE_DIR / "ACTIVE", PROFILE_DIR / "ACTIVE"):
+        try:
+            if pointer.is_file():
+                name = pointer.read_text(encoding="utf-8").strip()
+                if name:
+                    return name
+        except OSError as exc:                                  # noqa: BLE001
+            log.warning("profile: %s unreadable (%s)", pointer, exc)
     return _DEFAULT_PROFILE
+
+
+def list_profiles() -> list[dict[str, Any]]:
+    """Every profile installed on the host, for the console's profile picker."""
+    out: list[dict[str, Any]] = []
+    try:
+        entries = sorted(p for p in PROFILE_DIR.iterdir()
+                         if p.is_dir() and not p.name.startswith("_"))
+    except OSError:
+        return out
+    for entry in entries:
+        manifest = _read_manifest(entry.name)
+        if manifest.get("_fallback"):
+            continue                        # a directory with no manifest is not a profile
+        out.append({
+            "key": entry.name,
+            "label": manifest.get("label") or entry.name,
+            "country": (manifest.get("country") or {}).get("name"),
+            "revision": manifest.get("revision"),
+            "has_geo": (entry / "geo").is_dir(),
+            "has_copy": (entry / "copy").is_dir(),
+            "has_reference": (entry / "reference.json").is_file(),
+        })
+    return out
+
+
+def set_active(key: str) -> None:
+    """Point the deployment at another profile. Writes the pointer and drops the
+    cache so the next request serves the new country."""
+    if key not in {p["key"] for p in list_profiles()}:
+        raise HTTPException(404, f"no profile '{key}' installed")
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    (STATE_DIR / "ACTIVE").write_text(key + "\n", encoding="utf-8")
+    invalidate()
+    log.info("profile: active profile is now %s", key)
 
 
 def _safe_join(base: Path, *parts: str) -> Path:
@@ -289,6 +332,13 @@ async def get_profile() -> dict[str, Any]:
     out = {k: v for k, v in manifest.items() if k not in ("layers", "reference")}
     out["active"] = key
     return out
+
+
+@router.get("/installed")
+async def get_installed() -> dict[str, Any]:
+    """What this host could switch to. Read-only; switching is a demo-control
+    action, not something an unauthenticated caller can do."""
+    return {"active": active_key(), "profiles": list_profiles()}
 
 
 @router.get("/copy/{surface}")

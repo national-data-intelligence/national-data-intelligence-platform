@@ -124,6 +124,8 @@ spec:
             # optional:true → absent secret ⇒ service path off, admin bearer still works.
             - { name: DQ_DETECT_TOKEN, valueFrom: { secretKeyRef: { name: dq-detect-secrets, key: TOKEN, optional: true } } }
             - { name: NHDW_PROFILE_DIR, value: "/opt/nhdw-profiles" }
+            - { name: NHDW_PROFILE_STATE_DIR, value: "/opt/nhdw-state" }
+            - { name: DEMO_CONTROL_TOKEN, valueFrom: { secretKeyRef: { name: demo-control-secrets, key: TOKEN, optional: true } } }
             # Fallback only — the ACTIVE pointer file in that directory wins, so a
             # swap does not need a redeploy.
             - { name: NHDW_PROFILE, value: "et-v3" }
@@ -135,6 +137,10 @@ spec:
             # must be a file write on the server, visible to the gateway without a
             # rollout. Read-only: the gateway serves profiles, it never edits them.
             - { name: profiles, mountPath: /opt/nhdw-profiles, readOnly: true }
+            # WRITABLE, and only this: which profile is active is state, not
+            # content. Keeping them apart means the gateway can switch profiles
+            # but can never edit one.
+            - { name: profile-state, mountPath: /opt/nhdw-state }
             - { name: workspace-profiles, mountPath: /app/config, readOnly: true }
           readinessProbe:
             httpGet: { path: /health, port: 8000 }
@@ -149,6 +155,8 @@ spec:
         # nodes the profile store moves to the object store and this mount goes.
         - name: profiles
           hostPath: { path: /opt/nhdw-profiles, type: DirectoryOrCreate }
+        - name: profile-state
+          hostPath: { path: /opt/nhdw-state, type: DirectoryOrCreate }
         - { name: workspace-profiles, configMap: { name: workspace-profiles } }
 ---
 apiVersion: v1
