@@ -1016,24 +1016,37 @@ async def _detect_classification_gaps() -> list[dict[str, Any]]:
 async def _upsert_flags(conn, findings: list[dict[str, Any]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for f in findings:
-        row = await conn.fetchrow("""
-            INSERT INTO ops_governance.dq_flag
-                (raised_by, source, table_name, key, error_class,
-                 severity, description, status, fingerprint)
-            VALUES ('detector', $1, $2, $3::jsonb, $4, $5, $6, 'open', $7)
-            ON CONFLICT (fingerprint) WHERE fingerprint IS NOT NULL AND status <> 'resolved'
-            DO UPDATE SET description = EXCLUDED.description,
-                          severity    = EXCLUDED.severity,
-                          updated_at  = now()
-            RETURNING id, (xmax = 0) AS inserted
-        """, f["source"], f["table_name"], json.dumps(f["key"]),
-             f["error_class"], f["severity"], f["description"][:500], f["fingerprint"])
-        if row and row["inserted"]:
-            # history: the raise itself is the first recorded transition
-            await conn.execute("""
-                INSERT INTO ops_governance.dq_flag_event (flag_id, actor, from_status, to_status, note)
-                VALUES ($1, 'detector', NULL, 'open', left($2, 200))
-            """, row["id"], f["description"])
+        # The flag and its first history row go in TOGETHER. Without the
+        # transaction a failure between them leaves a raised flag with no
+        # recorded transition, which breaks the append-only record the
+        # governance KPIs are computed from — and that is not hypothetical:
+        # the event insert once failed on a missing sequence grant after the
+        # flag insert had already committed.
+        async with conn.transaction():
+            row = await conn.fetchrow("""
+                INSERT INTO ops_governance.dq_flag
+                    (raised_by, source, table_name, key, error_class,
+                     severity, description, status, fingerprint)
+                VALUES ('detector', $1, $2, $3::jsonb, $4, $5, $6, 'open', $7)
+                ON CONFLICT (fingerprint) WHERE fingerprint IS NOT NULL AND status <> 'resolved'
+                DO UPDATE SET description = EXCLUDED.description,
+                              severity    = EXCLUDED.severity,
+                              updated_at  = now()
+                RETURNING id, (xmax = 0) AS inserted
+            """, f["source"], f["table_name"], json.dumps(f["key"]),
+                 f["error_class"], f["severity"], f["description"][:500], f["fingerprint"])
+            if row:
+                # `inserted` is the normal raise; the EXISTS check heals a flag
+                # an earlier partial write left without any history at all.
+                needs_event = row["inserted"] or not await conn.fetchval(
+                    "SELECT EXISTS (SELECT 1 FROM ops_governance.dq_flag_event"
+                    " WHERE flag_id = $1)", row["id"])
+                if needs_event:
+                    # history: the raise itself is the first recorded transition
+                    await conn.execute("""
+                        INSERT INTO ops_governance.dq_flag_event (flag_id, actor, from_status, to_status, note)
+                        VALUES ($1, 'detector', NULL, 'open', left($2, 200))
+                    """, row["id"], f["description"])
         counts[f["error_class"]] = counts.get(f["error_class"], 0) + 1
     return counts
 
