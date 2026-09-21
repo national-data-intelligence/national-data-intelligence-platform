@@ -16,6 +16,7 @@ the marts image:  python bundle/scripts/gen-exposures.py
 from __future__ import annotations
 
 import ast
+import os
 import pathlib
 import sys
 
@@ -24,6 +25,11 @@ FETCHERS = REPO / "6_access-points/api/nhdw-gateway/app/fetchers.py"
 # Route modules that serve widgets outside the registry (declare WIDGET_MARTS).
 ROUTE_MODULES = [REPO / "6_access-points/api/nhdw-gateway/app/routes/ct.py"]
 MARTS = REPO / "2_pipelines/marts"
+# The one supplied host base, same contract as everywhere else (ingress, OIDC
+# redirect URIs, the keycloak seed, the wildcard certificate). A deployment on a
+# different host regenerates these exposures rather than shipping a link into
+# someone else's cluster.
+HOST_BASE = os.environ.get("NHDW_HOSTBASE", "127.0.0.1.nip.io")
 OUT = MARTS / "models/_exposures.yml"
 
 
@@ -139,7 +145,7 @@ def main() -> int:
             "    type: dashboard",
             f"    label: \"{widget} (Internal BI widget)\"",
             "    maturity: high",
-            f"    url: https://internal-bi.127.0.0.1.nip.io/",
+            f"    url: https://internal-bi.{HOST_BASE}/",
             f"    description: \"Internal BI widget `{widget}` reads {reads} through the governed gateway (Trino + OPA).\"",
             "    depends_on:",
             *[f"      - ref('{t}')" for _, t in marts],
