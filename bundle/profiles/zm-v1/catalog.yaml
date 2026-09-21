@@ -7,7 +7,23 @@
 # Zambian equivalent: they would render empty and read as a broken dashboard
 # rather than an inapplicable one.
 disable:
+  # ── PAGES ────────────────────────────────────────────────────────────────
+  # A page whose whole subject has no Zambian source is turned off as a page.
+  # Disabling its widgets one by one would leave an empty tab that looks broken
+  # rather than inapplicable, and page-tab elision already drops a page with no
+  # visible sections.
+  page:
+    - id: internal-bi/resource
+      why: >-
+        The Resource page is Ethiopia's EPSS supply chain, and every section of
+        it reads HCMIS WDM — the Ethiopian national warehouse system. There is no
+        Zambian HCMIS: the country's supply data is eLMIS, and its supply view is
+        the PCT page, which is built on it. Synthesising "Zambian HCMIS" rows
+        would be modelling a system that does not exist there.
+
+  # ── WIDGETS ──────────────────────────────────────────────────────────────
   widget:
+    # Geography Zambia does not have. Province → District → Facility; no woreda.
     - id: ov-act-first-woredas
       why: >-
         Ranks woredas for action. Zambia has no woreda level; the equivalent
@@ -15,10 +31,23 @@ disable:
         a different mart rather than a relabelling of this one.
     - id: dz-woreda-table
       why: >-
-        Woreda-grain disease surveillance. The eLMIS archive is a supply
-        archive and carries no notifiable-disease surveillance at all, so this
-        has neither the grain nor the data.
-    # dz-region-map was disabled here until _shared/geo.ts stopped hard-coding
-    # Ethiopian geometry. It now loads the active profile's admin-1 boundaries
-    # and registers them under a country-neutral echarts map name, so it draws
-    # Zambia correctly and is enabled again.
+        Woreda-grain disease surveillance. The eLMIS archive is a supply archive
+        and carries no notifiable-disease surveillance at all, so this has
+        neither the grain nor the data.
+
+    # Sources that are Ethiopian products, not generic categories. mBrana is an
+    # Ethiopian mobile reporting product; MFR is Ethiopia's Master Facility
+    # Registry; EthioEMR is an Ethiopian EMR. None has a Zambian counterpart in
+    # this deployment, and the archive carries no equivalent.
+    - id: dz-signal-chart
+      why: >-
+        Disease signal chart over EthioEMR, HCMIS, mBrana and MFR. Zambia's
+        archive has none of those and reports zero diseases.
+    - id: sv-cascade-ncd
+      why: >-
+        NCD care cascade over HCMIS resource allocation. No Zambian source for
+        either the cascade or the allocation.
+    - id: rm-facilities
+      why: >-
+        Facility capacity from HCMIS and MFR. Zambia's facility list is real and
+        comes from eLMIS, but capacity is not in that archive.

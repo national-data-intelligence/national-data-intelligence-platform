@@ -45,7 +45,48 @@ REPO_ROOT = _repo_root()
 
 # --- Paths & constants ----------------------------------------------------
 ROOT = Path(__file__).resolve().parents[1]
-SHARED = REPO_ROOT / "bundle" / "seeds" / "entity-model" / "_build"
+
+# WHICH COUNTRY's sample this generator consumes.
+#
+# build_sample.py emits Ethiopia's sample to _build/ and any other country's to
+# _build-<model stem>/, so the two never overwrite each other. This resolves the
+# matching directory instead of naming _build outright — a generator hardwired
+# to _build silently produces Ethiopian rows under a Zambian profile, which is
+# the failure the whole profile mechanism exists to prevent.
+#
+# Order: $NHDW_ENTITY_BUILD, then the ACTIVE profile's declared entity model,
+# then _build. A deployment with no profile is unchanged.
+#
+# Copied rather than imported: these source projects are deliberately
+# independent of each other and of the repo's packages.
+def _entity_build_dir(default_root):
+    import os as _os
+    from pathlib import Path as _P
+    env = _os.environ.get("NHDW_ENTITY_BUILD", "").strip()
+    if env:
+        return _P(env)
+    try:
+        import yaml as _y
+        pdir  = _P(_os.environ.get("NHDW_PROFILE_DIR", "/opt/nhdw-profiles"))
+        state = _P(_os.environ.get("NHDW_PROFILE_STATE_DIR", "/opt/nhdw-state"))
+        key = ""
+        for ptr in (state / "ACTIVE", pdir / "ACTIVE"):
+            if ptr.is_file():
+                key = ptr.read_text(encoding="utf-8").strip()
+                break
+        key = key or _os.environ.get("NHDW_PROFILE", "").strip()
+        if key:
+            man = _y.safe_load((pdir / key / "profile.yaml").read_text(encoding="utf-8"))
+            declared = (((man or {}).get("layers") or {}).get("data") or {}).get("entity_model")
+            if declared:
+                stem = _P(declared).stem
+                if stem != "entity-model":
+                    return default_root / f"_build-{stem}"
+    except Exception:
+        pass
+    return default_root / "_build"
+
+SHARED = _entity_build_dir(REPO_ROOT / "bundle" / "seeds" / "entity-model")
 ENTITY_MODEL = REPO_ROOT / "bundle" / "seeds" / "entity-model" / "entity-model.yaml"
 
 DEFAULT_BASE = os.environ.get("DHIS2_BASE_URL", "http://127.0.0.1:8080")

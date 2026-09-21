@@ -58,7 +58,48 @@ REPO_ROOT = _repo_root()
 
 ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env"
-SHARED_BUILD = REPO_ROOT / "bundle" / "seeds" / "entity-model" / "_build"
+
+# WHICH COUNTRY's sample this generator consumes.
+#
+# build_sample.py emits Ethiopia's sample to _build/ and any other country's to
+# _build-<model stem>/, so the two never overwrite each other. This resolves the
+# matching directory instead of naming _build outright — a generator hardwired
+# to _build silently produces Ethiopian rows under a Zambian profile, which is
+# the failure the whole profile mechanism exists to prevent.
+#
+# Order: $NHDW_ENTITY_BUILD, then the ACTIVE profile's declared entity model,
+# then _build. A deployment with no profile is unchanged.
+#
+# Copied rather than imported: these source projects are deliberately
+# independent of each other and of the repo's packages.
+def _entity_build_dir(default_root):
+    import os as _os
+    from pathlib import Path as _P
+    env = _os.environ.get("NHDW_ENTITY_BUILD", "").strip()
+    if env:
+        return _P(env)
+    try:
+        import yaml as _y
+        pdir  = _P(_os.environ.get("NHDW_PROFILE_DIR", "/opt/nhdw-profiles"))
+        state = _P(_os.environ.get("NHDW_PROFILE_STATE_DIR", "/opt/nhdw-state"))
+        key = ""
+        for ptr in (state / "ACTIVE", pdir / "ACTIVE"):
+            if ptr.is_file():
+                key = ptr.read_text(encoding="utf-8").strip()
+                break
+        key = key or _os.environ.get("NHDW_PROFILE", "").strip()
+        if key:
+            man = _y.safe_load((pdir / key / "profile.yaml").read_text(encoding="utf-8"))
+            declared = (((man or {}).get("layers") or {}).get("data") or {}).get("entity_model")
+            if declared:
+                stem = _P(declared).stem
+                if stem != "entity-model":
+                    return default_root / f"_build-{stem}"
+    except Exception:
+        pass
+    return default_root / "_build"
+
+SHARED_BUILD = _entity_build_dir(REPO_ROOT / "bundle" / "seeds" / "entity-model")
 
 # ─── Load .env ───────────────────────────────────────────────────────────────
 if ENV_FILE.exists():
@@ -92,9 +133,23 @@ REGIONS = _load("regions.json")                # 14 regions (id, …, epss_hub)
 ALL_COMMODITIES = _load("commodities.json")    # 35 commodities
 FACILITIES = _load("facilities.json")          # 893 facilities
 
-# Vaccines = commodities filtered to programme == EPI (10 rows).
+# Vaccines = commodities filtered to programme == EPI.
+#
+# A country whose commodity set has no EPI programme has no vaccine lane to
+# generate: Zambia's tracer list is the eLMIS one (ARV, EM, LAB …) and carries
+# no vaccines at all. That is a fact about the archive, not a broken model, so
+# it degrades to an empty lane and says so rather than asserting.
+#
+# The assertion still fires for a model that CLAIMS an EPI programme and then
+# has no commodities in it — which is the broken-model case it was written for.
 VACCINES = [c for c in ALL_COMMODITIES if c.get("programme") == "EPI"]
-assert VACCINES, "expected at least one EPI commodity in commodities.json"
+_HAS_EPI_PROGRAMME = any(
+    (c.get("programme") or "").upper() == "EPI" for c in ALL_COMMODITIES)
+if not VACCINES and _HAS_EPI_PROGRAMME:
+    raise AssertionError("commodities.json declares an EPI programme but no EPI commodity")
+if not VACCINES:
+    print("==> no EPI commodities in this country's model — the vaccine lane is "
+          "empty for this run (Zambia's eLMIS tracer list carries no vaccines)")
 
 # region_id -> epss hub id (e.g. ET-OR -> ADAMA).
 REGION_TO_HUB = {r["id"]: r["epss_hub"] for r in REGIONS}
