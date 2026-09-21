@@ -523,3 +523,45 @@ identity through them specifically. Saying so rather than implying full coverage
 `ops_identity.user` row raised `ForeignKeyViolationError` and surfaced as a bare
 500. A real login JIT-caches the identity so normal users never hit it, but it now
 returns a 409 that explains itself.
+
+---
+
+## 22. Final verification sweep — what was actually proven
+
+Recorded so the claims in this file can be checked rather than taken on trust.
+
+**Proven on the live deployment:**
+
+- `verify-system.sh`: **ALL GREEN, 36 checks** — every source up, every mart populated,
+  PII stripped at the processed zone, ML registry serving 7 models, the graduation
+  lifecycle, and the two live suites now wired in as check 9.
+- **Browser, real OIDC, 7/7**: Keycloak login, internal-bi renders, public and workshop
+  render on the SAME session (shared SSO), and admin correctly demands its own login
+  because it is a different realm (`privileged-ops`) — the boundary holding, not SSO
+  failing. My first run asserted the opposite and the system was right.
+- **Masking**: exact for a reveal-granted analyst, coarsened (`6.4915 → 6.5`,
+  `11.7900 → 11.8`) for low trust, on both the Control Tower feed and the generic mart
+  reader; the SQL editor refuses the masked columns by name; export is denied outright.
+- **MDM**: the as-of view with no session setting is byte-identical to the live view
+  (0 diffs). The collision guard holds — 4540 same-as rows yield 4540 distinct keys from
+  only 3278 distinct SOURCE keys, so the 1262 records sharing a source hash stay separate.
+  Release `R-2026-09` pins BOTH coordinates (decisions_as_of + source_watermark).
+- **Vocabulary**: reload runs clean — 163 concepts, 133 relationships, 187 crosswalk rows.
+- **DQ**: detector returns 8 findings across 3 classes including the new
+  `classification_gap`; the flag names 11 of 623 mart columns.
+- **OpenMetadata**: 632 tables, 4 databases, 5 pipelines, 7 dashboards, **582 lineage
+  edges** — the catalog and the exposure hop are real, not scaffolding.
+- **Cold-boot DB init**: the real init directory initialises a throwaway postgres from
+  zero, 16 assertions green, and fails correctly when a fix is reverted.
+
+**NOT proven, and worth saying plainly:**
+
+- A true fresh-volume boot of the whole platform — empty object store, empty ClickHouse,
+  empty OpenSearch, and the seed run that has to repopulate them. Only the database half
+  is covered. This is the one item left for the owner (call #18).
+- The widget path and the chatbot's `run_sql` were not driven with a low-trust identity
+  specifically; they share the `apply_masking` seam with the paths that were.
+- The masking `tokenize` and `drop` classes are covered by unit tests only. The sole
+  columns classified that way live on `bi_staging.bi_demo_patient_observations`, which is
+  an unserved staging model — the classification there is deliberately defensive, per the
+  note in the seed.
