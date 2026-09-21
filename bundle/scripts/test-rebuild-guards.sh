@@ -34,6 +34,7 @@ has bundle/scripts/sources-up.sh "dhis.conf is a directory" "dhis.conf directory
 has bundle/scripts/sources-up.sh "sudo rm -rf" "the dhis.conf repair can escalate for a root-owned dir"
 has bundle/scripts/seed-realistic.sh "PF_TRIES" "source preflight retries a cold source"
 has bundle/scripts/seed-realistic.sh "JOBTMP" "job manifests use a private per-run tmp dir"
+has bundle/scripts/sources-up.sh "weekly.csv missing — generating" "climate regenerates its gitignored seed if absent"
 
 echo "── dhis.conf ships (was gitignored → docker made a directory)"
 git -C "$R" ls-files --error-unmatch 0_external/sources/DHIS2/config/dhis.conf >/dev/null 2>&1 \
