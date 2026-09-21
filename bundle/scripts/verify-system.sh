@@ -20,9 +20,11 @@
 #      bundled mc binary is executable
 #   8. no retired names outside _archive (1_sources, fake-fayda image refs,
 #      1_infrastructure/{scripts,docker}) — replacement-means-removal guard
-#   9. masking negative path: a low-trust identity gets GENERALIZED coordinates
-#      on both the Control Tower feed and the generic mart reader, an analyst
-#      with the reveal grant gets exact ones, a partner role is denied
+#   9. live regression tests that used to sit unrun: the masking negative path
+#      (a low-trust identity gets GENERALIZED coordinates on both the Control
+#      Tower feed and the generic mart reader, an analyst with the reveal grant
+#      gets exact ones, a partner role is denied) and the public
+#      access-request surface (duplicate guard, validation, identity honesty)
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS=nhdw
@@ -224,19 +226,27 @@ stale=$(grep -rIl --exclude-dir='.*' "1_sources/\|nhdw/fake-fayda\|1_infrastruct
 # nothing ran, which is how a fail-open on the Control Tower GPS survived a
 # deploy: the policy self-tests passed because the policy was right, and no
 # gate ever asked what a low-trust caller actually received.
-MASK_E2E="$REPO/6_access-points/api/nhdw-gateway/tests/test_masking_e2e.sh"
-if [ -x "$MASK_E2E" ] || [ -f "$MASK_E2E" ]; then
-  mask_out="$(NHDW_HOSTBASE="$NHDW_HOSTBASE" NS="$NS" bash "$MASK_E2E" 2>&1)"
-  mask_rc=$?
-  if [ "$mask_rc" -eq 0 ]; then
-    pass "masking negative path enforced on both read paths"
+run_live_test() {   # $1 = label, $2 = script path
+  if [ ! -f "$2" ]; then fail "$1: test script missing at $2"; return; fi
+  local out rc
+  out="$(NHDW_HOSTBASE="$NHDW_HOSTBASE" NS="$NS" bash "$2" 2>&1)"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    pass "$1"
   else
-    fail "masking negative path FAILED:"
-    printf '%s\n' "$mask_out" | sed 's/^/      /'
+    fail "$1 FAILED:"
+    printf '%s\n' "$out" | sed 's/^/      /'
   fi
-else
-  fail "masking e2e test missing at $MASK_E2E"
-fi
+}
+
+run_live_test "masking negative path enforced on both read paths" \
+              "$REPO/6_access-points/api/nhdw-gateway/tests/test_masking_e2e.sh"
+
+# The public access-request surface is the one anonymous WRITE the system
+# exposes; its duplicate guard, schema validation and honest-identity storage
+# are security behaviour, not cosmetics. This test cleans up its own rows.
+run_live_test "public access-request surface (duplicate guard · validation · identity honesty)" \
+              "$REPO/6_access-points/api/nhdw-gateway/tests/test_public_access_request.sh"
 
 echo
 if [ "$FAIL" -ne 0 ]; then echo "== verify-system: FAILURES above =="; exit 1; fi
