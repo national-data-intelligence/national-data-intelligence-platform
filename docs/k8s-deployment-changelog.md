@@ -164,3 +164,27 @@ gh workflow run deploy.yml -f scope="<space-separated paths>"   # or scope=all
 Also note GitHub's concurrency behaviour: a newer run supersedes the *pending*
 one in the group, so two quick pushes can leave the middle one cancelled. Check
 which run number carries your commit rather than assuming it is the latest.
+
+## 2026-09-21 — from-bare provisioning reaches green
+
+**Symptom.** `provision.yml` (ansible `site.yml`) failed its final task, the
+canonical regression gate, with `✗ gateway health check failed` and
+`✗ ML registry has only 0/5 models`, while the cluster itself was healthy —
+30 pods Running, gateway and admin both answering 200.
+
+**Root cause.** One cause for both. `verify-system.sh` probes
+`https://gateway.$NHDW_HOSTBASE` and defaults that variable to the dev base,
+and the verify role invoked the script with no `environment:` block. On a
+re-homed deployment it therefore checked `127.0.0.1.nip.io`, got nothing, and
+reported a dead gateway and an empty model registry. Confirmed by hand: the
+same `/api/ml` call returns the registered models over the real host and
+nothing over the dev host. CI already passed `NHDW_HOSTBASE`; only the
+provisioning path did not — the same class of defect as the host-base
+precedence bug one level up, which is what made it look like a platform
+failure rather than a probe pointed at the wrong address.
+
+**Fix.** Pass `NHDW_HOSTBASE: "{{ nhdw_host_base }}"` to the regression-gate
+task. Provision attempt #12: 50 tasks ok, 0 failed, regression gate green.
+This is the first end-to-end green run of the from-bare path; the twelve
+attempts that preceded it are the six provisioning defects logged above plus
+their follow-on ordering and ownership problems.

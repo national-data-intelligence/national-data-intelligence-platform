@@ -98,3 +98,97 @@ reproduction becomes a deployment, and the deployed view can only ever answer
 **Alternative.** Keep the build-time var and re-run dbt per release.
 
 **Reverse.** Drop the `_asof` CTE's `current_setting(...)` back to the bare var.
+
+---
+
+## 6. eLMIS timeliness is measured; the other six stay NULL
+
+**Decided.** Wired a real `timeliness_pct` for eLMIS into `mart_data_quality` and
+left it NULL for DHIS2, HCMIS, mBrana, EthioEMR, MFR and Climate.
+
+**Why.** The handoff listed permanently-NULL timeliness as an open item needing a
+source-side change. Profiling showed that is true for six sources — their arrival
+columns hold the bulk load instant (DHIS2 `created`: 143 distinct values across
+701,338 rows, all within a five-minute window on the seed date), so any percentage
+computed from them would describe the loader, not the reporter. eLMIS is genuinely
+different: 73,925 distinct submission times across 73,926 requisitions, spread over
+a year, with a realistic lag distribution. Publishing a number for the six would be
+fabrication; withholding one for eLMIS was leaving real evidence unused.
+
+**Alternative.** Synthesise plausible arrival stamps in the six generators so every
+source shows a timeliness figure. That is still the right eventual fix for the
+generators, but it manufactures the measurement rather than observing it.
+
+**Reverse.** Delete the `elmis` CTE from `mart_data_quality.sql` and drop
+`eLMIS-hist` from the `source` accepted-values test.
+
+---
+
+## 7. The DQ mart reads the existing eLMIS model rather than recomputing
+
+**Decided.** After first writing an independent computation, replaced it with a
+roll-up of `mart_elmis_hist_timeliness`, and moved that model's hardcoded
+`interval '15 days'` onto the `reporting_deadlines` seed.
+
+**Why.** That model already defined on-time for this warehouse, and its 79.8% /
+9-day-median baseline is a documented regression anchor. Two computations would have
+been two definitions, free to drift. Fixing the deadline at the contract's source
+also means a steward changes it in one place instead of editing SQL. Parity was
+checked against the live warehouse before and after: 105 rows compared, 0
+differences, 79.8% unchanged.
+
+**Alternative.** Keep the independent computation in the DQ mart (it also excluded
+INITIATED/SKIPPED requisitions, which is arguably more precise — but precision that
+disagrees with the published baseline is a regression, not an improvement).
+
+**Reverse.** Restore `interval '15 days'` in `mart_elmis_hist_timeliness.sql` and
+drop the `reporting_deadlines` cross join.
+
+---
+
+## 8. eLMIS is excluded from the public transparency scorecard
+
+**Decided.** `mart_public_data_quality` filters out `eLMIS-hist`.
+
+**Why.** It is a Zambian historical archive carried for supply-chain feature work;
+the data dictionary already marks it internal-dashboards-only and notes it never
+joins the entity model. It reaching the national Open Data page would present
+another country's reporting record as Ethiopia's. The internal surfaces still show
+it, correctly labelled.
+
+**Alternative.** Publish it and rely on the label to disambiguate.
+
+**Reverse.** Delete the `AND source <> 'eLMIS-hist'` line.
+
+---
+
+## 9. The fail-open classification scan raises an incident on its own
+
+**Decided.** The DQ detector now runs the unclassified-column scan and raises a
+`classification_gap` flag; the scan moved into a function the steward endpoint and
+the detector share.
+
+**Why.** Masking is a denylist, so an unclassified sensitive column is served in the
+clear. The gap was discoverable, but only by a steward who went looking — which
+makes the one silent failure mode of the masking design the one thing nothing
+watched. One flag per scan rather than per column, because the work item is
+reviewing the list and per-column flags would swamp the queue on a rename.
+
+**Alternative.** Leave it on-demand and rely on review discipline.
+
+**Reverse.** Drop `_detect_classification_gaps` and its call in `_run_detection`.
+
+---
+
+## 10. Provision and deploy share one concurrency group
+
+**Decided.** Both workflows moved from separate groups to `nhdw-cluster`.
+
+**Why.** They drive helm against the same release on the same host. Separate groups
+let a push-triggered redeploy start while a provision is mid-flight, racing two
+`helm upgrade`s on one cluster. Queuing rather than cancelling, because an
+interrupted deploy leaves worse state than a slow one.
+
+**Alternative.** Leave them independent and rely on not triggering both at once.
+
+**Reverse.** Restore the two original group names.
