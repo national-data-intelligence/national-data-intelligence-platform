@@ -676,3 +676,52 @@ cannot be forgotten.
 with the content it is meant to be fading. It also takes no pointer events — a
 fade that swallowed a click on the row beneath it would be worse than the edge
 it replaced.
+
+---
+
+## 37. Folders are rows, not a tree view
+
+**Decided.** The resources shelf keeps its single table. Folders are rows at the
+top of it, a breadcrumb above says where you are, and one level is on screen at
+a time — the way a file manager lists things, not the way an IDE does.
+
+**Why.** A tree view is more navigation than thirty demo files ever justify, and
+the owner asked for the table to stay. Folders as rows means no second layout to
+maintain and no second place for a file to appear.
+
+---
+
+## 38. A folder is a row, not a path prefix
+
+**Decided.** `console.folder` is a real table with `parent_id`, and
+`resource.folder_id` points into it.
+
+**Why.** The cheaper design — a `path` column on the resource — cannot hold an
+**empty** folder, because there is no resource to carry the path. Creating an
+empty folder was part of the ask, and that settles it. The tree also gets
+referential integrity for free: deleting a folder cascades to its subtree and
+its files rather than leaving rows pointing at a path nothing owns.
+
+**A copy duplicates bytes.** Sharing the `object_key` between a file and its
+copy would be cheaper and is a trap: deleting either one unlinks the file and
+leaves the other pointing at nothing.
+
+---
+
+## 39. Two bugs the browser found that reading would not have
+
+**The All-files crumb was a no-op.** `state.folder = folderId ?? state.folder`
+treats an explicit `null` — which is how "go to the top" is expressed — as "not
+provided", so it kept the folder you were already in. You could walk into a
+folder and never walk out. `undefined` means "re-render where we are"; `null` is
+a destination. They are different and `??` conflates them.
+
+**The delete warning understated itself.** It was built from the row's DIRECT
+child counts while the delete is RECURSIVE, so a folder whose files sat one
+level down warned "0 files" and removed them anyway. The tree endpoint now
+returns subtree totals beside the direct ones, and the warning uses those.
+Verified on a folder with three files two levels down: it said 0, it now says 3,
+and the delete reports removing 3.
+
+The shape of both: a destructive action and a navigation control that were
+*plausible on the page* and wrong in use. Neither shows up in a diff.

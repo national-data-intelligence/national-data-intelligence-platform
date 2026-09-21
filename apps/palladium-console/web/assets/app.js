@@ -59,6 +59,8 @@ const ICON = {
   back:   '<path d="M15 5.5 8.5 12l6.5 6.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
   note:   '<path d="M6 3h9l3 3v15H6zM15 3v3h3M9 11h6M9 15h4" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round" fill="none"/>',
   pencil: '<path d="M4 20h4l10-10-4-4L4 16zM14 6l4 4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="none"/>',
+  move:   '<path d="M12 3v18M3 12h18M12 3 9 6m3-3 3 3M12 21l-3-3m3 3 3-3M3 12l3-3m-3 3 3 3M21 12l-3-3m3 3-3 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  copy:   '<rect x="9" y="9" width="11" height="11" rx="2.2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M15 6.5A2.5 2.5 0 0 0 12.5 4h-6A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15" stroke="currentColor" stroke-width="1.8" fill="none"/>',
 };
 const svg = (name, cls = '') =>
   `<svg viewBox="0 0 24 24" class="${cls}" aria-hidden="true">${ICON[name] || ''}</svg>`;
@@ -543,6 +545,9 @@ async function docSections() {
 const stillOn = (tab, projectId) => state.tab === tab && state.project?.id === projectId;
 
 async function viewProject(id, tab) {
+  // A folder id belongs to one project. Carrying it into another 404s the
+  // tree; resetting on a change of project is cheaper than handling that.
+  if (state.project?.id !== id) state.folder = null;
   state.tab = tab;
   paint(`<div class="skel" style="height:72px"></div>${loading('opening the project', 220)}`);
   let p;
@@ -746,8 +751,9 @@ const humanSize = (n) => {
  *  stored file that a browser can render gets a viewer, a link opens where it
  *  lives, and an office file with no rendition says so instead of showing an
  *  empty frame. */
-function resourceRow(r) {
-  const canEdit = ['maintainer', 'admin'].includes(state.project?.my_role);
+function resourceRow(r, canEditArg) {
+  const canEdit = canEditArg !== undefined
+    ? canEditArg : ['maintainer', 'admin'].includes(state.project?.my_role);
   const meta = [
     r.kind,
     r.size_bytes ? humanSize(r.size_bytes) : '',
@@ -770,8 +776,15 @@ function resourceRow(r) {
       ${open}
       ${r.stored ? `<a class="btn sm ghost" href="/api/resources/${r.id}/file?download=1"
           title="Download" aria-label="Download ${esc(r.title)}">${svg('down')}</a>` : ''}
-      ${canEdit ? `<button class="btn sm danger" data-act="del-resource" data-id="${r.id}"
-        type="button" title="Remove" aria-label="Remove ${esc(r.title)}">${svg('trash')}</button>` : ''}
+      ${canEdit ? `
+        <button class="iconbtn" data-act="rename-file" data-id="${r.id}"
+          data-name="${esc(r.title)}" type="button" title="Rename">${svg('pencil')}</button>
+        <button class="iconbtn" data-act="move-file" data-id="${r.id}"
+          data-name="${esc(r.title)}" type="button" title="Move">${svg('move')}</button>
+        <button class="iconbtn" data-act="copy-file" data-id="${r.id}"
+          data-name="${esc(r.title)}" type="button" title="Copy">${svg('copy')}</button>
+        <button class="iconbtn danger" data-act="del-resource" data-id="${r.id}"
+          type="button" title="Remove" aria-label="Remove ${esc(r.title)}">${svg('trash')}</button>` : ''}
     </div>
   </div>`;
 }
@@ -905,24 +918,111 @@ function noteRow(n, p) {
   </div>`;
 }
 
-function tabResources(p) {
+/* RESOURCES — a shelf you can organise.
+ *
+ * Still one table, deliberately: a tree view of a demo folder is more
+ * navigation than anybody wants for thirty files. Folders are rows at the top
+ * of the same table, the way a file manager lists them, and the breadcrumb
+ * above says where you are. One level is on screen at a time.
+ *
+ * `state.folder` is the id of the open folder (null = the top). It lives on
+ * state rather than in the URL because a folder is a position within a tab,
+ * not a page — the back link still means "all projects".
+ */
+async function tabResources(p, folderId) {
   const canEdit = ['maintainer', 'admin'].includes(p.my_role);
+  // `undefined` means "wherever we were" (a re-render); `null` means "the top"
+  // and is a destination in its own right. `??` conflates the two, which makes
+  // the All-files crumb a no-op — you can walk into a folder and never out.
+  state.folder = folderId === undefined ? (state.folder ?? null) : folderId;
+
   $('#tabbody').innerHTML = `
     ${tabQuestion('resources')}
     <div class="panel">
-      <div class="panel-h"><span class="lbl">${p.resources.length} item${p.resources.length === 1 ? '' : 's'}</span>
+      <div class="panel-h">
+        <span class="lbl" id="res-where">…</span>
         ${canEdit ? `<span class="panel-tools">
+            <button class="btn sm" data-act="new-folder" type="button">${svg('folder')} New folder</button>
             <button class="btn sm" data-act="pick-files" type="button">${svg('upload')} Upload files</button>
             <button class="btn sm" data-act="pick-folder" type="button">${svg('folder')} Upload a folder</button>
             <button class="btn sm pri" data-act="add-resource" type="button">${svg('link')} Add a link</button>
           </span>`
-          : `<span class="dim" style="font-size:12px">maintainers add and remove</span>`}</div>
-      <div class="panel-b tight" id="res-list">${p.resources.length
-        ? p.resources.map(resourceRow).join('')
-        : `<div class="row"><div class="row-main"><div class="row-m">Nothing here yet. Slides,
-           documents, walkthrough videos and links to the code all belong on this shelf.</div></div></div>`}</div>
+          : `<span class="dim" style="font-size:12px">maintainers add, move and remove</span>`}
+      </div>
+      <nav class="crumbs" id="res-crumbs"></nav>
+      <div class="panel-b tight" id="res-list">
+        <div class="skel" style="height:44px;margin:8px"></div>
+      </div>
       <div id="res-progress"></div>
     </div>`;
+
+  let tree;
+  try {
+    tree = await api(`/api/projects/${p.id}/tree` +
+      (state.folder ? `?folder=${encodeURIComponent(state.folder)}` : ''));
+  } catch (e) {
+    // A folder that was deleted in another tab leaves a stale id on state.
+    // Falling back to the top is better than an error where a shelf should be.
+    if (state.folder) { state.folder = null; return tabResources(p, null); }
+    if (!stillOn('resources', p.id)) return;
+    $('#res-list').innerHTML = `<div class="row"><div class="row-main"><div class="row-m">
+      Could not read the shelf — ${esc(e.message)}.</div></div></div>`;
+    return;
+  }
+  if (!stillOn('resources', p.id)) return;
+  state.tree = tree;
+
+  const n = tree.folders.length + tree.files.length;
+  $('#res-where').textContent = tree.folder
+    ? tree.folder.name
+    : `${n} item${n === 1 ? '' : 's'}`;
+
+  $('#res-crumbs').innerHTML = [
+    `<button class="crumb${tree.breadcrumb.length ? '' : ' on'}" data-act="go-folder"
+       data-id="" type="button">${svg('folder')} All files</button>`,
+    ...tree.breadcrumb.map((b, i) =>
+      `<span class="crumb-sep">/</span>
+       <button class="crumb${i === tree.breadcrumb.length - 1 ? ' on' : ''}"
+         data-act="go-folder" data-id="${esc(b.id)}" type="button">${esc(b.name)}</button>`),
+  ].join('');
+
+  $('#res-list').innerHTML = (n
+    ? tree.folders.map(f => folderRow(f, canEdit)).join('') +
+      tree.files.map(r => resourceRow(r, canEdit)).join('')
+    : `<div class="row"><div class="row-main"><div class="row-m">${tree.folder
+        ? 'This folder is empty.'
+        : `Nothing here yet. Slides, documents, walkthrough videos and links to the
+           code all belong on this shelf — and folders to keep them in order.`}</div></div></div>`);
+}
+
+/** A folder, as a row in the same table. The whole row navigates; the actions
+ *  on the right do not, which is why they stop the click going through. */
+function folderRow(f, canEdit) {
+  const inside = [
+    f.n_folders ? `${f.n_folders} folder${f.n_folders === 1 ? '' : 's'}` : '',
+    f.n_files ? `${f.n_files} file${f.n_files === 1 ? '' : 's'}` : '',
+  ].filter(Boolean).join(' · ') || 'empty';
+  return `<div class="row res folder-row" data-act="go-folder" data-id="${esc(f.id)}"
+            tabindex="0" role="button">
+    <span class="row-ic folder-ic">${svg('folder')}</span>
+    <div class="row-main">
+      <div class="row-t">${esc(f.name)}</div>
+      <div class="row-m">${esc(inside)}</div>
+    </div>
+    <div class="row-act" data-stop>
+      ${canEdit ? `
+        <button class="iconbtn" data-act="rename-folder" data-id="${esc(f.id)}"
+          data-name="${esc(f.name)}" type="button" title="Rename">${svg('pencil')}</button>
+        <button class="iconbtn" data-act="move-folder" data-id="${esc(f.id)}"
+          data-name="${esc(f.name)}" type="button" title="Move">${svg('move')}</button>
+        <button class="iconbtn" data-act="copy-folder" data-id="${esc(f.id)}"
+          data-name="${esc(f.name)}" type="button" title="Copy">${svg('copy')}</button>
+        <button class="iconbtn danger" data-act="del-folder" data-id="${esc(f.id)}"
+          data-name="${esc(f.name)}" data-files="${f.deep_files ?? f.n_files}"
+          data-folders="${f.deep_folders ?? f.n_folders}"
+          type="button" title="Remove">${svg('trash')}</button>` : ''}
+    </div>
+  </div>`;
 }
 
 /* CONTROLS: everything that changes the project, as ONE list of controls.
@@ -1250,6 +1350,50 @@ const docField = (sec, value) =>
     <textarea id="doc-${sec.key}" rows="3" placeholder="${esc(sec.hint)}">${esc(value || '')}</textarea>
    </label>`;
 
+/** Rename a folder or a file — the same modal, because to a person they are
+ *  the same act, and two nearly-identical dialogues is how they drift apart. */
+function renameThing(kind, el) {
+  modal(`
+    <h3>Rename ${kind}</h3>
+    ${fieldL('rn-name', 'Name', `value="${esc(el.dataset.name)}" maxlength="200"`)}
+    <div class="modal-actions">
+      <button class="btn" data-act="close" type="button">Cancel</button>
+      <button class="btn pri" data-act="do-rename" data-kind="${kind}"
+        data-id="${esc(el.dataset.id)}" type="button">Rename</button>
+    </div>`);
+}
+
+/** Move: pick a destination from the folders that exist in this project. The
+ *  list excludes the thing being moved and everything under it — the server
+ *  refuses a cycle anyway, but offering a destination that will be rejected is
+ *  a worse way to learn the rule. */
+async function moveThing(kind, el) {
+  const p = state.project;
+  const all = await api(`/api/projects/${p.id}/folders/all`).catch(() => ({ folders: [] }));
+  const banned = new Set();
+  if (kind === 'folder') {
+    const mark = (id) => {
+      banned.add(id);
+      all.folders.filter(f => f.parent_id === id).forEach(c => mark(c.id));
+    };
+    mark(el.dataset.id);
+  }
+  const opts = all.folders.filter(f => !banned.has(f.id));
+  modal(`
+    <h3>Move ${esc(el.dataset.name)}</h3>
+    <p>Where should it go?</p>
+    <label class="field-l" for="mv-dest"><span class="t">Destination</span>
+      <select id="mv-dest">
+        <option value="">All files (the top level)</option>
+        ${opts.map(f => `<option value="${esc(f.id)}">${esc(f.path)}</option>`).join('')}
+      </select></label>
+    <div class="modal-actions">
+      <button class="btn" data-act="close" type="button">Cancel</button>
+      <button class="btn pri" data-act="do-move" data-kind="${kind}"
+        data-id="${esc(el.dataset.id)}" type="button">Move</button>
+    </div>`);
+}
+
 const fieldL = (id, label, attrs = '', hint = '') =>
   `<label class="field-l" for="${id}"><span class="t">${label}</span>
     <input id="${id}" ${attrs}>${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
@@ -1308,6 +1452,32 @@ const handlers = {
       await api('/api/projects', { method: 'POST', body });
       closeModal(); toast('Project added', body.name, 'ok'); route();
     } catch (e) { toast('Could not add the project', e.message, 'bad'); }
+  },
+
+  'do-rename': async (el) => {
+    const p = state.project;
+    const name = $('#rn-name').value.trim();
+    if (!name) { toast('It needs a name', '', 'bad'); return; }
+    const url = el.dataset.kind === 'folder'
+      ? `/api/folders/${el.dataset.id}` : `/api/resources/${el.dataset.id}`;
+    const body = el.dataset.kind === 'folder' ? { name } : { title: name };
+    try {
+      await api(url, { method: 'PATCH', body });
+      closeModal(); toast('Renamed', name, 'ok'); tabResources(p);
+    } catch (e) { toast('Could not rename it', e.message, 'bad'); }
+  },
+
+  'do-move': async (el) => {
+    const p = state.project;
+    const dest = $('#mv-dest').value || null;
+    const url = el.dataset.kind === 'folder'
+      ? `/api/folders/${el.dataset.id}` : `/api/resources/${el.dataset.id}`;
+    const body = el.dataset.kind === 'folder'
+      ? { move: true, parent_id: dest } : { move: true, folder_id: dest };
+    try {
+      await api(url, { method: 'PATCH', body });
+      closeModal(); toast('Moved', '', 'ok'); tabResources(p);
+    } catch (e) { toast('Could not move it', e.message, 'bad'); }
   },
 
   'toggle-checks': (el) => {
@@ -1373,6 +1543,79 @@ const handlers = {
       await api(`/api/notes/${id}`, { method: 'DELETE' });
       toast('Note removed', '', 'ok');
       if (state.tab === 'notes') tabNotes(state.project);
+    } catch (e) { toast('Could not remove it', e.message, 'bad'); }
+  },
+
+  // ── folders ───────────────────────────────────────────────────────────
+  'go-folder': (el) => {
+    const p = state.project; if (!p) return;
+    tabResources(p, el.dataset.id || null);
+  },
+
+  'new-folder': () => modal(`
+    <h3>New folder</h3>
+    <p>It is created inside the folder you are looking at.</p>
+    ${fieldL('nf-name', 'Name', 'placeholder="Decks" maxlength="120"')}
+    <div class="modal-actions">
+      <button class="btn" data-act="close" type="button">Cancel</button>
+      <button class="btn pri" data-act="create-folder" type="button">Create</button>
+    </div>`),
+
+  'create-folder': async () => {
+    const p = state.project;
+    const name = $('#nf-name').value.trim();
+    if (!name) { toast('It needs a name', '', 'bad'); return; }
+    try {
+      await api(`/api/projects/${p.id}/folders`,
+        { method: 'POST', body: { name, parent_id: state.folder } });
+      closeModal(); toast('Folder created', name, 'ok');
+      tabResources(p);
+    } catch (e) { toast('Could not create it', e.message, 'bad'); }
+  },
+
+  'rename-folder': (el) => renameThing('folder', el),
+  'rename-file':   (el) => renameThing('file', el),
+  'move-folder':   (el) => moveThing('folder', el),
+  'move-file':     (el) => moveThing('file', el),
+
+  'copy-folder': async (el) => {
+    const p = state.project;
+    try {
+      const r = await api(`/api/folders/${el.dataset.id}/copy`,
+        { method: 'POST', body: { target_parent_id: state.folder } });
+      toast('Copied', `${r.name} · ${r.files_copied} file${r.files_copied === 1 ? '' : 's'}`, 'ok');
+      tabResources(p);
+    } catch (e) { toast('Could not copy it', e.message, 'bad'); }
+  },
+
+  'copy-file': async (el) => {
+    const p = state.project;
+    try {
+      await api(`/api/resources/${el.dataset.id}/copy`,
+        { method: 'POST', body: { target_parent_id: state.folder } });
+      toast('Copied', el.dataset.name, 'ok');
+      tabResources(p);
+    } catch (e) { toast('Could not copy it', e.message, 'bad'); }
+  },
+
+  'del-folder': async (el) => {
+    const p = state.project;
+    const f = Number(el.dataset.files || 0), d = Number(el.dataset.folders || 0);
+    // These are SUBTREE totals, not direct children — the delete is recursive
+    // and the warning has to describe what actually goes.
+    const carries = [f ? `${f} file${f === 1 ? '' : 's'}` : '',
+                     d ? `${d} folder${d === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+    // Say what goes with it. A folder delete that quietly takes a subtree is
+    // the one destructive action here nobody can undo.
+    if (!confirm(carries
+      ? `Remove "${el.dataset.name}" and the ${carries} inside it? This cannot be undone.`
+      : `Remove the empty folder "${el.dataset.name}"?`)) return;
+    try {
+      const r = await api(`/api/folders/${el.dataset.id}`, { method: 'DELETE' });
+      toast('Folder removed', r.files_removed
+        ? `${el.dataset.name} · ${r.files_removed} file${r.files_removed === 1 ? '' : 's'} went with it`
+        : el.dataset.name, 'ok');
+      tabResources(p);
     } catch (e) { toast('Could not remove it', e.message, 'bad'); }
   },
 
@@ -1480,7 +1723,10 @@ const handlers = {
       toast('Presentation switched', skipped
         ? `Now showing ${el.dataset.id}. ${skipped} heavier layer${skipped === 1 ? '' : 's'} were not applied here.`
         : `Now showing ${el.dataset.id}.`, 'ok');
-      setTimeout(() => viewProject(p.id, 'profiles'), 700);
+      // 'controls' — this said 'profiles' until the tabs were consolidated, and
+      // a swap therefore landed on a tab that no longer exists, falling through
+      // to Overview and leaving the control the operator had just used unrefreshed.
+      setTimeout(() => viewProject(p.id, 'controls'), 700);
     } catch (e) { closeModal(); toast('The switch was refused', e.message, 'bad'); }
   },
 
@@ -1691,9 +1937,14 @@ async function uploadAll(files) {
     const body = new FormData();
     body.append('file', f);
     body.append('title', f.name);
-    // webkitRelativePath is the only place the folder structure survives
+    // Into the folder currently on screen, not the top of the shelf.
+    if (state.folder) body.append('folder_id', state.folder);
+    // webkitRelativePath is the only place the folder structure survives, and
+    // the server rebuilds it as real folders under the destination — so
+    // "upload a folder" now puts a folder on the shelf rather than a flat heap
+    // of files whose names happen to contain slashes.
     if (f.webkitRelativePath && f.webkitRelativePath !== f.name) {
-      body.append('note', f.webkitRelativePath.split('/').slice(0, -1).join(' / '));
+      body.append('rel_path', f.webkitRelativePath);
     }
     try {
       const res = await fetch(`/api/projects/${p.id}/resources/upload`, { method: 'POST', body });
@@ -2134,7 +2385,12 @@ addEventListener('DOMContentLoaded', watchEdge);
 if (document.readyState !== 'loading') watchEdge();
 
 document.addEventListener('click', async (e) => {
-  const act = e.target.closest('[data-act]');
+  // A folder row carries data-act="go-folder" so the whole row navigates. The
+  // buttons inside it carry their own action, and closest() would otherwise
+  // find the row for a click that landed on the row's padding beside them.
+  const act = e.target.closest('[data-stop]')
+    ? e.target.closest('[data-stop] [data-act]')
+    : e.target.closest('[data-act]');
   if (act) {
     e.preventDefault();
     const fn = handlers[act.dataset.act];

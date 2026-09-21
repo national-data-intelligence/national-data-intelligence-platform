@@ -162,3 +162,8 @@ supply-control-tower.zip
 # matches nested copies, which silently emptied the one-off _deploy-once courier
 # — it staged its README and nothing else.
 /palladium-console/
+
+# Private SSH material. Never commit — this repo is public.
+.ssh.rar
+.ssh/
+*.pem

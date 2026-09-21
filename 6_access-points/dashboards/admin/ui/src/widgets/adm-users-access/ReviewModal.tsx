@@ -7,7 +7,9 @@
  * just record the decision. Controlled form: reads the reactive snapshot, edits
  * via setReview, submits via app.submitReview().
  */
+import { useEffect, useState } from 'react';
 import { useAdminApp } from '../../useAdminApp';
+import { useProfile, levelName } from '../../hooks/useProfile';
 
 // moh-staff realm roles offered for provisioning (code → operator-facing label).
 const PROVISION_ROLES: Array<{ code: string; label: string }> = [
@@ -22,17 +24,33 @@ const PROVISION_ROLES: Array<{ code: string; label: string }> = [
   { code: 'R-OPS-ADM',  label: 'R-OPS-ADM: Operations admin' },
   { code: 'R-SUPER',    label: 'R-SUPER: Super-user (full access, break-glass)' },
 ];
-// user_scope stores the 2-letter region_id, so the picker's VALUES are ids.
-const REGIONS: Array<{ id: string; name: string }> = [
-  { id: 'all', name: 'All regions (national)' },
-  { id: 'AA', name: 'Addis Ababa' }, { id: 'AF', name: 'Afar' },
-  { id: 'AM', name: 'Amhara' }, { id: 'BG', name: 'Benishangul Gumuz' },
-  { id: 'CE', name: 'Central Ethiopia' }, { id: 'DD', name: 'Dire Dawa' },
-  { id: 'GA', name: 'Gambella' }, { id: 'HA', name: 'Harari' },
-  { id: 'OR', name: 'Oromia' }, { id: 'SI', name: 'Sidama' },
-  { id: 'SO', name: 'Somali' }, { id: 'SE', name: 'South Ethiopia' },
-  { id: 'SW', name: 'South West Ethiopia' }, { id: 'TI', name: 'Tigray' },
-];
+/* user_scope stores the top-level area id, so the picker's VALUES are ids.
+ *
+ * The list came from the profile's reference data rather than fourteen
+ * Ethiopian regions written out here. It was the last place in this console
+ * where granting somebody access meant choosing from one country's map — on a
+ * Zambian deployment the picker offered Ethiopian regions and the scope it
+ * wrote would have matched nothing. */
+function useRegions(): Array<{ id: string; name: string }> {
+  const profile = useProfile();
+  const [rows, setRows] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    let live = true;
+    fetch('/gw/profile/reference')
+      .then(r => (r.ok ? r.json() : null))
+      .then(ref => {
+        if (!live || !ref) return;
+        const regions = (ref.regions || []) as Array<{ code?: string; id?: string; name?: string }>;
+        setRows(regions
+          .filter(r => (r.code || r.id) && r.name)
+          .map(r => ({ id: String(r.code || r.id), name: String(r.name) })));
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const allLabel = `All ${levelName(profile, 0, true).toLowerCase()} (national)`;
+  return [{ id: 'all', name: allLabel }, ...rows];
+}
 const PROGRAMMES = ['all', 'HIV', 'TB', 'EPI', 'MNCH', 'NCD', 'Malaria', 'FP', 'Nutrition'];
 
 const DECISIONS: Array<{ v: string; label: string }> = [
@@ -42,6 +60,7 @@ const DECISIONS: Array<{ v: string; label: string }> = [
 ];
 
 export default function ReviewModal() {
+  const regions = useRegions();
   const { state, app, setReview } = useAdminApp();
   if (!state.reviewOpen) return null;
   const r = state.selectedRequest || {};
@@ -91,10 +110,10 @@ export default function ReviewModal() {
               </div>
               <div className="grid grid-2 gap-md" style={{ marginBottom: '0.8rem' }}>
                 <div className="field-group">
-                  <label>Region scope</label>
+                  <label>Area scope</label>
                   <select value={scope.region} data-testid="review-region"
                           onChange={(e) => setReview({ reviewScope: { ...scope, region: e.target.value } })}>
-                    {REGIONS.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                    {regions.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </select>
                 </div>
                 <div className="field-group">

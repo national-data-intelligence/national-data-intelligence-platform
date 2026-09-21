@@ -852,6 +852,372 @@ async def patch_project(project_id: str, body: ProjectPatch,
     return _project_row(row)
 
 
+# ── folders ─────────────────────────────────────────────────────────────────
+# Organisation for the shelf. Everything here is scoped to one project and
+# checked against it: a folder id from another project must never be reachable
+# by guessing, so every lookup carries the project and 404s rather than leaking
+# that the row exists somewhere else.
+
+async def _folder_in(c: asyncpg.Connection, project_id: str, folder_id: str | None):
+    if folder_id in (None, "", "root"):
+        return None
+    row = await c.fetchrow(
+        "SELECT * FROM console.folder WHERE id=$1 AND project_id=$2", folder_id, project_id)
+    if not row:
+        raise HTTPException(404, "no such folder here")
+    return row
+
+
+async def _breadcrumb(c: asyncpg.Connection, folder) -> list[dict]:
+    """Root-first trail to `folder`. Walks parents with a depth cap — a cycle
+    should be impossible (see _would_cycle) but a loop in a web request is a
+    hung worker, and a cap costs nothing."""
+    trail: list[dict] = []
+    cur, guard = folder, 0
+    while cur is not None and guard < 64:
+        trail.append({"id": str(cur["id"]), "name": cur["name"]})
+        if cur["parent_id"] is None:
+            break
+        cur = await c.fetchrow("SELECT * FROM console.folder WHERE id=$1", cur["parent_id"])
+        guard += 1
+    return list(reversed(trail))
+
+
+async def _would_cycle(c: asyncpg.Connection, folder_id: str, new_parent: str | None) -> bool:
+    """Is `new_parent` inside `folder_id`'s own subtree? Moving a folder into
+    its own descendant detaches the whole branch from the tree — the rows keep
+    existing and nothing can ever reach them again."""
+    if new_parent is None:
+        return False
+    if str(new_parent) == str(folder_id):
+        return True
+    cur, guard = new_parent, 0
+    while cur is not None and guard < 64:
+        row = await c.fetchrow("SELECT parent_id FROM console.folder WHERE id=$1", cur)
+        if not row:
+            return False
+        if row["parent_id"] and str(row["parent_id"]) == str(folder_id):
+            return True
+        cur = row["parent_id"]
+        guard += 1
+    return False
+
+
+@app.get("/api/projects/{project_id}/tree")
+async def list_tree(project_id: str, folder: str | None = None,
+                    user: User = Depends(current_user)) -> dict:
+    """One level of the shelf: the folders and the files directly inside it."""
+    await require_role(user, project_id, "viewer")
+    pool = await db()
+    async with pool.acquire() as c:
+        here = await _folder_in(c, project_id, folder)
+        fid = here["id"] if here else None
+        # Direct counts for the row (the file-manager convention) AND subtree
+        # totals for the delete warning. Delete is recursive, so a warning built
+        # from direct counts would say "0 files" while removing ten one level
+        # down — the one destructive action here, understating itself.
+        folders = await c.fetch("""
+            SELECT f.*,
+                   (SELECT count(*) FROM console.folder s WHERE s.parent_id = f.id) AS n_folders,
+                   (SELECT count(*) FROM console.resource r
+                     WHERE r.folder_id = f.id AND r.kind <> 'note') AS n_files,
+                   sub.deep_folders, sub.deep_files
+            FROM console.folder f
+            CROSS JOIN LATERAL (
+                WITH RECURSIVE tree AS (
+                    SELECT f.id
+                    UNION ALL
+                    SELECT c2.id FROM console.folder c2 JOIN tree ON c2.parent_id = tree.id
+                )
+                SELECT (SELECT count(*) FROM tree) - 1 AS deep_folders,
+                       (SELECT count(*) FROM console.resource r
+                         WHERE r.folder_id IN (SELECT id FROM tree)
+                           AND r.kind <> 'note') AS deep_files
+            ) sub
+            WHERE f.project_id = $1 AND f.parent_id IS NOT DISTINCT FROM $2
+            ORDER BY lower(f.name)
+        """, project_id, fid)
+        files = await c.fetch("""
+            SELECT * FROM console.resource
+            WHERE project_id = $1 AND folder_id IS NOT DISTINCT FROM $2 AND kind <> 'note'
+            ORDER BY ordering, created_at
+        """, project_id, fid)
+        crumb = await _breadcrumb(c, here) if here else []
+    return {
+        "folder": ({"id": str(here["id"]), "name": here["name"]} if here else None),
+        "breadcrumb": crumb,
+        "folders": [{"id": str(f["id"]), "name": f["name"],
+                     "n_folders": f["n_folders"], "n_files": f["n_files"],
+                     "deep_folders": f["deep_folders"], "deep_files": f["deep_files"],
+                     "created_at": f["created_at"].isoformat()} for f in folders],
+        "files": [_resource_row(r) for r in files],
+    }
+
+
+@app.get("/api/projects/{project_id}/folders/all")
+async def all_folders(project_id: str, user: User = Depends(current_user)) -> dict:
+    """Every folder in the project, each with its full path — what a move
+    dialogue needs. Paths are built in one pass from the parent map rather than
+    a query per row."""
+    await require_role(user, project_id, "viewer")
+    pool = await db()
+    async with pool.acquire() as c:
+        rows = await c.fetch(
+            "SELECT id, parent_id, name FROM console.folder WHERE project_id=$1", project_id)
+    by_id = {str(r["id"]): {"id": str(r["id"]),
+                            "parent_id": (str(r["parent_id"]) if r["parent_id"] else None),
+                            "name": r["name"]} for r in rows}
+
+    def path_of(fid: str) -> str:
+        parts, cur, guard = [], fid, 0
+        while cur and guard < 64:
+            node = by_id.get(cur)
+            if not node:
+                break
+            parts.append(node["name"])
+            cur = node["parent_id"]
+            guard += 1
+        return " / ".join(reversed(parts))
+
+    out = [{**v, "path": path_of(k)} for k, v in by_id.items()]
+    out.sort(key=lambda f: f["path"].lower())
+    return {"folders": out}
+
+
+class FolderIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    parent_id: str | None = None
+
+
+@app.post("/api/projects/{project_id}/folders")
+async def create_folder(project_id: str, body: FolderIn,
+                        user: User = Depends(current_user)) -> dict:
+    await require_role(user, project_id, "maintainer")
+    pool = await db()
+    async with pool.acquire() as c:
+        parent = await _folder_in(c, project_id, body.parent_id)
+        try:
+            row = await c.fetchrow("""
+                INSERT INTO console.folder (project_id, parent_id, name, created_by)
+                VALUES ($1,$2,$3,$4) RETURNING *
+            """, project_id, (parent["id"] if parent else None), body.name.strip(), user.sub)
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(409, f"there is already a folder called '{body.name.strip()}' here")
+        project = await c.fetchrow("SELECT id, name FROM console.project WHERE id=$1", project_id)
+    await log_activity(user=user, verb="created a folder", detail=body.name.strip(),
+                       project={"id": project["id"], "name": project["name"]})
+    return {"id": str(row["id"]), "name": row["name"]}
+
+
+class FolderPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    parent_id: str | None = None
+    move: bool = False          # explicit: parent_id=None means "to the top"
+
+
+@app.patch("/api/folders/{folder_id}")
+async def patch_folder(folder_id: str, body: FolderPatch,
+                       user: User = Depends(current_user)) -> dict:
+    """Rename, move, or both. `move` has to be set to act on parent_id, because
+    a null parent is a legitimate destination (the top level) and is otherwise
+    indistinguishable from "not sent"."""
+    pool = await db()
+    async with pool.acquire() as c:
+        row = await c.fetchrow("SELECT * FROM console.folder WHERE id=$1", folder_id)
+        if not row:
+            raise HTTPException(404, "no such folder")
+        pid = str(row["project_id"])
+        await require_role(user, pid, "maintainer")
+
+        new_parent = row["parent_id"]
+        if body.move:
+            dest = await _folder_in(c, pid, body.parent_id)
+            new_parent = dest["id"] if dest else None
+            if await _would_cycle(c, folder_id, new_parent):
+                raise HTTPException(400, "a folder cannot be moved inside itself")
+        try:
+            out = await c.fetchrow("""
+                UPDATE console.folder SET name = $2, parent_id = $3 WHERE id = $1 RETURNING *
+            """, folder_id, (body.name or row["name"]).strip(), new_parent)
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(409, "something with that name is already there")
+        project = await c.fetchrow("SELECT id, name FROM console.project WHERE id=$1", pid)
+    await log_activity(user=user, verb=("moved a folder" if body.move else "renamed a folder"),
+                       detail=out["name"],
+                       project={"id": project["id"], "name": project["name"]})
+    return {"id": str(out["id"]), "name": out["name"]}
+
+
+@app.delete("/api/folders/{folder_id}")
+async def delete_folder(folder_id: str, user: User = Depends(current_user)) -> dict:
+    """Takes the subtree and its files with it. The bytes go too — see
+    _delete_bytes_under; a row cascade that left files on disk would grow the
+    volume forever with things nothing can reach."""
+    pool = await db()
+    async with pool.acquire() as c:
+        row = await c.fetchrow("SELECT * FROM console.folder WHERE id=$1", folder_id)
+        if not row:
+            raise HTTPException(404, "no such folder")
+        pid = str(row["project_id"])
+        await require_role(user, pid, "maintainer")
+        keys = await c.fetch("""
+            WITH RECURSIVE sub AS (
+                SELECT id FROM console.folder WHERE id = $1
+                UNION ALL
+                SELECT f.id FROM console.folder f JOIN sub ON f.parent_id = sub.id
+            )
+            SELECT r.object_key, r.preview_key FROM console.resource r
+            WHERE r.folder_id IN (SELECT id FROM sub)
+        """, folder_id)
+        await c.execute("DELETE FROM console.folder WHERE id=$1", folder_id)
+        project = await c.fetchrow("SELECT id, name FROM console.project WHERE id=$1", pid)
+    for k in keys:
+        for key in (k["object_key"], k["preview_key"]):
+            if key:
+                try:
+                    (DATA_DIR / key).unlink(missing_ok=True)
+                except OSError:
+                    log.warning("could not remove %s", key)
+    await log_activity(user=user, verb="removed a folder", detail=row["name"],
+                       project={"id": project["id"], "name": project["name"]})
+    return {"ok": True, "files_removed": len(keys)}
+
+
+class CopyIn(BaseModel):
+    target_parent_id: str | None = None
+
+
+async def _copy_resource(c: asyncpg.Connection, row, folder_id, user: User) -> str:
+    """Copy one resource row AND its bytes.
+
+    The bytes are duplicated rather than the key shared. Sharing would be
+    cheaper and is a trap: deleting either copy unlinks the file and leaves the
+    other pointing at nothing."""
+    new_key = new_preview = None
+    for src_attr, dst in (("object_key", "obj"), ("preview_key", "prev")):
+        key = row[src_attr]
+        if not key:
+            continue
+        src = DATA_DIR / key
+        if not src.is_file():
+            continue
+        folder = DATA_DIR / str(row["project_id"]) / uuid.uuid4().hex[:12]
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / src.name
+        target.write_bytes(src.read_bytes())
+        if dst == "obj":
+            new_key = str(target.relative_to(DATA_DIR))
+        else:
+            new_preview = str(target.relative_to(DATA_DIR))
+    out = await c.fetchrow("""
+        INSERT INTO console.resource
+            (project_id, folder_id, kind, title, note, object_key, url, mime,
+             size_bytes, ordering, preview_key, uploaded_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id
+    """, row["project_id"], folder_id, row["kind"], row["title"], row["note"],
+         new_key, row["url"], row["mime"], row["size_bytes"], row["ordering"],
+         new_preview, user.sub)
+    return str(out["id"])
+
+
+@app.post("/api/folders/{folder_id}/copy")
+async def copy_folder(folder_id: str, body: CopyIn,
+                      user: User = Depends(current_user)) -> dict:
+    """Copy a folder and everything under it. Breadth-first rather than
+    recursive so a deep tree cannot exhaust the stack in a request handler."""
+    pool = await db()
+    async with pool.acquire() as c:
+        row = await c.fetchrow("SELECT * FROM console.folder WHERE id=$1", folder_id)
+        if not row:
+            raise HTTPException(404, "no such folder")
+        pid = str(row["project_id"])
+        await require_role(user, pid, "maintainer")
+        dest = await _folder_in(c, pid, body.target_parent_id)
+        dest_id = dest["id"] if dest else None
+        if await _would_cycle(c, folder_id, dest_id):
+            raise HTTPException(400, "a folder cannot be copied inside itself")
+
+        name, n = row["name"], 0
+        while await c.fetchval("""SELECT 1 FROM console.folder
+                WHERE project_id=$1 AND parent_id IS NOT DISTINCT FROM $2
+                  AND lower(name)=lower($3)""", pid, dest_id, name):
+            n += 1
+            name = f"{row['name']} (copy{'' if n == 1 else ' ' + str(n)})"
+
+        new_root = await c.fetchrow("""
+            INSERT INTO console.folder (project_id, parent_id, name, created_by)
+            VALUES ($1,$2,$3,$4) RETURNING *
+        """, pid, dest_id, name, user.sub)
+
+        copied_files = 0
+        queue = [(row["id"], new_root["id"])]
+        while queue:
+            src_id, dst_id = queue.pop(0)
+            for r in await c.fetch(
+                    "SELECT * FROM console.resource WHERE folder_id=$1", src_id):
+                await _copy_resource(c, r, dst_id, user)
+                copied_files += 1
+            for sub in await c.fetch(
+                    "SELECT * FROM console.folder WHERE parent_id=$1", src_id):
+                made = await c.fetchrow("""
+                    INSERT INTO console.folder (project_id, parent_id, name, created_by)
+                    VALUES ($1,$2,$3,$4) RETURNING id
+                """, pid, dst_id, sub["name"], user.sub)
+                queue.append((sub["id"], made["id"]))
+        project = await c.fetchrow("SELECT id, name FROM console.project WHERE id=$1", pid)
+    await log_activity(user=user, verb="copied a folder", detail=name,
+                       project={"id": project["id"], "name": project["name"]})
+    return {"id": str(new_root["id"]), "name": name, "files_copied": copied_files}
+
+
+class ResourceMove(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    folder_id: str | None = None
+    move: bool = False
+
+
+@app.patch("/api/resources/{resource_id}")
+async def patch_resource(resource_id: str, body: ResourceMove,
+                         user: User = Depends(current_user)) -> dict:
+    pool = await db()
+    async with pool.acquire() as c:
+        row = await c.fetchrow("SELECT * FROM console.resource WHERE id=$1", resource_id)
+        if not row:
+            raise HTTPException(404, "no such resource")
+        pid = str(row["project_id"])
+        await require_role(user, pid, "maintainer")
+        new_folder = row["folder_id"]
+        if body.move:
+            dest = await _folder_in(c, pid, body.folder_id)
+            new_folder = dest["id"] if dest else None
+        out = await c.fetchrow("""
+            UPDATE console.resource SET title = $2, folder_id = $3 WHERE id = $1 RETURNING *
+        """, resource_id, (body.title or row["title"]).strip(), new_folder)
+        project = await c.fetchrow("SELECT id, name FROM console.project WHERE id=$1", pid)
+    await log_activity(user=user, verb=("moved a file" if body.move else "renamed a file"),
+                       detail=out["title"],
+                       project={"id": project["id"], "name": project["name"]})
+    return _resource_row(out)
+
+
+@app.post("/api/resources/{resource_id}/copy")
+async def copy_resource(resource_id: str, body: CopyIn,
+                        user: User = Depends(current_user)) -> dict:
+    pool = await db()
+    async with pool.acquire() as c:
+        row = await c.fetchrow("SELECT * FROM console.resource WHERE id=$1", resource_id)
+        if not row:
+            raise HTTPException(404, "no such resource")
+        pid = str(row["project_id"])
+        await require_role(user, pid, "maintainer")
+        dest = await _folder_in(c, pid, body.target_parent_id)
+        new_id = await _copy_resource(c, row, (dest["id"] if dest else None), user)
+        project = await c.fetchrow("SELECT id, name FROM console.project WHERE id=$1", pid)
+    await log_activity(user=user, verb="copied a file", detail=row["title"],
+                       project={"id": project["id"], "name": project["name"]})
+    return {"id": new_id}
+
+
 # ── notes ───────────────────────────────────────────────────────────────────
 # What somebody learned and wants the next presenter to know. Text, a file, or
 # both — the file goes through the same store as every other resource.
@@ -1200,15 +1566,25 @@ async def _render_pdf(src: Path) -> str | None:
 async def upload_resource(project_id: str, request: Request,
                           file: UploadFile = File(...),
                           title: str = Form(""), note: str = Form(""),
-                          kind: str = Form(""),
+                          kind: str = Form(""), folder_id: str = Form(""),
+                          rel_path: str = Form(""),
                           user: User = Depends(current_user)) -> dict:
     """Store one file. A folder upload is this, once per file in it, with the
     path the browser reports kept as the note — which is how the shelf stays a
     flat list of things people can open rather than a tree nobody navigates."""
     await require_role(user, project_id, "maintainer")
-    stored = await _store_upload(project_id, file, title=title, note=note,
-                                 kind=kind, user=user)
     pool = await db()
+    async with pool.acquire() as c:
+        here = await _folder_in(c, project_id, folder_id or None)
+        dest = here["id"] if here else None
+        # A folder upload sends each file with the path the browser reports
+        # (`webkitRelativePath`). Rebuilding that tree here is what makes
+        # "upload a folder" put a folder on the shelf rather than a flat heap of
+        # files whose names happen to contain slashes.
+        if rel_path:
+            dest = await _ensure_path(c, project_id, dest, rel_path, user)
+    stored = await _store_upload(project_id, file, title=title, note=note,
+                                 kind=kind, user=user, folder_id=dest)
     async with pool.acquire() as c:
         project = await c.fetchrow("SELECT id, name FROM console.project WHERE id=$1",
                                    project_id)
@@ -1217,8 +1593,34 @@ async def upload_resource(project_id: str, request: Request,
     return {k: stored[k] for k in ("id", "mime", "size_bytes", "previewable")}
 
 
+async def _ensure_path(c: asyncpg.Connection, project_id: str, parent,
+                       rel_path: str, user: User):
+    """Create (or find) the folder chain a browser reported for one file.
+
+    `rel_path` is `webkitRelativePath`, which includes the file's own name — the
+    last segment is dropped. Segments are matched case-insensitively against
+    what is already there, so re-uploading a folder merges into it rather than
+    creating a second one beside it with different capitalisation."""
+    parts = [seg.strip() for seg in rel_path.replace("\\", "/").split("/")[:-1]]
+    for seg in [x for x in parts if x and x not in (".", "..")][:12]:
+        found = await c.fetchrow("""
+            SELECT * FROM console.folder
+            WHERE project_id=$1 AND parent_id IS NOT DISTINCT FROM $2 AND lower(name)=lower($3)
+        """, project_id, parent, seg)
+        if found:
+            parent = found["id"]
+            continue
+        made = await c.fetchrow("""
+            INSERT INTO console.folder (project_id, parent_id, name, created_by)
+            VALUES ($1,$2,$3,$4) RETURNING id
+        """, project_id, parent, seg, user.sub)
+        parent = made["id"]
+    return parent
+
+
 async def _store_upload(project_id: str, file: UploadFile, *, title: str = "",
-                        note: str = "", kind: str = "", user: User) -> dict:
+                        note: str = "", kind: str = "", user: User,
+                        folder_id=None) -> dict:
     """Take one uploaded file to rest: on disk, rendered if it can be, and a row
     in console.resource. Both the resources shelf and a note's attachment come
     through here, so an attachment gets the same size limit, the same PDF
@@ -1253,12 +1655,12 @@ async def _store_upload(project_id: str, file: UploadFile, *, title: str = "",
     async with pool.acquire() as c:
         row = await c.fetchrow("""
             INSERT INTO console.resource
-                (project_id, kind, title, note, object_key, mime, size_bytes,
+                (project_id, folder_id, kind, title, note, object_key, mime, size_bytes,
                  preview_key, uploaded_by)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
             RETURNING id
-        """, project_id, kind or guessed, title.strip() or safe, note.strip() or None,
-             key, mime, len(raw), preview_key, user.sub)
+        """, project_id, folder_id, kind or guessed, title.strip() or safe,
+             note.strip() or None, key, mime, len(raw), preview_key, user.sub)
     return {"id": str(row["id"]), "title": title.strip() or safe, "mime": mime,
             "size_bytes": len(raw),
             "previewable": bool(preview_key) or mime in INLINE_TYPES}

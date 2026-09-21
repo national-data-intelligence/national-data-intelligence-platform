@@ -1362,3 +1362,45 @@ td strong { color: var(--ink); font-weight: 600; }
   background: var(--paper); border-radius: var(--r-box);
   box-shadow: var(--shadow-lift); padding: 4px 0;
 }
+
+/* ── folders on the shelf ────────────────────────────────────────────────── */
+/* Still one table. Folders are rows at the top of it, the way a file manager
+   lists them — a tree view would be more navigation than thirty demo files
+   ever justify. */
+.crumbs {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px;
+  padding: 10px 22px 0;
+}
+.crumb {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 9px; border: 0; border-radius: var(--r-pill);
+  background: none; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  transition: background .14s ease, color .14s ease;
+}
+.crumb:hover { background: var(--fill); color: var(--ink); }
+.crumb.on { color: var(--ink); }
+.crumb svg { width: 14px; height: 14px; }
+.crumb-sep { color: var(--ink-3); font-size: 12px; }
+
+.folder-row { cursor: pointer; }
+.folder-row:hover { background: var(--fill); }
+.folder-row:focus-visible { outline: 2px solid var(--field-focus); outline-offset: -2px; }
+/* Folders read before files without needing a heading to say so. */
+.folder-ic { background: var(--accent-soft); color: var(--ink); }
+
+.iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0;
+  border: 0; border-radius: 9px; background: none; cursor: pointer;
+  color: var(--ink-3); transition: background .14s ease, color .14s ease;
+}
+.iconbtn:hover { background: var(--fill-2); color: var(--ink); }
+.iconbtn.danger:hover { background: var(--bad-soft); color: var(--bad); }
+.iconbtn svg { width: 16px; height: 16px; }
+/* The actions appear on hover or focus — a row with five always-on icons reads
+   as a toolbar rather than as a file. */
+.row.res .row-act .iconbtn { opacity: 0; }
+.row.res:hover .row-act .iconbtn,
+.row.res:focus-within .row-act .iconbtn { opacity: 1; }
+@media (hover: none) { .row.res .row-act .iconbtn { opacity: 1; } }

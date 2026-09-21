@@ -34,7 +34,13 @@ export type Profile = {
   platform: { name: string; abbr: string };
   geography: { levels: Level[] };
   locale?: { default?: string; fiscal_calendar?: string };
-  scope?: { all_geography?: string };
+  /* The common copy deck, already resolved by the gateway. Kept whole rather
+     than cherry-picked: a deck key this file does not know about is still
+     reachable by the surface that does. */
+  scope?: { all_geography?: string; all_programmes?: string; all_periods?: string;
+            national?: string };
+  workshop?: { footer_owner?: string };
+  empty?: Record<string, string>;
 };
 
 /* Country-neutral. NOT Ethiopia: a fallback that names a country is the bug
@@ -54,6 +60,8 @@ export const BUNDLED: Profile = {
   },
   locale: { default: 'en', fiscal_calendar: 'gregorian' },
   scope: { all_geography: 'All areas' },
+  workshop: {},
+  empty: {},
 };
 
 let cache: Profile | null = null;
@@ -78,7 +86,7 @@ async function load(): Promise<Profile> {
       fetch('/gw/profile/copy/common').then(r => (r.ok ? r.json() : null)).catch(() => null),
     ]);
     if (ok(p) && p.country?.name) profile = merge(BUNDLED, p);
-    if (ok(c) && c.scope) profile = merge(profile, { scope: c.scope });
+    if (ok(c)) profile = merge(profile, c);
   } catch { /* bundled stands */ }
   try {
     if ((profile as any).brand?.accent) {

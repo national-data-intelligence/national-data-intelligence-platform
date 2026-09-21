@@ -35,6 +35,12 @@ Four tabs, each answering one question and nothing else:
 | **Controls** | What can I change, and what can I press? |
 | **Notes** | What should the next person know? |
 
+Resources is one table with folders in it: create, upload (files or a whole
+folder, which arrives as folders), rename, move, copy and delete, for files and
+folders alike. A breadcrumb says where you are; one level shows at a time. A
+folder is a real row (`console.folder`), not a path prefix — an empty folder has
+no file to carry a path, and creating one is part of the point.
+
 Overview **is** the write-up and nothing else — five fixed sections set as a
 document: what it is, who it is for, what to show, how it is built, what to be
 careful about. They are fixed so every project reads alike and the gaps are

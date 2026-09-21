@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════
    NHDW · Dashboard Mockups · shared design language
-   Government-formal palette with Ethiopian tricolor accents
+   Government-formal palette; the accent comes from the active profile
    ═══════════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -17,7 +17,7 @@
   --navy-500:#64748B;   /* mid slate accent */
   --navy-50: #EEF2F7;   /* very pale cool slate */
 
-  /* ── Ethiopian tricolor (unused — kept only so legacy refs don't break) ── */
+  /* ── legacy accent variables (unused — kept only so old refs don't break) ── */
   --eth-green: #078930;
   --eth-yellow:#fcdd09;
   --eth-red:   #da121a;

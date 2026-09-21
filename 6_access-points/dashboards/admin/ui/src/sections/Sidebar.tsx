@@ -20,6 +20,7 @@
  */
 import { useAdminApp } from '../useAdminApp';
 import { useDashboardSpec, specAllowsWidget, specPageTitle } from '../api/spec';
+import { useProfile, logoUrl } from '../hooks/useProfile';
 
 // `widget` is the catalog widget the page carries — a nav item is shown only
 // when the CALLER'S resolved spec grants it. Without that gate a role with a
@@ -52,6 +53,7 @@ function insertAfter(items: NavItem[], afterId: string, item: NavItem): NavItem[
 }
 
 export default function Sidebar() {
+  const profile = useProfile();
   const { state, setActive } = useAdminApp();
   // Resolved permission catalog for THIS caller: pages arrive with their
   // widget lists already grant-filtered by the gateway.
@@ -116,9 +118,11 @@ export default function Sidebar() {
     <aside className="admin-side">
       <div className="admin-sidehead">
         <a href="/" title="Back to public site">
-          <img className="sidehead-logo" src="/static/assets/logo-fmoh.png" alt="" />
+          {logoUrl(profile)
+            ? <img className="sidehead-logo" src={logoUrl(profile)!} alt="" />
+            : null}
           <span className="sidehead-text">
-            <span className="title">NHDW</span>
+            <span className="title">{profile.platform?.abbr || 'NHDW'}</span>
             <span className="subtitle">Admin console</span>
           </span>
         </a>

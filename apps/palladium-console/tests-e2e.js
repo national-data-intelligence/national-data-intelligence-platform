@@ -400,7 +400,10 @@ const EXTENSION_NOISE = /contentscript|ObjectMultiplex|MaxListenersExceeded|mess
   await member.waitForTimeout(1500);
   R(!(await member.$('[data-act="add-resource"]')),
     'a presenter is not offered the Add control');
-  R(/maintainers add and remove/.test((await member.textContent('#tabbody')) || ''),
+  // Matches the sense, not the exact sentence: the wording gained "move" when
+  // folders arrived, and a check that pins the copy fails on every edit to it
+  // while still not noticing if the explanation disappears entirely.
+  R(/maintainers\b[^.]*\bremove/.test((await member.textContent('#tabbody')) || ''),
     'and is told who can');
 
   await member.click('a[href$="/controls"]');
@@ -658,6 +661,67 @@ const EXTENSION_NOISE = /contentscript|ObjectMultiplex|MaxListenersExceeded|mess
       R(!/Action ran/i.test(t), 'a refused action never reads as a success');
     }
   } else R(false, 'an action was available to run');
+
+  // ── 11b. folders on the shelf ─────────────────────────────────────────
+  section('folders');
+  await page.goto(B + '/#/projects', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(2400);
+  await (await page.$('.pcard:has(.pill.live)')).click();
+  await page.waitForSelector('.phead', { timeout: 10000 });
+  await page.click('.tab-l:text-is("Resources")');
+  await page.waitForSelector('#res-list .row', { timeout: 12000 });
+  await page.waitForTimeout(1200);
+  R(!!(await page.$('#res-crumbs .crumb')), 'the shelf says where you are');
+
+  const fname = 'suite-' + Math.random().toString(36).slice(2, 7);
+  await page.click('[data-act="new-folder"]');
+  await page.waitForSelector('#nf-name', { timeout: 8000 });
+  await page.fill('#nf-name', fname);
+  await page.click('[data-act="create-folder"]');
+  await page.waitForTimeout(2600);
+  R((await page.$$eval('.folder-row .row-t', e => e.map(x => x.textContent))).includes(fname),
+    'a folder can be created');
+
+  await page.click(`.folder-row:has-text("${fname}")`);
+  await page.waitForTimeout(2200);
+  R(/empty/i.test((await page.textContent('#res-list')) || ''), 'and opened, and says it is empty');
+  R(((await page.textContent('#res-crumbs')) || '').includes(fname),
+    'the breadcrumb follows you in');
+
+  // Upload INTO the open folder — the file must land here, not at the top.
+  const [fc] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.click('[data-act="pick-files"]'),
+  ]);
+  await fc.setFiles({ name: 'in-folder.txt', mimeType: 'text/plain',
+                      buffer: Buffer.from('landed here') });
+  await page.waitForTimeout(5000);
+  R(((await page.textContent('#res-list')) || '').includes('in-folder.txt'),
+    'an upload lands in the folder you are looking at');
+
+  await page.hover('.row.res:has-text("in-folder.txt")');
+  await page.click('.row.res:has-text("in-folder.txt") [data-act="copy-file"]');
+  await page.waitForTimeout(2600);
+  R((await page.$$eval('.row.res .row-t', e =>
+      e.filter(x => x.textContent.includes('in-folder')).length)) === 2, 'a file can be copied');
+
+  // Back OUT — an explicit null destination, which a ?? would swallow.
+  await page.click('.crumb[data-id=""]');
+  await page.waitForTimeout(2200);
+  R(!((await page.textContent('#res-crumbs')) || '').includes(fname),
+    'the All-files crumb really goes back to the top');
+
+  // The delete warning must describe the SUBTREE, not the direct children.
+  let warned = '';
+  page.once('dialog', d => { warned = d.message(); d.accept(); });
+  await page.hover(`.folder-row:has-text("${fname}")`);
+  await page.click(`.folder-row:has-text("${fname}") [data-act="del-folder"]`);
+  await page.waitForTimeout(3200);
+  R(/2 files/.test(warned), 'a folder delete warns about everything inside it, at any depth',
+    warned.slice(0, 70));
+  R(!(await page.$$eval('.folder-row .row-t', e => e.map(x => x.textContent))).includes(fname),
+    'and the folder goes');
+  await noOverflow(page, 'folders');
 
   // ── 12b. the write-up, and that creation feeds it ─────────────────────
   // The point of this block is the SEAM: a field typed into the create form has

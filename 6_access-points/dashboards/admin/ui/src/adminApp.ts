@@ -21,6 +21,14 @@ import {
   listAccessRequests, decideAccessRequest,
   type AccessRequestRow,
 } from './api/accessRequests';
+import { profileNow } from './hooks/useProfile';
+
+/** How an access-decision email signs off. These reach real people, so the
+ *  ministry named is the deployment's own rather than one country's. */
+const signOff = (): string => {
+  const p = profileNow();
+  return [p.ministry?.name, p.platform?.abbr].filter(Boolean).join(' · ');
+};
 
 // Public-form dashboard keys → display labels for the queue pills.
 const _DASH_LABELS: Record<string, string> = {
@@ -226,20 +234,20 @@ function adminApp() {
              + `Complete your first-time login at: https://nhdw.local/login/setup?token=XXXX (valid 72 hours)\n\n`
              + (this.reviewNote ? `Reviewer note: ${this.reviewNote}\n\n` : ``)
              + `If you have any questions, please reply to this email.\n\n`
-             + `Federal Ministry of Health · NHDW\n`;
+             + `${signOff()}\n`;
       }
       if (this.reviewDecision === 'declined') {
         return `Dear ${r.name},\n\n`
              + `Your access request to the National Health Data Warehouse (${r.id}) has not been approved at this time.\n\n`
              + (this.reviewNote ? `Reason: ${this.reviewNote}\n\n` : `Reason: Access criteria for the requested dashboards were not fully met.\n\n`)
              + `You may submit a new request once the noted concerns are addressed.\n\n`
-             + `Federal Ministry of Health · NHDW\n`;
+             + `${signOff()}\n`;
       }
       return `Dear ${r.name},\n\n`
            + `Thank you for your access request to the NHDW (${r.id}). Before we can complete the review, we need additional information:\n\n`
            + `  ${this.reviewNote || 'Please confirm your institutional affiliation and intended use.'}\n\n`
            + `Please reply to this email with the requested details. We will resume the review on receipt.\n\n`
-           + `Federal Ministry of Health · NHDW\n`;
+           + `${signOff()}\n`;
     },
 
     init() {

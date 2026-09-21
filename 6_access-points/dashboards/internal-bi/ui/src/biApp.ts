@@ -46,7 +46,7 @@ declare global {
 // Programme filter values are the mart programme_id CODES (uppercase); the name is
 // the display label. Same code-as-value contract as REGIONS so a wildcard pick
 // ('MALARIA') matches programme_id in the marts.
-const PERIOD_OPTS = { 'all':'All time','last_4wk':'Last 4 weeks','last_12wk':'Last 12 weeks','last_6mo':'Last 6 months','last_12mo':'Last 12 months','last_24mo':'Last 24 months','ytd':'Year to date','efy_ytd':'Ethiopian FY to date' };
+const PERIOD_OPTS = { 'all':'All time','last_4wk':'Last 4 weeks','last_12wk':'Last 12 weeks','last_6mo':'Last 6 months','last_12mo':'Last 12 months','last_24mo':'Last 24 months','ytd':'Year to date','efy_ytd':'Fiscal year to date' };
 // Commodity filter values are the EXACT mart commodity_name strings — the code IS
 // the name because the supply marts (bi_supply.mart_supply_region_stock /
 // mart_resource_allocation) key on commodity_name directly. Kept in sync with the

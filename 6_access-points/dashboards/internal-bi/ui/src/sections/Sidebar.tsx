@@ -6,6 +6,7 @@
  * 5 pages when the spec isn't loaded yet, preserving pixel-diff parity
  * for the default R-OPS-ADM dev user (who can see everything).
  */
+import { useEffect, useState } from 'react';
 import { useBiApp } from '../useBiApp';
 import { useDashboardSpec } from '../api/spec';
 
@@ -19,6 +20,21 @@ const PAGES = [
 ];
 
 export default function Sidebar() {
+  // The crest and the word-mark are profile facts. internal-BI already
+  // fetches the profile for its reference tables, so this reads the same
+  // endpoint rather than adding a second source for the same answer.
+  const [logoSrc, setLogoSrc] = useState<string | null>(null);
+  const [platformAbbr, setPlatformAbbr] = useState('NHDW');
+  useEffect(() => {
+    let live = true;
+    fetch('/gw/profile').then(r => (r.ok ? r.json() : null)).then(p => {
+      if (!live || !p) return;
+      setLogoSrc(p.ministry?.logo
+        ? `/gw/profile/asset/${encodeURIComponent(p.ministry.logo)}` : null);
+      if (p.platform?.abbr) setPlatformAbbr(p.platform.abbr);
+    }).catch(() => {});
+    return () => { live = false; };
+  }, []);
   const { state, setActive } = useBiApp();
   const { spec, loaded } = useDashboardSpec('internal-bi');
 
@@ -39,9 +55,11 @@ export default function Sidebar() {
     <aside className="bi-sidebar">
       <div className="bi-sidehead">
         <a href="/">
-          <img src="/static/assets/logo-fmoh.png" alt="NHDW" className="sidehead-logo" />
+          {logoSrc
+            ? <img src={logoSrc} alt="" className="sidehead-logo" />
+            : null}
           <div className="sidehead-text">
-            <div className="title">NHDW</div>
+            <div className="title">{platformAbbr}</div>
             <div className="subtitle">Internal BI</div>
           </div>
         </a>

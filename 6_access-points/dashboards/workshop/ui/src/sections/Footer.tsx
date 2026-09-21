@@ -9,10 +9,13 @@ import { useProfile } from '../hooks/useProfile';
 
 export default function Footer() {
   const profile = useProfile();
-  // The owner line is the deployment's, not one country's. It used to name
-  // Ethiopia's ministry and state outright, on every page of the portal.
-  const owner = [profile.ministry?.name, profile.country?.official_name]
-    .filter(Boolean).join(' · ');
+  // The owner line comes from the profile's own copy deck — `workshop
+  // .footer_owner`, which the gateway serves already resolved. Composing it
+  // here from the parts would work today and drift the moment a profile wants
+  // it worded differently, which is the whole reason the deck exists. The
+  // compose is the fallback, not the path.
+  const owner = profile.workshop?.footer_owner
+    || [profile.ministry?.name, profile.country?.official_name].filter(Boolean).join(' · ');
   return (
     <footer className="foot">
       <div className="foot-inner">

@@ -228,3 +228,39 @@ ALTER TABLE console.project ADD COLUMN IF NOT EXISTS who_for      text;
 ALTER TABLE console.project ADD COLUMN IF NOT EXISTS what_to_show text;
 ALTER TABLE console.project ADD COLUMN IF NOT EXISTS how_built    text;
 ALTER TABLE console.project ADD COLUMN IF NOT EXISTS caveats      text;
+
+
+-- ── folders ─────────────────────────────────────────────────────────────────
+-- Organisation for the resources shelf. A real table rather than a path prefix
+-- on the resource, for one reason that decides it: the owner asked to CREATE a
+-- folder, and an empty folder has no resource to carry its path. A tree of rows
+-- can hold nothing; a materialised path cannot.
+--
+-- parent_id NULL = a top-level folder in that project. Deleting a folder takes
+-- its subtree with it (ON DELETE CASCADE here) and its files (the resource FK
+-- below cascades too) — a delete that left orphans behind the shelf would be
+-- worse than one that is plainly destructive.
+CREATE TABLE IF NOT EXISTS console.folder (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id  uuid NOT NULL REFERENCES console.project(id) ON DELETE CASCADE,
+    parent_id   uuid REFERENCES console.folder(id) ON DELETE CASCADE,
+    name        text NOT NULL CONSTRAINT folder_name_chk CHECK (btrim(name) <> ''),
+    created_by  text REFERENCES console.person(kc_sub),
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS folder_parent_idx ON console.folder (project_id, parent_id, name);
+-- Two folders with the same name in the same place would be indistinguishable
+-- on screen. NULLS NOT DISTINCT so the rule also holds at the top level, where
+-- parent_id is NULL.
+CREATE UNIQUE INDEX IF NOT EXISTS folder_unique_name_idx
+    ON console.folder (project_id, parent_id, lower(name)) NULLS NOT DISTINCT;
+
+ALTER TABLE console.resource ADD COLUMN IF NOT EXISTS folder_id uuid;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'resource_folder_fk') THEN
+        ALTER TABLE console.resource
+            ADD CONSTRAINT resource_folder_fk FOREIGN KEY (folder_id)
+            REFERENCES console.folder(id) ON DELETE CASCADE;
+    END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS resource_folder_idx ON console.resource (project_id, folder_id);
