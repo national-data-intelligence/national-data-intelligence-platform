@@ -284,3 +284,44 @@ caller free to make the same mistake against a lookup that fails open silently.
 
 **Reverse.** Three commits under `6_access-points/api/nhdw-gateway/` and one in
 `bundle/scripts/verify-system.sh`; revert individually.
+
+---
+
+## 14. Investigated a conformed-hub count gap and concluded it is a pending build, not a defect
+
+**What looked wrong.** `v_facility_resolution` yields 3298 distinct conformed keys
+while `hub_facility_conformed` holds 3296. Two facilities (`selihom pharmacy`,
+`vitality pharmacy`, both resolved by `norm_name`) are in the view and not the hub,
+and their source rows date from 2026-08-06 — so at first read the hub had been
+missing them for six weeks, which would have suggested an incremental-watermark bug
+silently dropping late-arriving keys.
+
+**What it actually is.** Checked rather than assumed:
+
+- referential integrity is clean — 0 same-as links and 0 canonical-sat rows point at
+  a missing hub row, and both facilities are present in `dim_facility`;
+- the hub is 1:1 with no hash collisions (3296 rows / 3296 distinct business keys /
+  3296 distinct hashes), so nothing collapsed;
+- both skipped rows carry valid non-null hashes, so they are not being filtered for
+  a null key;
+- the AutomateDV postgres hub macro anti-joins on the primary key
+  (`LEFT JOIN this ... WHERE d.pk IS NULL`) with **no** load-timestamp watermark, so
+  it cannot permanently skip a late key by construction;
+- `dbt-vault` last completed 2026-09-20T22:32Z and has not run since — deploys only
+  rebuild the tiers whose inputs changed, and this session's commits touched the
+  gateway and the marts, not the vault.
+
+The two keys should therefore appear on the next vault build. A full-scope redeploy
+was dispatched to confirm it rather than leaving the conclusion untested.
+
+**Also confirmed, and NOT a defect.** `sat_facility_canonical` holds 3298 rows over
+3296 distinct hashes. The two duplicates (`Esakore Drug Store`, and
+`Mehal Sub City` / `Mehal Sub- City`) carry DISTINCT hashdiffs — they are
+insert-only golden-record revisions, exactly the designed bitemporal behaviour, not
+duplicate masters.
+
+**Baseline note for later.** The conformance checksum is now
+`40859ffca66a83a9f51da720c6374abc`, not the `c5d265ec9dc60c57760360205edd6070`
+recorded as the pre-MDM baseline. With zero live steward decisions the resolution
+logic is still deterministic; the corpus it runs over has grown. Use the new value
+as the baseline for future revert checks.
