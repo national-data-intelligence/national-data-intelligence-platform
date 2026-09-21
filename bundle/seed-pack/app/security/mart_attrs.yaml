@@ -327,6 +327,20 @@
   granularity: aggregate
   default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional, not personal
   description: "eLMIS v2 history — planning-module mock: latest stock position + suggested resupply per facility × tracer product (governed)."
+- schema_name: bi_supply
+  table_name: mart_pct_kpi
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # province × month aggregates; no facility identities
+  description: "PCT KPI layer (Zambia eLMIS) — Global Fund S8 on-shelf availability, stockout exposure, months-of-stock bands, order fill; numerator + denominator per row."
+- schema_name: bi_supply
+  table_name: pct_kpi_definitions
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "PCT KPI contracts (seed) — numerator, denominator, formula, grain, source, target, exclusions, reference, limitation per KPI."
 # ── MDM augmentation (PCT dataflow design): golden records + discovered relationships ──
 - schema_name: bi_mdm
   table_name: mdm_commodity_match_candidates
