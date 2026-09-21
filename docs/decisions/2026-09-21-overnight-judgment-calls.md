@@ -192,3 +192,51 @@ interrupted deploy leaves worse state than a slow one.
 **Alternative.** Leave them independent and rely on not triggering both at once.
 
 **Reverse.** Restore the two original group names.
+
+---
+
+## 11. Archived the artifact-centric graduation test rather than rewriting it
+
+**Decided.** Moved `test_graduation_flow.sh` to
+`_archive/2026-09-21/graduation-artifact-centric-test/` with a README, instead of
+porting its 17 assertions to the project-centric endpoints.
+
+**Why.** It drives `/api/graduation/submit` and `/queue`, retired when graduation
+became project-centric. Every request 404s, so all 17 assertions fail against a
+perfectly healthy system — it reads as a broken subsystem and cost real time during
+this sweep before the 404s explained themselves. Leaving it in place is exactly the
+stale-artifact failure the archive rule exists to prevent. Porting it is a genuine
+rewrite of paths and payloads against an API I would have to learn, and
+`verify-system` check 6d already proves the review lifecycle ran through the real
+endpoints.
+
+**What this loses, recorded rather than dropped.** 6d only proves the ALLOW path.
+Still uncovered: the deny half of each gate, the `artifact_review` writers, the
+`personal → shared` tier move, the `rejected` terminal state, the real sha256 on
+`artifact_version`, input hardening (bad kind → 400, promote-before-validate → 409),
+and the draft-detail authz gate. The README lists all of it.
+
+**Alternative.** Port it now — more coverage, but a rewrite against an unfamiliar
+surface during a verification pass.
+
+**Reverse.** The file is intact in `_archive/`; restoring means rewriting its
+request paths, not un-archiving as-is.
+
+---
+
+## 12. Two unrun regression suites now run on every deploy
+
+**Decided.** `verify-system.sh` gained a check 9 that executes the masking
+negative-path test and the public access-request test.
+
+**Why.** Both existed as complete, working regression suites that nothing invoked —
+not CI, not verify-system, not provisioning. That is how a fail-open on the Supply
+Control Tower coordinates survived a deploy: the startup self-tests check role →
+masked set, the policy half was always correct, and nothing ever asked what a
+low-trust caller actually received. A test nobody runs is documentation.
+
+**Cost accepted.** Two live HTTP suites add roughly a minute to every deploy, and
+the access-request test writes rows (it cleans them up through an EXIT trap).
+
+**Reverse.** Delete check 9 from `verify-system.sh`; both scripts keep working
+standalone.
