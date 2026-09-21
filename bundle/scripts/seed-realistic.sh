@@ -116,14 +116,20 @@ if [ "$INGEST" = 1 ]; then
     # Sources are host containers slow to accept connections — a fresh DHIS2 /
     # SQL Server is not listening the instant docker reports up, and a country
     # switch that just recreated them widens that window. Retry with backoff.
+    SKIP_SRC="${NHDW_SKIP_SOURCES:-}"
+    if [ -z "$SKIP_SRC" ] && [ "${NHDW_PROFILE:-et-v3}" != "et-v3" ]; then SKIP_SRC="climate"; fi
+    [ -n "$SKIP_SRC" ] && echo "  (preflight skips: $SKIP_SRC)"
     PF_TRIES="${NHDW_PREFLIGHT_TRIES:-20}"; pf_ok=0
     for pf_i in $(seq 1 "$PF_TRIES"); do
   if kubectl -n "$NS" run src-preflight --rm -i --restart=Never \
       --image=nhdw/dhis2-ingestor:1.0.0 --image-pull-policy=IfNotPresent --quiet \
+      --env="PF_SKIP=$SKIP_SRC" \
       --command -- python3 -c '
 import socket, sys
 ports = {"dhis2": 8080, "climate": 8095, "mfr": 8093,
          "sqlserver(hcmiswdm+mbrana)": 1433, "ethioemr-mysql": 33306, "elmis-hist-postgres": 5434}
+import os as _os
+ports = {n: p for n, p in ports.items() if not any(k in n for k in _os.environ.get("PF_SKIP","").split())}
 bad = []
 for name, p in ports.items():
     s = socket.socket(); s.settimeout(4)
