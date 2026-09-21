@@ -1,6 +1,5 @@
 {
   "_note": "Copy deck for the public dashboard. Extracted verbatim from the JSX that shipped before profiles existed — et-v3 must render identically. Placeholders in {braces} are filled from profile.yaml so a name is stated once.",
-
   "govbar": {
     "skip": "Skip to content",
     "mark_text": "{platform.abbr}",
@@ -13,7 +12,6 @@
     "request_access": "Request access",
     "dashboards": "Dashboards"
   },
-
   "hero": {
     "strip_volume": "Vol. 01",
     "strip_series": "Public Series",
@@ -28,14 +26,128 @@
     "cta_primary": "Open the data catalogue",
     "cta_secondary": "Read the latest bulletins"
   },
-
   "footer": {
     "brand_line": "{platform.name} · {platform.abbr}",
     "owner_line": "{ministry.name} · {country.official_name}",
     "columns": [
-      { "title": "About", "links": ["Methodology", "Governance", "Contact"] },
-      { "title": "Open",  "links": ["API docs", "dbt docs", "Code repository"] },
-      { "title": "Legal", "links": ["Privacy notice", "Terms of use", "Data licence"] }
+      {
+        "title": "About",
+        "links": [
+          "Methodology",
+          "Governance",
+          "Contact"
+        ]
+      },
+      {
+        "title": "Open",
+        "links": [
+          "API docs",
+          "dbt docs",
+          "Code repository"
+        ]
+      },
+      {
+        "title": "Legal",
+        "links": [
+          "Privacy notice",
+          "Terms of use",
+          "Data licence"
+        ]
+      }
+    ]
+  },
+  "insights": {
+    "_note": "Offline fallback for the national KPI tiles, used ONLY when the gateway returns nothing. Real published figures for THIS country — Ethiopia DHS 2024-25 plus routine-programme estimates. Lives in the profile because a Zambia deployment falling back to Ethiopian DHS numbers would be worse than showing nothing.",
+    "section_sub": "National coverage figures from the 2024-25 {country.adjective} Demographic and Health Survey, with programme and routine-reporting estimates.",
+    "fallback_kpis": [
+      {
+        "key": "PENTA3-COV",
+        "kind": "coverage",
+        "order": 1,
+        "tone": "alert",
+        "lbl": "Penta3 coverage",
+        "val": "40%",
+        "deltaTrend": "flat",
+        "deltaText": "EDHS 2024-25",
+        "target": "HSDIP target 95%"
+      },
+      {
+        "key": "ANC4-COV",
+        "kind": "coverage",
+        "order": 2,
+        "tone": "alert",
+        "lbl": "ANC4 coverage",
+        "val": "53%",
+        "deltaTrend": "up",
+        "deltaText": "EDHS 2024-25",
+        "target": "HSDIP target 81%"
+      },
+      {
+        "key": "SBA-COV",
+        "kind": "coverage",
+        "order": 3,
+        "tone": "watch",
+        "lbl": "Skilled birth attendance",
+        "val": "64%",
+        "deltaTrend": "up",
+        "deltaText": "up from 12% in 2011",
+        "target": "HSDIP target 76%"
+      },
+      {
+        "key": "FP-MCPR",
+        "kind": "coverage",
+        "order": 4,
+        "tone": "alert",
+        "lbl": "Modern contraceptive use",
+        "val": "35%",
+        "deltaTrend": "flat",
+        "deltaText": "unchanged since 2016",
+        "target": "HSDIP target 50%"
+      },
+      {
+        "key": "TB-TX-SUCC",
+        "kind": "outcome",
+        "order": 5,
+        "tone": "watch",
+        "lbl": "TB treatment success",
+        "val": "89%",
+        "deltaTrend": "flat",
+        "deltaText": "programme data",
+        "target": "HSDIP target 90%"
+      },
+      {
+        "key": "HIV-VL-SUPP",
+        "kind": "outcome",
+        "order": 6,
+        "tone": "watch",
+        "lbl": "ART viral suppression",
+        "val": "90%",
+        "deltaTrend": "up",
+        "deltaText": "programme data",
+        "target": "95-95-95 third 95"
+      },
+      {
+        "key": "NUT-STUNT",
+        "kind": "outcome",
+        "order": 7,
+        "tone": "alert",
+        "lbl": "Under-5 stunting",
+        "val": "40%",
+        "deltaTrend": "flat",
+        "deltaText": "EDHS 2024-25",
+        "target": "SDG target ≤25%"
+      },
+      {
+        "key": "PHEM-COMPL",
+        "kind": "trust",
+        "order": 8,
+        "tone": "info",
+        "lbl": "Reporting completeness",
+        "val": "92%",
+        "deltaTrend": "up",
+        "deltaText": "routine reporting",
+        "target": "HSDIP target 95%"
+      }
     ]
   }
 }
