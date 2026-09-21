@@ -156,6 +156,22 @@ def test_who_codes_target_only_declared_domains():
             assert c["concept_class_id"] in classes, f"{c['concept_code']}: undeclared class"
 
 
+def test_built_csvs_use_lf_line_endings():
+    """seed-ref-vocab.sh streams these straight into COPY, which locks onto the
+    newline convention of the first data row and then rejects a terminator line
+    using the other one — a CRLF csv fails the whole load with "unquoted newline
+    found in data". csv.writer's default 'excel' dialect emits \\r\\n, so this
+    has to be asserted rather than assumed."""
+    out = Path(__file__).resolve().parent / "_build"
+    built = sorted(out.glob("*.csv"))
+    assert built, f"no built CSVs in {out} — run build_vocab.py first"
+    for f in built:
+        raw = f.read_bytes()
+        assert b"\r\n" not in raw, (
+            f"{f.name} has CRLF line endings; COPY will reject the load. "
+            "csv.writer needs lineterminator='\\n'.")
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
     failed = 0

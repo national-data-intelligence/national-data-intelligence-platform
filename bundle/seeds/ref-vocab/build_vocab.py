@@ -301,7 +301,12 @@ def write(files: dict[str, list[list]], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, rows in files.items():
         with open(out_dir / name, "w", newline="") as fh:
-            csv.writer(fh).writerows(rows)
+            # lineterminator explicitly: csv.writer defaults to the 'excel'
+            # dialect, which ends every row with \r\n, and newline="" means
+            # Python writes that through verbatim. The loader streams these
+            # into COPY, which locks onto the newline convention of the first
+            # row and then rejects a terminator line that uses the other one.
+            csv.writer(fh, lineterminator="\n").writerows(rows)
 
 
 def main() -> int:

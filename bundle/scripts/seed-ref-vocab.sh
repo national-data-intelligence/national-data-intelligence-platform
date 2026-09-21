@@ -31,17 +31,37 @@ PSQL(){ kubectl -n "$NS" exec -i "$POD" -- psql -q -U "$PGUSER" -d "$DB" "$@"; }
 # Load order respects FKs. Each table: COPY into a temp clone → upsert → temp dropped
 # at commit. Metamodel rows update in place; crosswalk/concept rows are keyed on their
 # bitemporal PK, so a superseded mapping (new valid_from) inserts alongside history.
+# The whole load goes in as a SCRIPT on stdin, not as `psql -c`. psql sends a
+# -c string as ONE simple query, and when the batch reaches COPY ... FROM STDIN
+# it has no way to switch the same channel over to copy data — it gives up with
+# "unexpected COPY_IN result, aborting connection". Inline the CSV after the
+# COPY and terminate it with \. instead. The explicit transaction is required
+# too: ON COMMIT DROP would drop the temp table the instant the CREATE
+# autocommits, leaving the COPY with no target.
+# (A data line consisting of exactly \. would end the stream early. Nothing in a
+# vocabulary CSV looks like that, and the row-count assertion below would catch
+# it if it ever did.)
 load(){ # $1=table  $2=conflict-key  $3=update-set
   local t="$1" key="$2" set="$3" csv="$VOCAB/_build/$1.csv"
   local cols; cols="$(head -1 "$csv")"
-  tail -n +2 "$csv" | PSQL -v ON_ERROR_STOP=1 -c "
-    CREATE TEMP TABLE _in (LIKE nhdw_ref.$t INCLUDING DEFAULTS) ON COMMIT DROP;
-    COPY _in ($cols) FROM STDIN WITH (FORMAT csv, NULL '');
-    INSERT INTO nhdw_ref.$t ($cols)
-      SELECT $cols FROM _in
-      ON CONFLICT ($key) DO UPDATE SET $set;
-  " >/dev/null
-  log "loaded $t ($(($(wc -l < "$csv") - 1)) rows)"
+  local rows=$(($(wc -l < "$csv") - 1))
+  {
+    echo "BEGIN;"
+    echo "CREATE TEMP TABLE _in (LIKE nhdw_ref.$t INCLUDING DEFAULTS) ON COMMIT DROP;"
+    echo "COPY _in ($cols) FROM STDIN WITH (FORMAT csv, NULL '');"
+    # strip CR: COPY locks onto the newline convention of the first data row,
+    # so a CRLF csv plus an LF terminator line fails with "unquoted newline
+    # found in data". build_vocab.py writes LF now; this keeps an older
+    # pre-built _build/ from breaking the load.
+    tail -n +2 "$csv" | tr -d '\r'
+    echo "\\."
+    echo "INSERT INTO nhdw_ref.$t ($cols)"
+    echo "  SELECT $cols FROM _in"
+    echo "  ON CONFLICT ($key) DO UPDATE SET $set;"
+    echo "COMMIT;"
+  } | PSQL -v ON_ERROR_STOP=1 >/dev/null || {
+    echo "✗ vocabulary load failed for $t" >&2; exit 1; }
+  log "loaded $t ($rows rows)"
 }
 
 load vocabulary   "vocabulary_id" \
