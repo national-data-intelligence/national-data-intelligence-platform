@@ -18,9 +18,7 @@ disable:
         Woreda-grain disease surveillance. The eLMIS archive is a supply
         archive and carries no notifiable-disease surveillance at all, so this
         has neither the grain nor the data.
-    - id: dz-region-map
-      why: >-
-        Draws the Ethiopian region choropleth from eth-regions geometry
-        registered under the echarts map name 'ethiopia'. Until that helper
-        reads the profile's geometry it would draw the wrong country, which is
-        worse than drawing nothing.
+    # dz-region-map was disabled here until _shared/geo.ts stopped hard-coding
+    # Ethiopian geometry. It now loads the active profile's admin-1 boundaries
+    # and registers them under a country-neutral echarts map name, so it draws
+    # Zambia correctly and is enabled again.

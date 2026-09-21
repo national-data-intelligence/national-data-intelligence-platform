@@ -26,10 +26,12 @@ export const REGIONS: string[] = [
   'South Ethiopia', 'South West Ethiopia', 'Tigray',
 ];
 
-/** admin-1 display name → the name used by the boundary file, resolved at
- *  profile BUILD time. Replaces the runtime normaliser in _shared/geo.ts, which
- *  carried a literal `.replace('gambella','gambela')` to paper over the fact
- *  that two sources spell the same place differently. */
+/** Display name (and region code) → the name the boundary file uses, resolved
+ *  at profile BUILD time by the one process that has both lists in front of it.
+ *  Replaces the runtime normaliser in _shared/geo.ts, which carried a literal
+ *  `.replace('gambella','gambela')` to paper over two sources spelling the same
+ *  place differently. Keyed by BOTH the formal name and the code so a caller
+ *  holding either can resolve. */
 export const REGION_GEO_NAME: Record<string, string> = {};
 
 /** The same regions as {code,name} — the shape the filter chrome wants, where the
@@ -146,8 +148,17 @@ export async function loadReference(timeoutMs = 4000): Promise<void> {
       refill(REGION_OPTIONS, regions.map(r => ({ code: r.code, name: r.geo_name || r.name })));
       rekey(REGION_BY_ID, Object.fromEntries(
         regions.map(r => [r.code, r.geo_name || r.name])));
-      rekey(REGION_GEO_NAME, Object.fromEntries(
-        regions.filter(r => r.geo_name).map(r => [r.geo_name!, r.geo_name!])));
+      // key on every form a caller might hold: the formal name from the entity
+      // model, the short display name, and the region code.
+      const geoMap: Record<string, string> = {};
+      for (const r of regions) {
+        const target = r.geo_name || r.name;
+        if (!target) continue;
+        geoMap[r.name] = target;
+        geoMap[target] = target;
+        if (r.code) geoMap[r.code] = target;
+      }
+      rekey(REGION_GEO_NAME, geoMap);
     }
 
     refill(PROGRAMMES, (ref.programmes || [])

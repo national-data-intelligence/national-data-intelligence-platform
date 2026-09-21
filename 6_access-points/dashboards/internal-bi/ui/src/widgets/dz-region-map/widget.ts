@@ -35,7 +35,7 @@
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { choropleth, sparklineSvg } from '../_shared/charts';
-import { loadEthContextGeo } from '../_shared/geo';
+import { loadRegionContextGeo } from '../_shared/geo';
 import { regionName } from '../_shared/reference';
 
 type Metric = 'burden' | 'readiness' | 'reliability';
@@ -436,7 +436,7 @@ const def: WidgetDef = {
           woredaRows = (await ctx.fetchData({ geography: soleId, woreda: '1' })) || [];
         }
 
-        geo = await loadEthContextGeo();          // Ethiopia regions + faint surrounding land
+        geo = await loadRegionContextGeo();       // the profile's regions + faint surrounding land
         mapMount.innerHTML = '';
 
         // Initial selection: the single/globally-focused region, else top-burden.

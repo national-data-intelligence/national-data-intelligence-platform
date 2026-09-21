@@ -7,7 +7,7 @@
  */
 import * as echarts from 'echarts';
 import type { Theme } from '../../runtime/types';
-import { normRegion, geoNameFor } from './geo';
+import { normRegion, geoNameFor, REGION_MAP, REGION_CTX_MAP } from './geo';
 
 /** EWARS alarm-probability risk ramp (semantic, like status colours — NOT the
  *  accent). low→high: pale green · green · amber · orange · red. Aligned to the
@@ -773,11 +773,11 @@ export function choropleth(
      *  draws its own legend, e.g. the redesigned dz-region-map sidebar). Default
      *  true keeps the legend for existing callers. */
     showScale?: boolean;
-    /** ADDITIVE — render the merged 'eth-ctx' map (Ethiopia regions ON a faint
+    /** ADDITIVE — render the merged context map (the profile's regions ON a faint
      *  band of real neighbouring land, over a soft-water backdrop). The view is
      *  framed deterministically via `boundingCoords` (Ethiopia's bbox, or the
      *  focus region's bbox, expanded by a margin) so surrounding land fills the
-     *  wide/short host. Unset → the plain 'ethiopia' map, unchanged for rm-map. */
+     *  wide/short host. Unset → the plain region map, unchanged for rm-map. */
     worldContext?: boolean;
     /** ADDITIVE — fixed pixel height for the map host. Default 440 preserves the
      *  prior (aspect-driven) behaviour for existing callers; a small value gives
@@ -803,17 +803,17 @@ export function choropleth(
   // The interactive/colourable features are the Ethiopia regions only; in the
   // worldContext merged map the `__ctx` land features are backdrop, never data.
   const isCtx = (n: any): boolean => !!opts.worldContext && typeof n === 'string' && n.indexOf('ctx-') === 0;
-  const ethFeatures = geo.features.filter((f: any) => !f.properties.__ctx);
+  const regionFeatures = geo.features.filter((f: any) => !f.properties.__ctx);
 
   // National bbox over the Ethiopia features (drives both the focus-zoom clamp
-  // and the worldContext framing). Over ethFeatures only, so the surrounding
+  // and the worldContext framing). Over the region features only, so the surrounding
   // world land never inflates the "national" extent.
   let na = Infinity, nb = Infinity, nc = -Infinity, nd = -Infinity;
-  for (const f of ethFeatures) { const bb = featureBBox(f); if (bb) { na = Math.min(na, bb[0]); nb = Math.min(nb, bb[1]); nc = Math.max(nc, bb[2]); nd = Math.max(nd, bb[3]); } }
+  for (const f of regionFeatures) { const bb = featureBBox(f); if (bb) { na = Math.min(na, bb[0]); nb = Math.min(nb, bb[1]); nc = Math.max(nc, bb[2]); nd = Math.max(nd, bb[3]); } }
 
   // Region focus (Task 1): frame the selected region's bbox + de-emphasize the rest.
   const focusName = opts.focusRegion ? geoNameFor(geo, opts.focusRegion) : null;
-  const focusFeat = focusName ? ethFeatures.find((f: any) => normRegion(f.properties.name) === normRegion(focusName)) : null;
+  const focusFeat = focusName ? regionFeatures.find((f: any) => normRegion(f.properties.name) === normRegion(focusName)) : null;
   const rb = focusFeat ? featureBBox(focusFeat) : null;
 
   // Non-worldContext path: center + zoom (byte-for-byte the prior behaviour).
@@ -883,7 +883,7 @@ export function choropleth(
     series: [{
       // roam:'move' = drag-to-pan only. Scroll-wheel zoom is intentionally OFF so scrolling the
       // PAGE over the map never hijacks into a zoom; deliberate zoom is via the +/− buttons below.
-      type: 'map', map: opts.worldContext ? 'eth-ctx' : 'ethiopia', roam: 'move', aspectScale: 0.85,
+      type: 'map', map: opts.worldContext ? REGION_CTX_MAP : REGION_MAP, roam: 'move', aspectScale: 0.85,
       // worldContext frames deterministically via boundingCoords; otherwise center+zoom.
       ...(opts.worldContext
         ? { zoom: 1, ...(boundingCoords ? { boundingCoords } : {}), scaleLimit: { min: 1, max: 8 } }
@@ -914,7 +914,7 @@ export function choropleth(
   zin.onclick = () => applyZoom(zoom * 1.4);
   zout.onclick = () => applyZoom(zoom / 1.4);
   zc.appendChild(zin); zc.appendChild(zout); host.appendChild(zc);
-  const allNames = ethFeatures.map((f: any) => f.properties.name);
+  const allNames = regionFeatures.map((f: any) => f.properties.name);
   const selectByName = (region: string) => {
     chart.dispatchAction({ type: 'unselect', seriesIndex: 0, name: allNames });
     chart.dispatchAction({ type: 'select', seriesIndex: 0, name: geoNameFor(geo, region) });

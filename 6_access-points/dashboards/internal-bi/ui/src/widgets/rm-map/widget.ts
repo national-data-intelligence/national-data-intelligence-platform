@@ -11,7 +11,7 @@
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { choropleth } from '../_shared/charts';
-import { loadEthGeo } from '../_shared/geo';
+import { loadRegionGeo } from '../_shared/geo';
 import { regionName } from '../_shared/reference';
 
 type Metric = 'composite_score' | 'drug_stress' | 'facility_gap' | 'readiness_gap';
@@ -69,7 +69,7 @@ const def: WidgetDef = {
         // SPA display name so the geojson feature join (normRegion) actually matches.
         // Without this every region reads "no data" and the map renders flat.
         for (const r of rows) { const name = regionName(String(r.region)); rowsByRegion[name] = r; valuesByRegion[name] = Number(r[metric] ?? 0); }
-        const geo = await loadEthGeo();
+        const geo = await loadRegionGeo();
         // supplyStress is ordered high→low; choropleth maps 0→first, so reverse → high stress = dark slate.
         const ramp = [...ctx.theme.ramps.supplyStress].reverse();
         const tooltip = (name: string) => {
