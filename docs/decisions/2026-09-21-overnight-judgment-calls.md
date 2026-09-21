@@ -494,3 +494,32 @@ cluster heals on the next detector run instead of staying broken.
 
 **Reverse.** Revert the `_detect_classification_gaps` call and the transaction in
 `_upsert_flags`.
+
+---
+
+## 21. Masking verified across the read paths the plan names
+
+**Checked, with a real low-trust identity against the live deployment:**
+
+| path | high trust (reveal: restricted) | low trust |
+|---|---|---|
+| Control Tower feed | exact `6.4915` | **generalized `6.5`** |
+| generic mart reader | exact `11.7900` | **generalized `11.8`** |
+| SQL editor (`/api/sql/execute`) | exact values | **refused, naming the masked columns** |
+| export (`/api/exports/marts/…`) | presigned CSV | **403 — trust guard denies before masking** |
+
+The SQL editor refusal is the right shape: rather than silently returning masked
+values for an explicitly-selected column, it names `lat, lng` and says a `SELECT *`
+would return them masked — so a caller cannot mistake a masked value for a real
+one. Export is denied outright because `export` is a sensitive verb, which is
+stricter than masking, not weaker.
+
+**Not driven end to end:** the widget path and the chatbot's `run_sql`. Both route
+through the same `apply_masking` seam as the mart reader (same code, same
+obligation), and the unit tests cover the transform, but I did not put a low-trust
+identity through them specifically. Saying so rather than implying full coverage.
+
+**One incidental defect found and fixed.** Exporting as a principal with no
+`ops_identity.user` row raised `ForeignKeyViolationError` and surfaced as a bare
+500. A real login JIT-caches the identity so normal users never hit it, but it now
+returns a 409 that explains itself.
