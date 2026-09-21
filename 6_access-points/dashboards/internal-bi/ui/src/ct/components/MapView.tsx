@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { WAREHOUSES, NODES, MOVEMENTS, WH_BY_ID, NODE_BY_ID, RUN_BY_ID, type Movement } from '../data/runtime';
+import { WAREHOUSES, NODES, MOVEMENTS, WH_BY_ID, NODE_BY_ID, RUN_BY_ID, type Movement, type VehicleRun } from '../data/runtime';
+import { authFetch } from '../../api/useAuth';
 import { filterMovements, type Slicer } from '../lib/select';
 
 // register the pmtiles:// protocol once
@@ -14,7 +15,41 @@ function ensureProtocol() {
   _protoInstalled = true;
 }
 
-const ET_BOUNDS: [number, number, number, number] = [32.9, 3.3, 48.0, 15.0];
+type Bounds = [number, number, number, number];
+
+/** Offline basemaps under /static/ct (one Protomaps schema, one style). The map uses
+ *  the one whose bounds contain the plan's own nodes — the data decides the country.
+ *  `outline` is the admin-1 line layer drawn over it; profile geometry needs the
+ *  login token (the /gw proxy is authenticated). */
+interface Basemap { tiles: string; bounds: Bounds; outline: { url: string; auth: boolean } }
+const BASEMAPS: Basemap[] = [
+  { tiles: 'ethiopia.pmtiles', bounds: [32.9, 3.3, 48.0, 15.0], outline: { url: '/static/ct/et-regions.geojson', auth: false } },
+  { tiles: 'zambia.pmtiles', bounds: [21.8, -18.2, 33.9, -8.1], outline: { url: '/gw/profile/geo/admin1.geojson?profile=zm-v1', auth: true } },
+];
+
+function dataBounds(): Bounds | null {
+  const pts = [...NODES, ...WAREHOUSES].filter(p => Number.isFinite(p.lng) && Number.isFinite(p.lat));
+  if (!pts.length) return null;
+  return [Math.min(...pts.map(p => p.lng)), Math.min(...pts.map(p => p.lat)),
+          Math.max(...pts.map(p => p.lng)), Math.max(...pts.map(p => p.lat))];
+}
+
+function pickBasemap(b: Bounds | null): Basemap {
+  if (!b) return BASEMAPS[0];
+  const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+  return BASEMAPS.find(m => cx >= m.bounds[0] && cx <= m.bounds[2] && cy >= m.bounds[1] && cy <= m.bounds[3]) ?? BASEMAPS[0];
+}
+
+/** A run's drawn line. Runs may carry no path (a path of facility coordinates would
+ *  bypass the gateway's GPS masking), so the line is rebuilt from the masked node
+ *  coordinates: store → stops in sequence → store. */
+function runPath(r: VehicleRun): [number, number][] {
+  if (r.path && r.path.length) return r.path;
+  const hub = WH_BY_ID[r.originHubId];
+  const stops = [...r.stops].sort((a, b) => a.seq - b.seq).map(st => NODE_BY_ID[st.nodeId])
+    .filter(Boolean).map(n => [n.lng, n.lat] as [number, number]);
+  return hub ? [[hub.lng, hub.lat], ...stops, [hub.lng, hub.lat]] : stops;
+}
 
 // muted route/node colors (dampened per feedback)
 // Routes and borders are separated by HUE, not weight. Borders are neutral grey;
@@ -90,7 +125,7 @@ function routesGeo(movs: Movement[]) {
     type: 'FeatureCollection' as const,
     features: runsFor(movs).map(r => ({
       type: 'Feature' as const, properties: { runId: r.id },
-      geometry: { type: 'LineString' as const, coordinates: r.path },
+      geometry: { type: 'LineString' as const, coordinates: runPath(r) },
     })),
   };
 }
@@ -127,7 +162,7 @@ function arcsGeo(movs: Movement[]) {
 
 function nodesGeo(movs: Movement[]) {
   const worst = new Map<string, number>();
-  for (const m of movs) worst.set(m.toId, Math.min(worst.get(m.toId) ?? 9999, m.daysToStockout));
+  for (const m of movs) worst.set(m.toId, Math.min(worst.get(m.toId) ?? 9999, m.daysToStockout ?? 9999));
   return {
     type: 'FeatureCollection' as const,
     features: NODES.filter(n => worst.has(n.id)).map(n => ({
@@ -138,8 +173,8 @@ function nodesGeo(movs: Movement[]) {
   };
 }
 
-function graticuleGeo(step = 2) {
-  const [w, s, e, nn] = ET_BOUNDS;
+function graticuleGeo(bounds: Bounds, step = 2) {
+  const [w, s, e, nn] = bounds;
   const features: any[] = [];
   for (let lng = Math.ceil(w); lng <= e; lng += step)
     features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[lng, s], [lng, nn]] } });
@@ -170,6 +205,7 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
   const mapRef = useRef<maplibregl.Map | null>(null);
   const truckRef = useRef<maplibregl.Marker | null>(null);
   const whMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const filteredRef = useRef(false);
   const rafRef = useRef<number>(0);
   const truckGenRef = useRef(0);
   const readyRef = useRef(false);
@@ -181,14 +217,17 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
   useEffect(() => {
     if (!containerRef.current) return;
     ensureProtocol();
+    const fit = dataBounds();
+    const base = pickBasemap(fit);
+    const frame = fit ?? base.bounds;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      center: [40.0, 9.0], zoom: 5.0, attributionControl: false,
+      center: [(frame[0] + frame[2]) / 2, (frame[1] + frame[3]) / 2], zoom: 5.0, attributionControl: false,
       style: {
         version: 8,
         glyphs: '/static/ct/fonts/{fontstack}/{range}.pbf',
         sources: {
-          protomaps: { type: 'vector', url: `pmtiles://${window.location.origin}/static/ct/ethiopia.pmtiles` },
+          protomaps: { type: 'vector', url: `pmtiles://${window.location.origin}/static/ct/${base.tiles}` },
           // offline elevation (terrarium terrain-RGB tiles) for hillshade relief
           dem: { type: 'raster-dem', tiles: ['/static/ct/terrain/{z}/{x}/{y}.png'], encoding: 'terrarium', tileSize: 256, maxzoom: 8 },
         },
@@ -201,14 +240,22 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
     ro.observe(containerRef.current);
 
     map.on('load', () => {
-      map.addSource('graticule', { type: 'geojson', data: graticuleGeo() as any });
+      map.addSource('graticule', { type: 'geojson', data: graticuleGeo(base.bounds) as any });
       map.addLayer({ id: 'graticule', type: 'line', source: 'graticule',
         paint: { 'line-color': '#9aa6b4', 'line-width': 0.5, 'line-opacity': 0.12, 'line-dasharray': [2, 3] } });
 
-      // Zambia's own border — bold, so the working country reads distinctly from neighbours
-      map.addSource('zm-outline', { type: 'geojson', data: '/static/ct/et-regions.geojson' });
+      // The working country's admin-1 lines — bold, so it reads distinctly from neighbours
+      if (base.outline.auth) {
+        map.addSource('zm-outline', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } as any });
+        authFetch(base.outline.url).then(r => (r.ok ? r.json() : null)).then(g => {
+          const src = map.getSource('zm-outline') as maplibregl.GeoJSONSource | undefined;
+          if (g && src) src.setData(g);
+        }).catch(() => { /* outline is decoration; the map stays usable without it */ });
+      } else {
+        map.addSource('zm-outline', { type: 'geojson', data: base.outline.url });
+      }
       // Real terrain: elevation-graded hypsometric colour ("heatmap" style) from the
-      // offline Ethiopia DEM — below-sea/water blue, lowland green, mid tan/yellow,
+      // offline DEM tiles — below-sea/water blue, lowland green, mid tan/yellow,
       // highland brown, peaks pale. The color-relief layer needs maplibre-gl v5.
       map.addLayer({
         id: 'et-relief', type: 'color-relief', source: 'dem',
@@ -222,7 +269,7 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
           ],
         },
       } as any);
-      // Real elevation relief ON TOP of the green land (offline Ethiopia DEM tiles) —
+      // Real elevation relief ON TOP of the green land (offline DEM tiles) —
       // gives mountains/rift valley true terrain shading.
       map.addLayer({ id: 'et-hillshade', type: 'hillshade', source: 'dem',
         paint: { 'hillshade-exaggeration': 0.45, 'hillshade-shadow-color': '#5f7a52',
@@ -272,7 +319,8 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
         paint: { 'circle-radius': 4.5, 'circle-color': C.routeSel, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
 
       readyRef.current = true;
-      map.fitBounds(ET_BOUNDS, { padding: 26, duration: 0 });
+      map.fitBounds(frame, { padding: 26, duration: 0 });
+      map.on('zoomend', applyLabels);
       renderAll();
 
       map.on('click', 'nodes', (e) => {
@@ -299,9 +347,19 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Store names only where they can be read: zoomed in, or once a Region / store
+  // filter narrows the map (a national view of every store label is noise).
+  const applyLabels = () => {
+    const map = mapRef.current, el = containerRef.current;
+    if (!map || !el) return;
+    el.classList.toggle('ct-labels-off', !(filteredRef.current || map.getZoom() >= 7));
+  };
+
   const renderAll = () => {
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
+    filteredRef.current = slicer.region !== 'all' || slicer.hub !== 'all';
+    applyLabels();
     const movs = filterMovements(slicer);
     (map.getSource('routes') as maplibregl.GeoJSONSource)?.setData(routesGeo(movs) as any);
     (map.getSource('nodes') as maplibregl.GeoJSONSource)?.setData(nodesGeo(movs) as any);
@@ -351,7 +409,7 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
       (map.getSource('sel-stops') as maplibregl.GeoJSONSource)?.setData({ type: 'FeatureCollection', features: [] } as any);
       return;
     }
-    const pts = run.path;
+    const pts = runPath(run);
     (map.getSource('sel-route') as maplibregl.GeoJSONSource)?.setData({
       type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: pts } }],
     } as any);
@@ -406,7 +464,7 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
     const path = layer === 'network'
       ? (selMov ? arc([WH_BY_ID[selMov.fromId].lng, WH_BY_ID[selMov.fromId].lat],
                       [NODE_BY_ID[selMov.toId].lng, NODE_BY_ID[selMov.toId].lat]) : null)
-      : selectedRun(selectedId)?.path ?? null;
+      : (() => { const r = selectedRun(selectedId); return r ? runPath(r) : null; })();
     if (!path || !path.length) return;
     const b = new maplibregl.LngLatBounds(path[0] as any, path[0] as any);
     for (const p of path) b.extend(p as any);

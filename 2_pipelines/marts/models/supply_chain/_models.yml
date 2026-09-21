@@ -312,15 +312,25 @@ models:
       - name: period_id
         tests: [not_null]
       - name: from_hub_id
-        tests: [not_null]
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('mart_ct_nodes')
+                field: node_id
       - name: to_node_id
-        tests: [not_null]
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('mart_ct_nodes')
+                field: node_id
       - name: commodity_key
         tests: [not_null]
       - name: reason
         tests:
           - not_null
-          - accepted_values: {values: [nearest, capacity-overflow]}
+          - accepted_values: {values: [nearest, capacity-overflow, district]}
   - name: mart_ct_vehicle_runs
     description: |
       One row per dispatch vehicle run, reproducing plan.ts VEHICLE_RUNS. The
@@ -505,7 +515,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              arguments: { values: ['source', 'repaired_lat_sign', 'repaired_lng_sign',
+              arguments: { values: ['source', 'repaired_lat_sign', 'repaired_lng_sign', 'district_mean_point_rejected',
                                     'district_facility_mean', 'province_facility_mean', 'none'] }
       - name: lat
         tests:

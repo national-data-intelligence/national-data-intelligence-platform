@@ -42,7 +42,7 @@ _OPA_ATTRS = {"data_class": "DC.STK", "granularity": "aggregate", "sensitivity":
 WIDGET_MARTS = {
     "ct-filters":  [("bi_supply", "mart_ct_nodes"), ("bi_supply", "mart_ct_movements"),
                     ("bi_supply", "mart_ct_plan_stats")],
-    "ct-kpis":     [("bi_supply", "mart_ct_movements")],
+    "ct-kpis":     [("bi_supply", "mart_ct_movements"), ("bi_supply", "mart_pct_kpi")],
     "ct-movement": [("bi_supply", "mart_ct_movements"), ("bi_supply", "mart_ct_nodes")],
     "ct-dispatch": [("bi_supply", "mart_ct_vehicle_runs"), ("bi_supply", "mart_ct_movements"),
                     ("bi_supply", "mart_ct_nodes")],
@@ -81,13 +81,15 @@ def _sql_in(values: list[str]) -> str:
 def _warehouse(r: dict) -> dict:
     return {"id": r["node_id"], "name": r["name"], "short": r.get("short_name"),
             "zone": r.get("zone"), "lng": _f(r.get("lng")), "lat": _f(r.get("lat")),
-            "hub": _b(r.get("is_hub")), "vehicles": _i(r.get("vehicles"))}
+            "hub": _b(r.get("is_hub")), "vehicles": _i(r.get("vehicles")),
+            "locationBasis": r.get("location_basis")}
 
 
 def _node(r: dict) -> dict:
     return {"id": r["node_id"], "name": r["name"], "region": r.get("region"),
             "type": r.get("node_type"), "lng": _f(r.get("lng")), "lat": _f(r.get("lat")),
-            "lineCount": _i(r.get("line_count")), "storeCap": _i(r.get("store_cap"))}
+            "lineCount": _i(r.get("line_count")), "storeCap": _i(r.get("store_cap")),
+            "regionId": r.get("region_id"), "locationBasis": r.get("location_basis")}
 
 
 def _movement(r: dict) -> dict:
@@ -105,6 +107,7 @@ def _movement(r: dict) -> dict:
         "baselineHubId": r.get("baseline_hub_id"), "baselineKm": _i(r.get("baseline_km")),
         "planned": _b(r.get("planned")), "repaired": _b(r.get("repaired")),
         "capped": _b(r.get("capped")), "why": _j(r.get("why_json"), {}),
+        "atRisk": _b(r.get("at_risk")), "demandBasis": r.get("demand_basis"),
     }
 
 
@@ -195,6 +198,16 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
             run_clause = ""
         run_rows = (await trino_client.query(
             f"SELECT * FROM {_SCHEMA}.mart_ct_vehicle_runs{run_clause}")).get("rows") or []
+        # Stock-health KPIs at the latest reported month, per province, as
+        # numerator/denominator so the cards pool exactly as the KPI definitions
+        # say under any Region filter (same access attributes as the plan marts).
+        kpi_rows = (await trino_client.query(
+            f"SELECT region_id, kpi_code, coalesce(category, '') AS category, "
+            f"sum(numerator) AS numerator, sum(denominator) AS denominator, max(target) AS target "
+            f"FROM {_SCHEMA}.mart_pct_kpi WHERE month_id = (SELECT max(month_id) FROM {_SCHEMA}.mart_pct_kpi)"
+            f"{geo_clause.replace(' WHERE ', ' AND ')} "
+            f"AND kpi_code IN ('osa_s8', 'stockout_exposure', 'stockout_days_rate', 'mos_band') "
+            f"GROUP BY region_id, kpi_code, coalesce(category, '')")).get("rows") or []
     except HTTPException:
         raise
     except Exception as exc:
@@ -205,6 +218,13 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
             http_status=500, policy_decision="error", denied_reason=str(exc))
         raise HTTPException(500, f"CT plan query failed: {exc}")
 
+    if geo:
+        # A region-scoped caller sees only in-scope facilities and the stores that
+        # serve them — never the whole facility registry.
+        in_scope_hubs = {m.get("from_hub_id") for m in mv_rows}
+        node_rows = [r for r in node_rows
+                     if (r.get("node_kind") == "facility" and r.get("region_id") in geo)
+                     or (r.get("node_kind") == "hub" and r.get("node_id") in in_scope_hubs)]
     warehouses = [_warehouse(r) for r in node_rows if r.get("node_kind") == "hub"]
     nodes = [_node(r) for r in node_rows if r.get("node_kind") == "facility"]
     movements = [_movement(r) for r in mv_rows]
@@ -227,7 +247,8 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
     cur_moves = [m for m in movements if m["period"] == current_period]
     selected_id = None
     if cur_moves:
-        selected_id = max(cur_moves, key=lambda m: (m.get("priority") or 0, m["id"]))["id"]
+        selected_id = max(cur_moves, key=lambda m: (bool(m.get("planned")), m.get("priority") or 0,
+                                                    m.get("units") or 0, m["id"]))["id"]
 
     await ops_db.log_gateway_query(
         user=user, method="GET", path="/api/ct/plan",
@@ -251,4 +272,7 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
         "periodStats": period_stats,
         "summary": _summary(cur_stat) if cur_stat else None,
         "baseline": _baseline(cur_stat) if cur_stat else None,
+        "kpis": [{"regionId": r.get("region_id"), "kpi": r.get("kpi_code"), "category": r.get("category"),
+                  "numerator": _f(r.get("numerator")), "denominator": _f(r.get("denominator")),
+                  "target": _f(r.get("target"))} for r in kpi_rows],
     }

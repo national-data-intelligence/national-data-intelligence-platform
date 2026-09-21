@@ -40,9 +40,10 @@ exposures:
     label: "ct-kpis (Internal BI widget)"
     maturity: high
     url: https://internal-bi.127.0.0.1.nip.io/
-    description: "Internal BI widget `ct-kpis` reads bi_supply.mart_ct_movements through the governed gateway (Trino + OPA)."
+    description: "Internal BI widget `ct-kpis` reads bi_supply.mart_ct_movements, bi_supply.mart_pct_kpi through the governed gateway (Trino + OPA)."
     depends_on:
       - ref('mart_ct_movements')
+      - ref('mart_pct_kpi')
     owner:
       name: platform
 

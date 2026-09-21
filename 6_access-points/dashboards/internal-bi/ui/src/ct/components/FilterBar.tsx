@@ -13,9 +13,9 @@ export default function FilterBar({ slicer, setSlice, reset }: Props) {
           {REGION_NAMES.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
       </label>
-      <label className="pct-field">Warehouse
+      <label className="pct-field">District store
         <select value={slicer.hub} onChange={e => setSlice({ hub: e.target.value })}>
-          <option value="all">All zonal stores</option>
+          <option value="all">All district stores</option>
           {WAREHOUSES.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
       </label>

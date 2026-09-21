@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from starlette.middleware.gzip import GZipMiddleware
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from jose import jwt
@@ -132,6 +133,10 @@ async def get_user_or_none(request: Request) -> UserCtx | None:
 
 # ─── app ──────────────────────────────────────────────────────────────────
 app = FastAPI(title="NHDW Internal BI", docs_url=None, redoc_url=None)
+# Plan payloads (the Control Tower's is ~4 MB of JSON) and bundles compress ~10×;
+# the /gw proxy returns decoded gateway bodies, so compression happens here, at the
+# browser-facing edge.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 @app.get("/health")

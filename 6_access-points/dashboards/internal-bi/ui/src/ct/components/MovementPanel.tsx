@@ -27,6 +27,10 @@ function Step({ Icon, label, value, signedVal, total }:
 
 interface Props { movement: Movement; slicer: Slicer; onSelect: (id: string) => void }
 
+const DEMAND_BASIS: Record<string, string> = {
+  forecast: 'Forecast', elmis_amc: 'eLMIS AMC', forecast_and_amc: 'Forecast and eLMIS AMC',
+};
+
 export default function MovementPanel({ movement, slicer, onSelect }: Props) {
   const [shipOpen, setShipOpen] = useState(true);
   const [shipAll, setShipAll] = useState(false);
@@ -48,7 +52,7 @@ export default function MovementPanel({ movement, slicer, onSelect }: Props) {
       <div className="ct-selcard">
         <div className="ct-sel-top">
           <span className="ct-eyebrow">Selected movement</span>
-          <span className="ct-sel-planned">Planned</span>
+          <span className="ct-sel-planned">{movement.planned ? 'Planned' : 'Not covered'}</span>
         </div>
 
         <div className="ct-sel-from">{w.name}</div>
@@ -70,7 +74,7 @@ export default function MovementPanel({ movement, slicer, onSelect }: Props) {
           </div>
           <div className="ct-trio-i">
             <IconRunout />
-            <span className="ct-trio-v">{movement.daysToStockout}d</span>
+            <span className="ct-trio-v">{movement.daysToStockout != null ? `${movement.daysToStockout}d` : 'n/a'}</span>
             <span className="ct-trio-l">Until stock out</span>
           </div>
           <div className="ct-trio-i">
@@ -81,9 +85,10 @@ export default function MovementPanel({ movement, slicer, onSelect }: Props) {
         </div>
 
         <div className="ct-facts">
-          {run && <div className="ct-fact"><span className="k">Delivery</span><span className="v">{run.id}, stop {movement.sequenceIndex} of {run.stops.length}</span></div>}
-          {stop && <div className="ct-fact"><span className="k">Delivery ETA</span><span className="v">{hhmm(stop.etaMin)}</span></div>}
-          <div className="ct-fact"><span className="k">Road distance</span><span className="v">{fmt(movement.laneKm)} km</span></div>
+          {run && <div className="ct-fact"><span className="k">{run.vehicleType == null ? 'Delivery stop' : 'Delivery'}</span><span className="v">{run.vehicleType == null ? `Stop ${movement.sequenceIndex} of ${run.stops.length}` : `${run.id}, stop ${movement.sequenceIndex} of ${run.stops.length}`}</span></div>}
+          {stop && stop.etaMin != null && <div className="ct-fact"><span className="k">Delivery ETA</span><span className="v">{hhmm(stop.etaMin)}</span></div>}
+          <div className="ct-fact"><span className="k">{run && run.vehicleType == null ? 'Straight-line distance' : 'Road distance'}</span><span className="v">{fmt(movement.laneKm)} km</span></div>
+          {movement.demandBasis && <div className="ct-fact"><span className="k">Demand basis</span><span className="v">{DEMAND_BASIS[movement.demandBasis] ?? movement.demandBasis}</span></div>}
           {overflow && <div className="ct-fact"><span className="k">Rerouted from</span><span className="v">{nearest.short}, +{fmt(movement.assignDeltaKm)} km</span></div>}
         </div>
 

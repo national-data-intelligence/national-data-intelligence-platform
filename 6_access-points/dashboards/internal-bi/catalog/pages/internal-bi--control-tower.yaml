@@ -1,6 +1,7 @@
 id: internal-bi/control-tower
 title: Supply Control Tower
 ordering: 35
-filters: []
+filters:
+- region
 sections:
 - internal-bi/control-tower/main

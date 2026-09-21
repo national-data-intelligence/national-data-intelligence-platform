@@ -1,77 +1,124 @@
-/*
-    mart_ct_movements — one row per EPSS dispatch movement line (which hub
-    supplies which facility, of which commodity, on which run, in which period).
-    Reproduces plan.ts's MOVEMENTS array field-for-field, with types cast from
-    the all-string raw surface here (downstream typing per the vault contract).
+{{ config(materialized='table') }}
+{#
+    Supply Control Tower movements (bi_supply.mart_ct_movements) — Zambia eLMIS.
+    One movement per facility × tracer product with a planned order next month
+    (planned = true), plus every at-risk facility-product the plan leaves without
+    an order (planned = false, units 0) so "shortages covered" is real;
+    from the planning view of bi_supply.mart_pct_position (programmes summed):
+    units = planned order (dispensing units), amc = the monthly demand the plan
+    used (forecast median, or eLMIS AMC where the forecast does not apply —
+    demand_basis), mos / days_to_stockout from stock on hand at that rate.
+    From-hub = the facility's district store (inferred link, see mart_ct_nodes).
+    lane_km is straight-line (no road data). Stops are sequenced by a sweep
+    around the district store (vehicle_run_id = one district run per period).
+    priority = 100 × (1 − months of stock / max stock months), clamped 0–100.
+    why_json follows the panel's convention: signal is demand (negative),
+    prePlan = opening + signal, inbound = the order, postPlan = prePlan + inbound.
+    No cost data exists: cost / fill columns are NULL.
+#}
 
-    Joins the movement hub+sat to the link (for the hub/facility/period edges),
-    decodes the facility's region → region_id (OPA geo scoping), and conforms
-    commodity_key → commodity_reference for programme_id. why_json carries the
-    nested demand-signal breakdown for the movement detail panel. Grain: movement.
-    Backs ct-movement (network + rail) and ct-kpis. Schema: bi_supply.
-*/
-WITH mv AS (
-    SELECT h.movement_id, s.*
-    FROM {{ source('nhdw_vault_raw', 'hub_hcmis_dispatch') }} h
-    JOIN {{ source('nhdw_vault_business', 'v_sat_hcmis_dispatch_current') }} s
-        USING (hk_hcmis_dispatch)
+WITH pos AS (
+    SELECT facility_code, product_code,
+           max(product_name)                               AS product_name,
+           min(programme_id)                               AS programme_id,
+           max(as_of_month)                                AS as_of_month,
+           sum(stock_in_hand)                              AS soh,
+           sum(planning_rate)                              AS rate,
+           sum(planning_replenishment_units_excl_pipeline) AS units,
+           max(max_stock_months)                           AS max_months,
+           CASE WHEN bool_and(planning_basis = 'forecast_p50') THEN 'forecast'
+                WHEN bool_or(planning_basis = 'forecast_p50') THEN 'forecast_and_amc'
+                ELSE 'elmis_amc' END                       AS demand_basis
+           , bool_or(h1_risk IN ('likely_short', 'critical_at_risk')) AS at_risk
+    FROM {{ ref('mart_pct_position') }}
+    GROUP BY facility_code, product_code
+    HAVING coalesce(sum(planning_replenishment_units_excl_pipeline), 0) > 0
+        OR bool_or(h1_risk IN ('likely_short', 'critical_at_risk'))
 ),
-edge AS (
-    SELECT lnk.hk_hcmis_dispatch,
-           fh.hub_id  AS from_hub_id,
-           fac.node_id AS to_node_id,
-           fac.region  AS region,
-           per.period_id
-    FROM {{ source('nhdw_vault_raw', 'lnk_hcmis_dispatch') }} lnk
-    JOIN {{ source('nhdw_vault_raw', 'hub_hcmis_dispatch_hub') }} fh
-        USING (hk_hcmis_dispatch_hub)
-    JOIN {{ source('nhdw_vault_raw', 'hub_hcmis_dispatch_period') }} per
-        USING (hk_hcmis_dispatch_period)
-    JOIN (
-        SELECT hf.hk_hcmis_dispatch_facility, hf.node_id, fs.region
-        FROM {{ source('nhdw_vault_raw', 'hub_hcmis_dispatch_facility') }} hf
-        JOIN {{ source('nhdw_vault_business', 'v_sat_hcmis_dispatch_facility_current') }} fs
-            USING (hk_hcmis_dispatch_facility)
-    ) fac USING (hk_hcmis_dispatch_facility)
+
+geo AS (
+    SELECT * FROM {{ ref('mart_pct_facility_geo') }}
+),
+
+centre AS (
+    -- where the district's facilities actually are (GPS-sourced points only)
+    SELECT district_code, avg(lat) AS lat, avg(lng) AS lng
+    FROM geo WHERE coord_basis = 'source' GROUP BY district_code
+),
+
+dho AS (
+    -- same rule as mart_ct_nodes: a DHO with real GPS, nearest the district's facilities
+    SELECT DISTINCT ON (g.district_code) g.district_code, g.facility_code, g.lat, g.lng
+    FROM geo g LEFT JOIN centre c USING (district_code)
+    WHERE g.facility_type_code = 'DHO'
+    ORDER BY g.district_code, (g.coord_basis = 'source') DESC,
+             power(g.lat - coalesce(c.lat, g.lat), 2) + power(g.lng - coalesce(c.lng, g.lng), 2), g.facility_code
+),
+
+district AS (
+    SELECT district_code, avg(lat) AS lat, avg(lng) AS lng FROM geo GROUP BY district_code
+),
+
+hub AS (
+    SELECT d.district_code, 'H-' || coalesce(dho.facility_code, 'D' || d.district_code) AS hub_id,
+           coalesce(dho.lat, d.lat) AS lat, coalesce(dho.lng, d.lng) AS lng
+    FROM district d LEFT JOIN dho USING (district_code)
+),
+
+leg AS (
+    SELECT p.*, g.region_name, g.region_id, g.district_code, h.hub_id,
+           to_char((p.as_of_month || '-01')::date + interval '1 month', 'YYYY-MM') AS period_id,
+           2 * 6371 * asin(sqrt(power(sin(radians(g.lat - h.lat) / 2), 2)
+               + cos(radians(h.lat)) * cos(radians(g.lat)) * power(sin(radians(g.lng - h.lng) / 2), 2))) AS km,
+           atan2(g.lat - h.lat, g.lng - h.lng) AS bearing
+    FROM pos p
+    JOIN geo g USING (facility_code)
+    JOIN hub h USING (district_code)
+),
+
+seq AS (
+    SELECT l.*, (coalesce(units, 0) > 0) AS planned_order,
+           CASE WHEN coalesce(units, 0) > 0 THEN dense_rank() OVER (PARTITION BY hub_id, period_id, (coalesce(units, 0) > 0)
+                ORDER BY bearing, km, facility_code) END AS stop_seq
+    FROM leg l
 )
+
 SELECT
-    mv.movement_id,
-    edge.period_id,
-    edge.from_hub_id,
-    edge.to_node_id,
-    edge.region,
-    CASE edge.region
-        WHEN 'Tigray' THEN 'TI' WHEN 'Afar' THEN 'AF' WHEN 'Amhara' THEN 'AM'
-        WHEN 'Oromia' THEN 'OR' WHEN 'Somali' THEN 'SO' WHEN 'Benishangul-Gumuz' THEN 'BG'
-        WHEN 'Central Ethiopia' THEN 'CE' WHEN 'South Ethiopia' THEN 'SE'
-        WHEN 'South West Ethiopia' THEN 'SW' WHEN 'Gambela' THEN 'GA' WHEN 'Gambella' THEN 'GA'
-        WHEN 'Harari' THEN 'HA' WHEN 'Addis Ababa' THEN 'AA' WHEN 'Dire Dawa' THEN 'DD'
-        WHEN 'Sidama' THEN 'SI' ELSE NULL END AS region_id,
-    mv.drug,
-    mv.drug_short,
-    mv.commodity_key,
-    cr.programme_id,
-    mv.units::int                       AS units,
-    mv.amc::int                         AS amc,
-    mv.mos::numeric                     AS mos,
-    mv.days_to_stockout::int            AS days_to_stockout,
-    mv.priority::int                    AS priority,
-    mv.lane_km::int                     AS lane_km,
-    mv.cost_units::int                  AS cost_units,
-    mv.sequence_index::int              AS sequence_index,
-    mv.vehicle_run_id,
-    mv.fill_rate::numeric               AS fill_rate,
-    mv.nearest_hub_id,
-    mv.alt_hub_id,
-    mv.reason,
-    mv.assign_delta_km::int             AS assign_delta_km,
-    mv.assign_delta_cost::int           AS assign_delta_cost,
-    mv.baseline_hub_id,
-    mv.baseline_km::int                 AS baseline_km,
-    mv.planned::boolean                 AS planned,
-    mv.repaired::boolean                AS repaired,
-    mv.capped::boolean                  AS capped,
-    mv.why_json
-FROM mv
-JOIN edge USING (hk_hcmis_dispatch)
-LEFT JOIN {{ ref('commodity_reference') }} cr ON cr.commodity_id = mv.commodity_key
+    facility_code || ':' || product_code                AS movement_id,
+    period_id,
+    hub_id                                              AS from_hub_id,
+    facility_code                                       AS to_node_id,
+    region_name                                         AS region,
+    region_id,
+    product_name                                        AS drug,
+    product_name                                        AS drug_short,
+    product_code                                        AS commodity_key,
+    programme_id,
+    ceil(coalesce(greatest(units, 0), 0))::int          AS units,
+    round(rate)::int                                    AS amc,
+    CASE WHEN rate > 0 THEN round((greatest(soh, 0) / rate)::numeric, 2) END AS mos,
+    CASE WHEN rate > 0 THEN floor(greatest(soh, 0) / (rate / 30.0))::int END AS days_to_stockout,
+    CASE WHEN rate > 0 AND max_months > 0
+         THEN round(100 * greatest(0, least(1, 1 - (greatest(soh, 0) / rate) / max_months)))::int
+         ELSE 0 END                                     AS priority,
+    round(km)::int                                      AS lane_km,
+    NULL::int                                           AS cost_units,
+    stop_seq::int                                       AS sequence_index,
+    CASE WHEN planned_order THEN 'R-' || hub_id || '-' || period_id END AS vehicle_run_id,
+    NULL::numeric                                       AS fill_rate,
+    hub_id                                              AS nearest_hub_id,
+    NULL::text                                          AS alt_hub_id,
+    'district'::text                                    AS reason,
+    0                                                   AS assign_delta_km,
+    NULL::int                                           AS assign_delta_cost,
+    hub_id                                              AS baseline_hub_id,
+    round(km)::int                                      AS baseline_km,
+    planned_order                                       AS planned,
+    false                                               AS repaired,
+    false                                               AS capped,
+    json_build_object('opening', round(soh), 'signal', -round(rate), 'prePlan', round(soh - rate),
+                      'inbound', ceil(coalesce(greatest(units, 0), 0)),
+                      'postPlan', round(soh - rate) + ceil(coalesce(greatest(units, 0), 0)))::text AS why_json,
+    demand_basis,
+    at_risk
+FROM seq

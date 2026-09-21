@@ -1,13 +1,11 @@
 /**
  * Runtime data holder for the Supply Control Tower.
  *
- * Initialised from the bundled static plan (`plan.ts`, the offline fallback), then
- * repopulated from the REAL marts via the gateway route `/gw/ct/plan` on first
- * mount. Every CT module imports the plan symbols from HERE instead of `plan.ts`,
- * so ES live-bindings propagate the swap to all importers with zero component
- * changes — `filterMovements`, the map, the rail and the dispatch table all read
- * the mart-backed data once it arrives, and the static bundle keeps the page alive
- * if the gateway is unreachable.
+ * Empty until the REAL marts arrive via the gateway route `/gw/ct/plan` on first
+ * mount. Every CT module imports the plan symbols from HERE instead of `plan.ts`
+ * (which now only supplies the types and `byId`), so ES live-bindings propagate the
+ * data to all importers — `filterMovements`, the map, the rail and the dispatch table
+ * all read the mart-backed data once it arrives.
  */
 import * as STATIC from './plan';
 import { authFetch } from '../../api/useAuth';
@@ -16,23 +14,29 @@ import { authFetch } from '../../api/useAuth';
 export type { Warehouse, DeliveryNode, Why, Movement, StopLine, VehicleStop, VehicleRun, Period } from './plan';
 export { byId } from './plan';
 
-// Mutable data bindings — start from the static plan, reassigned by applyPlan().
-export let REGIONS = STATIC.REGIONS;
-export let REGION_NAMES = STATIC.REGION_NAMES;
-export let PERIODS = STATIC.PERIODS;
-export let CURRENT_PERIOD = STATIC.CURRENT_PERIOD;
-export let COMMODITIES = STATIC.COMMODITIES;
-export let WAREHOUSES = STATIC.WAREHOUSES;
-export let NODES = STATIC.NODES;
-export let MOVEMENTS = STATIC.MOVEMENTS;
-export let VEHICLE_RUNS = STATIC.VEHICLE_RUNS;
-export let SELECTED_ID = STATIC.SELECTED_ID;
-export let PERIOD_STATS = STATIC.PERIOD_STATS;
-export let SUMMARY = STATIC.SUMMARY;
-export let BASELINE = STATIC.BASELINE;
-export let WH_BY_ID = STATIC.WH_BY_ID;
-export let NODE_BY_ID = STATIC.NODE_BY_ID;
-export let RUN_BY_ID = STATIC.RUN_BY_ID;
+// Mutable data bindings — empty until the mart-backed plan arrives from /gw/ct/plan.
+// There is deliberately no bundled fallback plan: a fallback would show another
+// country's data whenever the gateway blinks; the page shows its empty state instead.
+export let REGIONS: typeof STATIC.REGIONS = [];
+export let REGION_NAMES: typeof STATIC.REGION_NAMES = [];
+export let PERIODS: typeof STATIC.PERIODS = [];
+export let CURRENT_PERIOD: string = '';
+export let COMMODITIES: typeof STATIC.COMMODITIES = [];
+export let WAREHOUSES: typeof STATIC.WAREHOUSES = [];
+export let NODES: typeof STATIC.NODES = [];
+export let MOVEMENTS: typeof STATIC.MOVEMENTS = [];
+export let VEHICLE_RUNS: typeof STATIC.VEHICLE_RUNS = [];
+export let SELECTED_ID: string = '';
+export let PERIOD_STATS: typeof STATIC.PERIOD_STATS = [];
+export let SUMMARY: typeof STATIC.SUMMARY | null = null;
+export let BASELINE: typeof STATIC.BASELINE | null = null;
+export let WH_BY_ID: typeof STATIC.WH_BY_ID = {} as typeof STATIC.WH_BY_ID;
+export let NODE_BY_ID: typeof STATIC.NODE_BY_ID = {} as typeof STATIC.NODE_BY_ID;
+export let RUN_BY_ID: typeof STATIC.RUN_BY_ID = {} as typeof STATIC.RUN_BY_ID;
+/** Stock-health KPI inputs per region at the latest reported month (numerator /
+ *  denominator), pooled by the cards under the current Region filter. */
+export interface KpiInput { regionId: string | null; kpi: string; category: string; numerator: number; denominator: number; target: number | null; }
+export let KPIS: KpiInput[] = [];
 
 const _byId = (xs: any[]): Record<string, any> =>
   Object.fromEntries((xs || []).map((x: any) => [x.id, x]));
@@ -53,20 +57,23 @@ export function applyPlan(p: any): void {
   if (p.periodStats) PERIOD_STATS = p.periodStats;
   if (p.summary) SUMMARY = p.summary;
   if (p.baseline) BASELINE = p.baseline;
+  if (p.kpis) KPIS = p.kpis;
 }
 
-let _loaded = false;
-/** Fetch the mart-backed plan once. Returns true if real data replaced the static fallback. */
-export async function ensurePlanLoaded(): Promise<boolean> {
-  if (_loaded) return true;
-  _loaded = true;
-  try {
-    const r = await authFetch('/gw/ct/plan');
-    if (!r.ok) return false;
-    const p = await r.json();
-    applyPlan(p);
-    return true;
-  } catch {
-    return false;   // keep the static bundle
-  }
+let _load: Promise<boolean> | null = null;
+/** Fetch the mart-backed plan once. Every caller awaits the SAME request, so no caller
+ *  sees "loaded" before the data has actually arrived. Resolves true when it did. */
+export function ensurePlanLoaded(): Promise<boolean> {
+  if (_load) return _load;
+  _load = (async () => {
+    try {
+      const r = await authFetch('/gw/ct/plan');
+      if (!r.ok) return false;
+      applyPlan(await r.json());
+      return true;
+    } catch {
+      return false;   // the page keeps its empty state
+    }
+  })();
+  return _load;
 }

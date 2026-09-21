@@ -1,8 +1,6 @@
 id: internal-bi/control-tower/main
 page_id: internal-bi/control-tower
 title: Movement planning
-eyebrow: EPSS distribution
-description: Hub-to-facility movement plan, routing, and dispatch for the current period.
 ordering: 10
 columns: 12
 dense: true
