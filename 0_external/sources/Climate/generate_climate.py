@@ -23,7 +23,9 @@ from datetime import date, timedelta
 
 RNG = random.Random(20260701)
 
-REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+# repo root is THREE levels up (0_external/sources/Climate/ → repo), not two.
+# The old ".." x2 wrote to 0_external/bundle/... — harmless only because the
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 CLIMATE_CSV = os.path.join(REPO, "bundle/seeds/sources/climate/weekly.csv")
 
 # 53-week window ending 2026-W27 (aligns with the surveillance + HMIS marts).

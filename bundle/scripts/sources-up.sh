@@ -127,8 +127,28 @@ up_fayda() {
 }
 
 up_climate() {
-  step "Climate — CSV API (no seed; serves the mounted weekly.csv)"
+  step "Climate — CSV API (serves the mounted weekly.csv)"
   ensure_env "$SRC/Climate"
+  # The weekly.csv it serves is a gitignored seed (bundle/seeds/sources/**/*.csv),
+  # so it is ABSENT on a fresh host and climate-api crash-loops on
+  # FileNotFoundError. Generate it if missing — the generator is committed even
+  # though its output is not. Same class as dhis.conf: a wipe or a fresh checkout
+  # leaves a mounted file gone, and the container cannot start without it.
+  CLIMATE_CSV="$REPO/bundle/seeds/sources/climate/weekly.csv"
+  if [ ! -f "$CLIMATE_CSV" ]; then
+    if [ "$WANT_PROFILE" != "et-v3" ]; then
+      # The generator hardcodes Ethiopian region climate profiles, so a
+      # non-default country has no honest climate data. Skip the source rather
+      # than serve Ethiopian rainfall under another flag; the profile catalog
+      # disables the widgets that read it.
+      warn "climate has no ${WANT_PROFILE} data (generator is Ethiopia-only) — skipping"
+      return 0
+    fi
+    log "weekly.csv missing — generating it (gitignored seed)"
+    ( cd "$SRC/Climate" && python3 generate_climate.py ) \
+      && log "climate weekly.csv generated" \
+      || { warn "climate generate failed — cannot start climate-api"; return 1; }
+  fi
   compose "$SRC/Climate" up -d >/dev/null 2>&1 || { warn "climate compose up failed"; return 1; }
   wait_healthy climate-api 120 && log "climate-api healthy" || warn "climate-api not healthy (continuing)"
 }
