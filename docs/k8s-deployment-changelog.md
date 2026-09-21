@@ -248,3 +248,37 @@ supplies, then asserts the six databases, the four `ops_*` schemas, the three
 needs Docker and nothing else, so it runs in the hosted CI job on every push.
 Verified both ways: green on the fixed tree, and red — naming the file and the
 error — on a copy with one `\connect` removed.
+
+## 2026-09-21 — the vocabulary reload had never been able to run
+
+**Symptom.** With the DDL tier finally applying all 40 init files, a full-scope
+deploy got one tier further and stopped: `✗ vocab reload failed`, with
+`unexpected COPY_IN result, aborting connection`.
+
+**Root cause, in two layers.**
+
+1. `seed-ref-vocab.sh` fed a multi-statement `psql -c` containing
+   `COPY _in (...) FROM STDIN`. psql sends a `-c` string as ONE simple query and
+   has no way to hand that same channel over to copy data mid-batch, so the load
+   could never succeed in that shape. The path only runs when the ref-vocab seeds
+   change or a deploy is full-scope — both rare — so it sat broken.
+
+2. Fixing that exposed `ERROR: unquoted newline found in data`. The built CSVs are
+   CRLF: `csv.writer` defaults to the `excel` dialect (`lineterminator='\r\n'`) and
+   `newline=""` passes it through verbatim. `COPY` locks onto the newline
+   convention of the first data row and then rejected the LF-only `\.` terminator.
+
+**Fix.** The load now goes in as a script on stdin — CSV inline, `\.` terminator,
+wrapped in an explicit transaction because `ON COMMIT DROP` would otherwise drop
+the temp table the instant the `CREATE` autocommits. A failed load aborts instead
+of being discarded. `build_vocab.py` writes LF (`lineterminator="\n"`), the loader
+strips CR so an older `_build/` still loads, and `test_build_vocab.py` asserts the
+built files are LF.
+
+**Verified live.** 16 vocabularies, 7 domains, 7 concept classes, 163 concepts, 133
+relationships, 187 crosswalk rows, exit 0; vocabulary suite 9/9.
+
+**The pattern, again.** Three init files and now the vocabulary loader — every one
+of them on a path that only executes during a cold boot or a full-scope deploy.
+Making failures honest is what surfaced them: each had been failing silently or
+never running at all.
