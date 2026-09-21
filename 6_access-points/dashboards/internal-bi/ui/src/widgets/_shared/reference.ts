@@ -6,13 +6,90 @@
  * here instead of the legacy biApp engine, so each widget folder depends only on
  * dashboard-scoped, pure code (keeps them plugin-shaped: the only cross-shell
  * dependency a widget has is its WidgetCtx).
+ *
+ * PROFILE-DRIVEN SINCE 2026-09. The tables below are no longer the source of
+ * truth — they are the FALLBACK. `loadReference()` fills them from
+ * /gw/profile/reference, which the gateway compiles from the entity model the
+ * warehouse itself was built from. Before that, this file, `biApp.ts` and the
+ * Control Tower's `ct/data/plan.ts` each declared the region list separately,
+ * three chances to drift from the data.
+ *
+ * They are populated IN PLACE (length = 0, then push) rather than reassigned,
+ * because twenty-nine modules already hold a reference to these arrays and must
+ * see the update without any of them changing. `main.tsx` awaits the load before
+ * the first render, so a widget never sees a half-filled table.
  */
 
-export const REGIONS = [
+export const REGIONS: string[] = [
   'Addis Ababa', 'Afar', 'Amhara', 'Benishangul Gumuz', 'Central Ethiopia',
   'Dire Dawa', 'Gambella', 'Harari', 'Oromia', 'Sidama', 'Somali',
   'South Ethiopia', 'South West Ethiopia', 'Tigray',
 ];
+
+/** admin-1 display name → the name used by the boundary file, resolved at
+ *  profile BUILD time. Replaces the runtime normaliser in _shared/geo.ts, which
+ *  carried a literal `.replace('gambella','gambela')` to paper over the fact
+ *  that two sources spell the same place differently. */
+export const REGION_GEO_NAME: Record<string, string> = {};
+
+/** The same regions as {code,name} — the shape the filter chrome wants, where the
+ *  CODE is the value the marts key on (region_id) and the name is only a label.
+ *  Kept here so `biApp.ts` can consume it instead of declaring the list a second
+ *  time in a second shape. */
+export const REGION_OPTIONS: Array<{ code: string; name: string }> = [
+  { code: 'AA', name: 'Addis Ababa' },       { code: 'AF', name: 'Afar' },
+  { code: 'AM', name: 'Amhara' },            { code: 'BG', name: 'Benishangul-Gumuz' },
+  { code: 'CE', name: 'Central Ethiopia' },  { code: 'DD', name: 'Dire Dawa' },
+  { code: 'GA', name: 'Gambella' },          { code: 'HA', name: 'Harari' },
+  { code: 'OR', name: 'Oromia' },            { code: 'SE', name: 'South Ethiopia' },
+  { code: 'SI', name: 'Sidama' },            { code: 'SO', name: 'Somali' },
+  { code: 'SW', name: 'South West Ethiopia' },{ code: 'TI', name: 'Tigray' },
+];
+
+/** Commodities, for the supply filters. Refilled from the profile; this list is
+ *  the fallback, so the filter still populates when the gateway is unreachable.
+ *  Note the code IS the name here — the supply marts key on the display string
+ *  rather than a short code, unlike regions and programmes. */
+export const COMMODITIES: Array<{ code: string; name: string }> = [
+  { code: 'Amlodipine 5mg', name: 'Amlodipine 5mg' },
+  { code: 'Amoxicillin 250 DT', name: 'Amoxicillin 250 DT' },
+  { code: 'Artemether-Lumefantrine', name: 'Artemether-Lumefantrine' },
+  { code: 'BCG vaccine', name: 'BCG vaccine' },
+  { code: 'COVID-19 vaccine', name: 'COVID-19 vaccine' },
+  { code: 'Combined oral contracept.', name: 'Combined oral contracept.' },
+  { code: 'Depo-Provera', name: 'Depo-Provera' },
+  { code: 'Fortified blended food', name: 'Fortified blended food' },
+  { code: 'GeneXpert cartridge', name: 'GeneXpert cartridge' },
+  { code: 'HIV RDT kit', name: 'HIV RDT kit' },
+  { code: 'HPV vaccine', name: 'HPV vaccine' },
+  { code: 'IPV (inactivated polio)', name: 'IPV (inactivated polio)' },
+  { code: 'Implanon NXT', name: 'Implanon NXT' },
+  { code: 'Insulin · regular 100 IU', name: 'Insulin · regular 100 IU' },
+  { code: 'Iron-folate', name: 'Iron-folate' },
+  { code: 'Isoniazid 300mg', name: 'Isoniazid 300mg' },
+  { code: 'LLIN bed net', name: 'LLIN bed net' },
+  { code: 'Losartan 50mg', name: 'Losartan 50mg' },
+  { code: 'Magnesium sulphate 50%', name: 'Magnesium sulphate 50%' },
+  { code: 'Malaria RDT pf/pv', name: 'Malaria RDT pf/pv' },
+  { code: 'Measles-Rubella', name: 'Measles-Rubella' },
+  { code: 'Metformin 500mg', name: 'Metformin 500mg' },
+  { code: 'OPV trivalent', name: 'OPV trivalent' },
+  { code: 'ORS sachet', name: 'ORS sachet' },
+  { code: 'Oxytocin 10 IU/ml', name: 'Oxytocin 10 IU/ml' },
+  { code: 'PCV-13', name: 'PCV-13' },
+  { code: 'Paracetamol 500mg', name: 'Paracetamol 500mg' },
+  { code: 'Pediatric ART', name: 'Pediatric ART' },
+  { code: 'Pentavalent DTwP-HepB-Hib', name: 'Pentavalent DTwP-HepB-Hib' },
+  { code: 'RHZE fixed-dose combo', name: 'RHZE fixed-dose combo' },
+  { code: 'RUTF (ready-to-use)', name: 'RUTF (ready-to-use)' },
+  { code: 'Rotavirus vaccine', name: 'Rotavirus vaccine' },
+  { code: 'TLD · adult ART', name: 'TLD · adult ART' },
+  { code: 'Tetanus toxoid', name: 'Tetanus toxoid' },
+];
+
+/** What the geography filter's wildcard option is called. "All Ethiopia" was a
+ *  country name sitting inside a UI string; it comes from the profile now. */
+export const scopeLabels = { allGeography: 'All Ethiopia' };
 
 /** 2-letter mart region_id → SPA region name (matches MFR/IDSR org-unit codes). */
 export const REGION_BY_ID: Record<string, string> = {
@@ -22,6 +99,82 @@ export const REGION_BY_ID: Record<string, string> = {
   SW: 'South West Ethiopia', TI: 'Tigray',
 };
 export const regionName = (id: string): string => REGION_BY_ID[id] || id || '-';
+
+// ── profile loading ─────────────────────────────────────────────────────────
+
+/** Replace an array's CONTENTS, keeping its identity so existing imports see it. */
+function refill<T>(target: T[], next: T[]): void {
+  if (!next?.length) return;            // an empty profile table keeps the fallback
+  target.length = 0;
+  target.push(...next);
+}
+
+function rekey(target: Record<string, string>, next: Record<string, string>): void {
+  if (!next || !Object.keys(next).length) return;
+  for (const k of Object.keys(target)) delete target[k];
+  Object.assign(target, next);
+}
+
+let loaded = false;
+
+/**
+ * Fill the tables from the active country profile. Awaited by main.tsx before
+ * the first render.
+ *
+ * Never throws and never blocks for long: on any failure the bundled Ethiopian
+ * tables stay in place and the dashboard renders exactly as it did before
+ * profiles existed. A dashboard whose region filter is one deploy stale is a
+ * working dashboard; one that will not paint because a fetch hung is not.
+ */
+export async function loadReference(timeoutMs = 4000): Promise<void> {
+  if (loaded) return;
+  loaded = true;
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    const res = await fetch('/gw/profile/reference', { signal: ctl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return;
+    const ref = await res.json();
+
+    const regions: Array<{ code: string; name: string; geo_name?: string }> = ref.regions || [];
+    if (regions.length) {
+      // The SPA's region NAME is the short display form the boundary file uses
+      // ("Oromia"), not the entity model's formal one ("Oromia Region") — the
+      // formal name is correct on a report and too long for a filter chip.
+      refill(REGIONS, regions.map(r => r.geo_name || r.name));
+      refill(REGION_OPTIONS, regions.map(r => ({ code: r.code, name: r.geo_name || r.name })));
+      rekey(REGION_BY_ID, Object.fromEntries(
+        regions.map(r => [r.code, r.geo_name || r.name])));
+      rekey(REGION_GEO_NAME, Object.fromEntries(
+        regions.filter(r => r.geo_name).map(r => [r.geo_name!, r.geo_name!])));
+    }
+
+    refill(PROGRAMMES, (ref.programmes || [])
+      .filter((p: any) => p?.code)
+      .map((p: any) => ({ code: p.code, name: p.name || p.code })));
+
+    refill(COMMODITIES, (ref.commodities || [])
+      .filter((c: any) => c?.code)
+      .map((c: any) => ({ code: c.code, name: c.name || c.code })));
+
+    refill(DISEASES, (ref.diseases || [])
+      .filter((d: any) => d?.key)
+      .map((d: any) => ({ key: d.key, name: d.name || d.key, climate: !!d.climate })));
+    rekey(DISEASE_NAME, Object.fromEntries(DISEASES.map(d => [d.key, d.name])));
+
+    // "All Ethiopia" → "All Zambia". Served already-resolved by the gateway.
+    try {
+      const cres = await fetch('/gw/profile/copy/common');
+      if (cres.ok) {
+        const common = await cres.json();
+        if (common?.scope?.all_geography) scopeLabels.allGeography = common.scope.all_geography;
+      }
+    } catch { /* label stays as bundled */ }
+  } catch {
+    /* bundled tables stand — see the doc comment */
+  }
+}
 
 // {code,name}: value is the mart programme_id CODE (uppercase), name is the label.
 // Mirrors biApp.ts PROGRAMMES so filter values ('MALARIA') match programme_id.

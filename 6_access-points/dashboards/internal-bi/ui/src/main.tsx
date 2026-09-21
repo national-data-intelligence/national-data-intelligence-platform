@@ -24,6 +24,7 @@ import './styles/x-cloak.css';
 import './styles/runtime.css';
 import App from './App';
 import { installDashboardApi } from './api/dashboardApi';
+import { loadReference } from './widgets/_shared/reference';
 
 // Chatbot SPA-side action surface — see api/dashboardApi.ts.
 installDashboardApi();
@@ -33,4 +34,11 @@ installDashboardApi();
 // behaviour (the paginated_table renderer auto-sets `ws.sort = options[0]`
 // after first render, so a second call sorts the rows and breaks pixel-diff
 // against the mockup which never re-renders).
-createRoot(document.getElementById('root')!).render(<App />);
+// Fill the reference tables from the active country profile BEFORE the first
+// render, so a widget never paints a stale region filter and then swaps it. The
+// call never rejects and self-limits to a few seconds — on any failure the
+// bundled tables stand and the dashboard renders exactly as it did before
+// profiles existed.
+loadReference().finally(() => {
+  createRoot(document.getElementById('root')!).render(<App />);
+});

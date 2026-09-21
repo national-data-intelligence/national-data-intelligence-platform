@@ -18,6 +18,15 @@
 // @ts-nocheck
 /* eslint-disable */
 
+// Reference tables come from _shared/reference.ts, which fills them from the
+// active country profile at boot. They used to be declared here as well — a
+// second copy of the region list in a second shape, free to drift from the one
+// the warehouse was built from.
+import {
+  REGION_OPTIONS as REGIONS, REGION_BY_ID, PROGRAMMES, DISEASES, DISEASE_NAME,
+  COMMODITIES, scopeLabels,
+} from './widgets/_shared/reference';
+
 import { T } from './theme';
 import { fetchDashboardSpec, SPEC_DENIED } from './api/spec';
 import { authFetch } from './api/useAuth';
@@ -32,55 +41,11 @@ declare global {
 // Region filter values are the CODES the marts key on (region_id); the name is
 // the display label. The global-filter + AlertModal emit {code} as the value so a
 // wildcard user's pick ('OR') matches the mart, exactly like a scoped user's cap.
-const REGIONS = [
-  { code: 'AA', name: 'Addis Ababa' },       { code: 'AF', name: 'Afar' },
-  { code: 'AM', name: 'Amhara' },            { code: 'BG', name: 'Benishangul-Gumuz' },
-  { code: 'CE', name: 'Central Ethiopia' },  { code: 'DD', name: 'Dire Dawa' },
-  { code: 'GA', name: 'Gambella' },          { code: 'HA', name: 'Harari' },
-  { code: 'OR', name: 'Oromia' },            { code: 'SE', name: 'South Ethiopia' },
-  { code: 'SI', name: 'Sidama' },            { code: 'SO', name: 'Somali' },
-  { code: 'SW', name: 'South West Ethiopia' },{ code: 'TI', name: 'Tigray' },
-];
 // 2-letter region codes used across the marts (mart region_id) → SPA region names.
 // Same coding as the MFR/IDSR sources (WOR-<REG>-… org-unit codes).
-const REGION_BY_ID = {
-  AA: 'Addis Ababa', AF: 'Afar', AM: 'Amhara', BG: 'Benishangul Gumuz',
-  CE: 'Central Ethiopia', DD: 'Dire Dawa', GA: 'Gambella', HA: 'Harari',
-  OR: 'Oromia', SI: 'Sidama', SO: 'Somali', SE: 'South Ethiopia',
-  SW: 'South West Ethiopia', TI: 'Tigray',
-};
 // Programme filter values are the mart programme_id CODES (uppercase); the name is
 // the display label. Same code-as-value contract as REGIONS so a wildcard pick
 // ('MALARIA') matches programme_id in the marts.
-const PROGRAMMES = [
-  { code: 'HIV', name: 'HIV' },        { code: 'TB', name: 'TB' },
-  { code: 'EPI', name: 'Immunization (EPI)' }, { code: 'MNCH', name: 'MNCH' },
-  { code: 'NCD', name: 'NCD' },        { code: 'MALARIA', name: 'Malaria' },
-  { code: 'FP', name: 'Family Planning' }, { code: 'NUTRITION', name: 'Nutrition' },
-];
-const DISEASES = [
-  {key:'cholera',     name:'Cholera',          tier:'high',  climate:true,  cfr_base:2.1,  seasonalPeak:32},
-  {key:'measles',     name:'Measles',          tier:'high',  climate:false, cfr_base:0.8,  seasonalPeak:10},
-  {key:'awd',         name:'AWD',              tier:'high',  climate:true,  cfr_base:1.4,  seasonalPeak:30},
-  {key:'malaria',     name:'Malaria',          tier:'high',  climate:true,  cfr_base:0.3,  seasonalPeak:38},
-  {key:'meningitis',  name:'Meningitis',       tier:'high',  climate:false, cfr_base:9.4,  seasonalPeak:8},
-  {key:'dengue',      name:'Dengue',           tier:'med',   climate:true,  cfr_base:0.5,  seasonalPeak:42},
-  {key:'yellowfever', name:'Yellow fever',     tier:'med',   climate:true,  cfr_base:6.0,  seasonalPeak:40},
-  {key:'pertussis',   name:'Pertussis',        tier:'med',   climate:false, cfr_base:0.5,  seasonalPeak:14},
-  {key:'typhoid',     name:'Typhoid fever',    tier:'med',   climate:true,  cfr_base:1.5,  seasonalPeak:28},
-  {key:'plague',      name:'Plague',           tier:'med',   climate:false, cfr_base:12.0, seasonalPeak:18},
-  {key:'rabies',      name:'Rabies',           tier:'med',   climate:false, cfr_base:98.0, seasonalPeak:22},
-  {key:'tetanus',     name:'Neonatal tetanus', tier:'med',   climate:false, cfr_base:18.0, seasonalPeak:6 },
-  {key:'anthrax',     name:'Anthrax',          tier:'low',   climate:false, cfr_base:20.0, seasonalPeak:20},
-  {key:'hepa',        name:'Hepatitis A',      tier:'low',   climate:true,  cfr_base:0.3,  seasonalPeak:34},
-  {key:'chikungunya', name:'Chikungunya',      tier:'low',   climate:true,  cfr_base:0.1,  seasonalPeak:44},
-  {key:'mpox',        name:'Mpox',             tier:'med',   climate:false, cfr_base:1.2,  seasonalPeak:16},
-  {key:'covid19',     name:'COVID-19',         tier:'med',   climate:false, cfr_base:1.8,  seasonalPeak:50},
-  {key:'leishmaniasis',name:'Visceral leishmaniasis', tier:'low', climate:true, cfr_base:5.0, seasonalPeak:24},
-  {key:'leptospirosis',name:'Leptospirosis',   tier:'low',   climate:true,  cfr_base:3.0,  seasonalPeak:34},
-  {key:'guineaworm',  name:'Guinea worm',      tier:'low',   climate:true,  cfr_base:0.0,  seasonalPeak:28},
-];
-const DISEASE_NAME = Object.fromEntries(DISEASES.map(d => [d.key, d.name]));
 const PERIOD_OPTS = { 'all':'All time','last_4wk':'Last 4 weeks','last_12wk':'Last 12 weeks','last_6mo':'Last 6 months','last_12mo':'Last 12 months','last_24mo':'Last 24 months','ytd':'Year to date','efy_ytd':'Ethiopian FY to date' };
 // Commodity filter values are the EXACT mart commodity_name strings — the code IS
 // the name because the supply marts (bi_supply.mart_supply_region_stock /
@@ -88,42 +53,6 @@ const PERIOD_OPTS = { 'all':'All time','last_4wk':'Last 4 weeks','last_12wk':'La
 // filter catalog (bundle/seed-pack/app/security/filters.yaml, id: commodity) and the
 // fetchers' commodity_col narrowing. A PLAIN narrowing filter (like period): no
 // role scope, always the full list.
-const COMMODITIES = [
-  { code: 'Amlodipine 5mg', name: 'Amlodipine 5mg' },
-  { code: 'Amoxicillin 250 DT', name: 'Amoxicillin 250 DT' },
-  { code: 'Artemether-Lumefantrine', name: 'Artemether-Lumefantrine' },
-  { code: 'BCG vaccine', name: 'BCG vaccine' },
-  { code: 'COVID-19 vaccine', name: 'COVID-19 vaccine' },
-  { code: 'Combined oral contracept.', name: 'Combined oral contracept.' },
-  { code: 'Depo-Provera', name: 'Depo-Provera' },
-  { code: 'Fortified blended food', name: 'Fortified blended food' },
-  { code: 'GeneXpert cartridge', name: 'GeneXpert cartridge' },
-  { code: 'HIV RDT kit', name: 'HIV RDT kit' },
-  { code: 'HPV vaccine', name: 'HPV vaccine' },
-  { code: 'IPV (inactivated polio)', name: 'IPV (inactivated polio)' },
-  { code: 'Implanon NXT', name: 'Implanon NXT' },
-  { code: 'Insulin · regular 100 IU', name: 'Insulin · regular 100 IU' },
-  { code: 'Iron-folate', name: 'Iron-folate' },
-  { code: 'Isoniazid 300mg', name: 'Isoniazid 300mg' },
-  { code: 'LLIN bed net', name: 'LLIN bed net' },
-  { code: 'Losartan 50mg', name: 'Losartan 50mg' },
-  { code: 'Magnesium sulphate 50%', name: 'Magnesium sulphate 50%' },
-  { code: 'Malaria RDT pf/pv', name: 'Malaria RDT pf/pv' },
-  { code: 'Measles-Rubella', name: 'Measles-Rubella' },
-  { code: 'Metformin 500mg', name: 'Metformin 500mg' },
-  { code: 'OPV trivalent', name: 'OPV trivalent' },
-  { code: 'ORS sachet', name: 'ORS sachet' },
-  { code: 'Oxytocin 10 IU/ml', name: 'Oxytocin 10 IU/ml' },
-  { code: 'PCV-13', name: 'PCV-13' },
-  { code: 'Paracetamol 500mg', name: 'Paracetamol 500mg' },
-  { code: 'Pediatric ART', name: 'Pediatric ART' },
-  { code: 'Pentavalent DTwP-HepB-Hib', name: 'Pentavalent DTwP-HepB-Hib' },
-  { code: 'RHZE fixed-dose combo', name: 'RHZE fixed-dose combo' },
-  { code: 'RUTF (ready-to-use)', name: 'RUTF (ready-to-use)' },
-  { code: 'Rotavirus vaccine', name: 'Rotavirus vaccine' },
-  { code: 'TLD · adult ART', name: 'TLD · adult ART' },
-  { code: 'Tetanus toxoid', name: 'Tetanus toxoid' },
-];
 
 
 function biApp() {
@@ -236,7 +165,7 @@ function biApp() {
     },
     filterLabel(key) {
       const v = this.filters[key];
-      if (key === 'geography') return v === 'all' ? 'All Ethiopia' : (REGIONS.find(r => r.code === v)?.name || v);
+      if (key === 'geography') return v === 'all' ? scopeLabels.allGeography : (REGIONS.find(r => r.code === v)?.name || v);
       if (key === 'period')    return PERIOD_OPTS[v] || v;
       if (key === 'programme') {
         if (v === 'all') return 'All programmes';
