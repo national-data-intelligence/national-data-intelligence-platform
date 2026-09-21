@@ -41,6 +41,12 @@ not per-series fitting, decides which method serves each class.
 (`forecast_contract.yaml`); the Gaussian lwr95/upr95 columns are retired (empty).
 `bi_supply.mart_pct_forecast` serves the latest batch run of a version that carries this
 backtest, with the version and MLflow run on every row.
-Registered as a challenger; promotion follows the contract's rule.
+**Promotion.** Version 4 was promoted to `@champion` on 2026-09-21 through the gateway's
+promote route by an operator (R-OPS-ADM; MLflow alias + gateway audit event), after its logged
+`champion_rule_passed = 1`. The route itself does not check the rule; the operator does, from the
+run's metrics. Version 1 (the pre-contract damped-Holt model) stays registered; rollback = promote
+it again. Because `bi_supply.mart_pct_forecast` serves only versions that carry the contract
+backtest, a surface must compare the mart's `model_version` with the live champion and fall back
+to eLMIS AMC, labelled, when they differ.
 
 **Owner.** PCT (Abenezer).
