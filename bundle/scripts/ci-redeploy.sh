@@ -104,8 +104,13 @@ if touched "bundle/profiles/"; then
     # --delete so a file removed upstream goes here too. Writable-by-us first,
     # sudo second: the runner may or may not own the directory, and the whole
     # script already treats sudo as available-but-not-guaranteed.
-    rsync -a --delete "$REPO/bundle/profiles/" "$PROFILE_DEST/" 2>/dev/null \
-      || sudo rsync -a --delete "$REPO/bundle/profiles/" "$PROFILE_DEST/" \
+    # --exclude ACTIVE is load-bearing: which profile is active is STATE, not
+    # content, and it is not in the repository. The gateway falls back to
+    # <profile dir>/ACTIVE when /opt/nhdw-state/ACTIVE is absent, so a --delete
+    # without this exclusion silently resets the deployment's country on every
+    # profile edit.
+    rsync -a --delete --exclude ACTIVE "$REPO/bundle/profiles/" "$PROFILE_DEST/" 2>/dev/null \
+      || sudo rsync -a --delete --exclude ACTIVE "$REPO/bundle/profiles/" "$PROFILE_DEST/" \
       || { echo "  ✗ could not sync profiles to $PROFILE_DEST"; exit 1; }
     echo "  profiles now: $(ls -1 "$PROFILE_DEST" 2>/dev/null | tr '\n' ' ')"
   else
