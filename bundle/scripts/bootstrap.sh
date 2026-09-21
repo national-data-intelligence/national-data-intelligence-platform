@@ -76,7 +76,18 @@ case "${1:-}" in
     shift
     if [ "${1:-}" = "--keep-cluster" ]; then
       echo "▸ deleting the dev overlay (keeping cluster ${CLUSTER})"
-      kubectl delete -k "$OVERLAY" --ignore-not-found 2>&1 | tail -5
+      # Mirror the apply path exactly: apply pipes `kustomize build
+      # --load-restrictor=LoadRestrictionsNone` into kubectl, because the base's
+      # configMapGenerator reaches files outside the kustomize root (jupyterhub
+      # profiles, init SQL). `kubectl delete -k` enforces the default
+      # restrictions and refuses the whole overlay — so this teardown deleted
+      # NOTHING while looking like it ran. Same builder in both directions.
+      kustomize build --load-restrictor=LoadRestrictionsNone "$OVERLAY" \
+        | kubectl delete --ignore-not-found -f - 2>&1 | tail -5
+      # StatefulSet volumes come from volumeClaimTemplates, so they are NOT in
+      # the manifest stream and survive the delete above — including, once, a
+      # half-initialized postgres volume that would have poisoned the next boot.
+      kubectl -n "$NS" delete pvc --all --ignore-not-found --timeout=120s 2>&1 | tail -3
     else
       echo "▸ deleting k3d cluster ${CLUSTER} (all state)"
       k3d cluster delete "$CLUSTER"
