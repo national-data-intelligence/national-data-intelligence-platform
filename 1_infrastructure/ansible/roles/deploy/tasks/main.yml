@@ -56,12 +56,14 @@
 # than hardcoded, so a new Job in the chart is handled automatically.
 - name: Delete finished chart Jobs (immutable — helm cannot patch them)
   ansible.builtin.shell:
-    cmd: >-
-      set -o pipefail;
-      {{ nhdw_helm }} template {{ nhdw_release | default('nhdw') }} {{ nhdw_chart_dir }}
-        -n {{ nhdw_namespace }} -f {{ nhdw_values_file }} --set hostBase={{ nhdw_host_base }}
-      | python3 -c 'import sys,yaml; [print(d["metadata"]["name"]) for d in yaml.safe_load_all(sys.stdin) if d and d.get("kind")=="Job"]'
-      | xargs -r -n1 kubectl -n {{ nhdw_namespace }} delete job --ignore-not-found
+    # literal block, NOT a folded one: in a folded scalar YAML keeps the
+    # newlines of more-indented lines, which split this pipeline into separate
+    # commands ("-n: command not found").
+    cmd: |
+      set -o pipefail
+      {{ nhdw_helm }} template {{ nhdw_release | default('nhdw') }} {{ nhdw_chart_dir }} -n {{ nhdw_namespace }} -f {{ nhdw_values_file }} --set hostBase={{ nhdw_host_base }} \
+        | python3 -c 'import sys,yaml; [print(d["metadata"]["name"]) for d in yaml.safe_load_all(sys.stdin) if d and d.get("kind")=="Job"]' \
+        | xargs -r -n1 kubectl -n {{ nhdw_namespace }} delete job --ignore-not-found
     executable: /bin/bash
   register: deploy_job_clear
   changed_when: "'deleted' in deploy_job_clear.stdout"
