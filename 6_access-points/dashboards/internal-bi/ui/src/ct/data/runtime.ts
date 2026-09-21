@@ -36,7 +36,7 @@ export let NODE_BY_ID: typeof STATIC.NODE_BY_ID = {} as typeof STATIC.NODE_BY_ID
 export let RUN_BY_ID: typeof STATIC.RUN_BY_ID = {} as typeof STATIC.RUN_BY_ID;
 /** Stock-health KPI inputs per region at the latest reported month (numerator /
  *  denominator), pooled by the cards under the current Region filter. */
-export interface KpiInput { regionId: string | null; kpi: string; category: string; numerator: number; denominator: number; target: number | null; }
+export interface KpiInput { regionId: string | null; kpi: string; category: string; month?: string; numerator: number; denominator: number; target: number | null; }
 export let KPIS: KpiInput[] = [];
 /** Whether the caller may approve / reject plan lines (the gateway's decision gate). */
 export let CAN_DECIDE = false;

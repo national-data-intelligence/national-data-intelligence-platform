@@ -54,6 +54,79 @@ function runPath(r: VehicleRun): [number, number][] {
 // muted route/node colors (dampened per feedback)
 // Routes and borders are separated by HUE, not weight. Borders are neutral grey;
 // routes are gold, which is the only warm element on a cool green basemap.
+/** Quiet demand-shading + label styling (design-review spec). */
+const SHADE = {
+  ramp: [[0, '#F1F5F9'], [0.5, '#CBD5E1'], [1, '#94A3B8']] as [number, string][],
+  noData: '#FFFFFF', opacity: 0.40, noDataOpacity: 0.10,
+  label: '#475569', labelHalo: '#FFFFFF',
+  netArc: '#2F6FB0', netArcSel: '#14477F',
+};
+const normName = (v: string): string => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+/** The country's outer boundary from its admin-1 polygons: every polygon edge that
+ *  appears exactly once is on the outside. Exact for any profile's geometry. */
+function outerBoundary(g: any): any {
+  const seen = new Map<string, [number, number][]>();
+  const key = (a: number[], b: number[]) => {
+    const p = `${a[0].toFixed(6)},${a[1].toFixed(6)}`, q = `${b[0].toFixed(6)},${b[1].toFixed(6)}`;
+    return p < q ? `${p}|${q}` : `${q}|${p}`;
+  };
+  const rings = (c: any): any[] => (typeof c[0][0][0] === 'number' ? c : c.flat());
+  for (const f of g.features || []) {
+    for (const ring of rings(f.geometry.coordinates)) {
+      for (let i = 0; i < ring.length - 1; i++) {
+        const k = key(ring[i], ring[i + 1]);
+        if (seen.has(k)) seen.delete(k); else seen.set(k, [ring[i], ring[i + 1]]);
+      }
+    }
+  }
+  return { type: 'Feature', properties: {},
+           geometry: { type: 'MultiLineString', coordinates: [...seen.values()] } };
+}
+
+function provinceCentroid(f: any): [number, number] {
+  let x0 = 180, x1 = -180, y0 = 90, y1 = -90;
+  const walk = (c: any) => { if (typeof c[0] === 'number') { x0 = Math.min(x0, c[0]); x1 = Math.max(x1, c[0]); y0 = Math.min(y0, c[1]); y1 = Math.max(y1, c[1]); } else c.forEach(walk); };
+  walk(f.geometry.coordinates);
+  return [(x0 + x1) / 2, (y0 + y1) / 2];
+}
+
+/** Per-province planned units from the CURRENT slice → RANK-normalised grey fills
+ *  (rank, not raw share: one dominant province must not flatten the rest). */
+function rampColor(t: number): string {
+  const stops = SHADE.ramp;
+  for (let i = 1; i < stops.length; i++) {
+    if (t <= stops[i][0]) {
+      const [t0, c0] = stops[i - 1], [t1, c1] = stops[i];
+      const u = (t - t0) / (t1 - t0);
+      const px = (c: string) => [1, 3, 5].map(j => parseInt(c.slice(j, j + 2), 16));
+      const a = px(c0), b = px(c1);
+      return '#' + a.map((av, j) => Math.round(av + (b[j] - av) * u).toString(16).padStart(2, '0')).join('');
+    }
+  }
+  return stops[stops.length - 1][1];
+}
+
+function shadeExpressions(movs: Movement[], outline: any): { color: any; opacity: any } {
+  const totals: Record<string, number> = {};
+  for (const m of movs) {
+    const region = NODE_BY_ID[m.toId]?.region;
+    if (region) totals[normName(region)] = (totals[normName(region)] || 0) + m.units;
+  }
+  const ranked = Object.keys(totals).sort((a, b) => totals[a] - totals[b]);
+  const t = (k: string) => (ranked.length > 1 ? ranked.indexOf(k) / (ranked.length - 1) : 1);
+  const color: any[] = ['match', ['get', '__norm']];
+  const opacity: any[] = ['match', ['get', '__norm']];
+  for (const f of (outline?.features || [])) {
+    const k = f.properties.__norm;
+    const has = k in totals;
+    color.push(k, has ? rampColor(t(k)) : SHADE.noData);
+    opacity.push(k, has ? SHADE.opacity : SHADE.noDataOpacity);
+  }
+  color.push(SHADE.noData); opacity.push(SHADE.noDataOpacity);
+  return { color, opacity };
+}
+
 const C = {
   route: '#e0a520',        // background routes (gold)
   routeSel: '#a86a08',     // selected route (deep amber)
@@ -95,7 +168,8 @@ const BASEMAP_LAYERS: any[] = [
     paint: { 'line-color': C.borderProvince, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.4, 9, 0.9], 'line-dasharray': [2, 2.5], 'line-opacity': 0.7 } },
   { id: 'boundaries-country', type: 'line', source: 'protomaps', 'source-layer': 'boundaries',
     filter: ['any', ['==', ['get', 'kind'], 'country'], ['<=', ['coalesce', ['get', 'min_admin_level'], 4], 2]],
-    paint: { 'line-color': C.borderNeighbour, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.7, 9, 1.3], 'line-opacity': 0.85 } },
+    layout: { 'line-cap': 'round' as const, 'line-join': 'round' as const },
+    paint: { 'line-color': '#8d9096', 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 1.2, 9, 2.2], 'line-opacity': 0.85 } },
   { id: 'places-locality', type: 'symbol', source: 'protomaps', 'source-layer': 'places',
     filter: ['match', ['get', 'kind'], ['locality', 'city', 'town'], true, false],
     layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'],
@@ -206,6 +280,7 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
   const truckRef = useRef<maplibregl.Marker | null>(null);
   const whMarkersRef = useRef<maplibregl.Marker[]>([]);
   const filteredRef = useRef(false);
+  const outlineRef = useRef<any>(null);
   const rafRef = useRef<number>(0);
   const truckGenRef = useRef(0);
   const readyRef = useRef(false);
@@ -245,15 +320,31 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
         paint: { 'line-color': '#9aa6b4', 'line-width': 0.5, 'line-opacity': 0.12, 'line-dasharray': [2, 3] } });
 
       // The working country's admin-1 lines — bold, so it reads distinctly from neighbours
+      map.addSource('zm-outline', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } as any });
+      map.addSource('zm-border', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } as any });
+      map.addSource('zm-labels', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } as any });
+      const applyOutline = (g: any) => {
+        if (!g) return;
+        for (const f of g.features || []) f.properties.__norm = normName(f.properties.shapeName || f.properties.name);
+        outlineRef.current = g;
+        (map.getSource('zm-outline') as maplibregl.GeoJSONSource | undefined)?.setData(g);
+        (map.getSource('zm-border') as maplibregl.GeoJSONSource | undefined)?.setData(outerBoundary(g) as any);
+        (map.getSource('zm-labels') as maplibregl.GeoJSONSource | undefined)?.setData({
+          type: 'FeatureCollection',
+          features: (g.features || []).map((f: any) => ({
+            type: 'Feature', properties: { name: f.properties.shapeName || f.properties.name },
+            geometry: { type: 'Point', coordinates: provinceCentroid(f) },
+          })),
+        } as any);
+        renderAll();
+      };
       if (base.outline.auth) {
-        map.addSource('zm-outline', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } as any });
-        authFetch(base.outline.url).then(r => (r.ok ? r.json() : null)).then(g => {
-          const src = map.getSource('zm-outline') as maplibregl.GeoJSONSource | undefined;
-          if (g && src) src.setData(g);
-        }).catch(() => { /* outline is decoration; the map stays usable without it */ });
+        authFetch(base.outline.url).then(r => (r.ok ? r.json() : null)).then(applyOutline)
+          .catch(() => { /* outline is decoration; the map stays usable without it */ });
       } else {
-        map.addSource('zm-outline', { type: 'geojson', data: base.outline.url });
+        fetch(base.outline.url).then(r => (r.ok ? r.json() : null)).then(applyOutline).catch(() => {});
       }
+
       // Real terrain: elevation-graded hypsometric colour ("heatmap" style) from the
       // offline DEM tiles — below-sea/water blue, lowland green, mid tan/yellow,
       // highland brown, peaks pale. The color-relief layer needs maplibre-gl v5.
@@ -274,9 +365,23 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
       map.addLayer({ id: 'et-hillshade', type: 'hillshade', source: 'dem',
         paint: { 'hillshade-exaggeration': 0.45, 'hillshade-shadow-color': '#5f7a52',
           'hillshade-highlight-color': '#f6faec', 'hillshade-accent-color': '#7d9268' } as any });
+      // demand shading over the terrain, under every border, lane and dot
+      map.addLayer({ id: 'zm-shade', type: 'fill', source: 'zm-outline',
+        paint: { 'fill-color': SHADE.noData, 'fill-opacity': SHADE.noDataOpacity, 'fill-antialias': true } });
+      // province lines: dashed and subordinate to the solid country border
       map.addLayer({ id: 'zm-outline', type: 'line', source: 'zm-outline',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': C.borderCountry, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.9, 9, 1.8], 'line-opacity': 0.75 } });
+        paint: { 'line-color': '#9AA0A8', 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.7, 9, 1.5],
+                 'line-opacity': 0.8, 'line-dasharray': [3, 2] } });
+      // the working country's own border: exact outer boundary of its provinces
+      map.addLayer({ id: 'zm-border-casing', type: 'line', source: 'zm-border',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#FFFFFF', 'line-opacity': 0.45,
+                 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 3.2, 9, 5.0] } });
+      map.addLayer({ id: 'zm-border', type: 'line', source: 'zm-border',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#475569', 'line-opacity': 0.9,
+                 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 2.0, 9, 3.4] } });
 
       // background routes (all runs in filter) — visible, not hidden (selected still stands out)
       map.addSource('routes', { type: 'geojson', data: routesGeo([]) as any });
@@ -297,12 +402,12 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
       map.addSource('net-arcs', { type: 'geojson', data: arcsGeo([]) as any });
       map.addLayer({ id: 'net-arcs', type: 'line', source: 'net-arcs',
         layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
-        paint: { 'line-color': C.route, 'line-opacity': 0.62,
-          'line-width': ['interpolate', ['linear'], ['get', 'units'], 40, 1, 900, 3.4] } });
+        paint: { 'line-color': SHADE.netArc, 'line-opacity': 0.42,
+          'line-width': ['interpolate', ['linear'], ['get', 'units'], 40, 1, 900, 3.0] } });
       map.addSource('net-arc-sel', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } as any });
       map.addLayer({ id: 'net-arc-sel', type: 'line', source: 'net-arc-sel',
         layout: { 'line-cap': 'round', 'line-join': 'round', visibility: 'none' },
-        paint: { 'line-color': C.routeSel, 'line-width': 3, 'line-opacity': 0.95 } });
+        paint: { 'line-color': SHADE.netArcSel, 'line-width': 3.2, 'line-opacity': 0.95 } });
 
       // delivery nodes (muted urgency)
       map.addSource('nodes', { type: 'geojson', data: nodesGeo([]) as any });
@@ -317,6 +422,15 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
       map.addSource('sel-stops', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } as any });
       map.addLayer({ id: 'sel-stops', type: 'circle', source: 'sel-stops',
         paint: { 'circle-radius': 4.5, 'circle-color': C.routeSel, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
+
+      // province names read as ground truth: quiet grey caps, over fills, under nothing that matters
+      map.addLayer({ id: 'zm-province-labels', type: 'symbol', source: 'zm-labels', minzoom: 4.6,
+        layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-transform': 'uppercase',
+                  'text-letter-spacing': 0.1, 'text-max-width': 7, 'text-padding': 6, 'text-optional': true,
+                  'text-variable-anchor': ['center', 'top', 'bottom', 'left', 'right'], 'text-radial-offset': 0.4,
+                  'text-size': ['interpolate', ['linear'], ['zoom'], 5, 8.5, 8, 11] },
+        paint: { 'text-color': SHADE.label, 'text-opacity': 0.9,
+                 'text-halo-color': SHADE.labelHalo, 'text-halo-width': 1.6, 'text-halo-blur': 0.2 } });
 
       readyRef.current = true;
       map.fitBounds(frame, { padding: 26, duration: 0 });
@@ -361,6 +475,11 @@ export default function MapView({ layer, slicer, selectedId, onSelect, focusNonc
     filteredRef.current = slicer.region !== 'all' || slicer.hub !== 'all';
     applyLabels();
     const movs = filterMovements(slicer);
+    if (outlineRef.current && map.getLayer('zm-shade')) {
+      const sh = shadeExpressions(movs, outlineRef.current);
+      map.setPaintProperty('zm-shade', 'fill-color', sh.color);
+      map.setPaintProperty('zm-shade', 'fill-opacity', sh.opacity);
+    }
     (map.getSource('routes') as maplibregl.GeoJSONSource)?.setData(routesGeo(movs) as any);
     (map.getSource('nodes') as maplibregl.GeoJSONSource)?.setData(nodesGeo(movs) as any);
     (map.getSource('net-arcs') as maplibregl.GeoJSONSource)?.setData(arcsGeo(movs) as any);
