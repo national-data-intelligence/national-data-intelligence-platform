@@ -77,3 +77,44 @@ The internal BI assistant is wired to the same gateway and the same access rules
 so a question it answers is bounded by the asker's role exactly as a dashboard
 read would be. It reads the widget catalogue and the live page to ground its
 answers in what the user can actually see.
+
+### Standard practice for every model (binding)
+
+Every model package (`bundle/seed-pack/app/ml/<name>/`) follows the same lifecycle,
+whoever builds it. The layers already exist; a model is not done until it uses all
+of them.
+
+1. **Exploratory analysis and census** — `eda/` in the package holds the reproducible
+   queries behind the modelling choices: the target population, what is excluded
+   and why, demand/series classes, missingness and censoring. Nothing is decided on a
+   notebook that is not committed as a query or script.
+2. **Target and features** — `feature_spec.yaml` names every column explicitly (never
+   `SELECT *`) and reads a governed mart. The target is defined once (for PCT: the
+   `adjusted_demand` of `mart_pct_demand_month`). Every feature is available at the
+   forecast's `as_of` date — a leakage test in `tests/` proves it.
+3. **Evaluation before promotion** — a rolling-origin fold ledger with an untouched
+   final holdout, predeclared baselines, and a predeclared promotion rule. Metrics
+   are chosen for the data: no MAPE on series with zeros, no seasonal comparator
+   without a prior season.
+4. **Tracking** — every training run logs its parameters, metrics (per fold,
+   holdout and segment), feature-query hash and artifacts **inside the MLflow run**,
+   and registers a version. A metric that exists only in job output does not exist.
+5. **Uncertainty** — quantiles come from a stated method with nominal coverage that
+   is checked on the holdout; intervals are never relabelled.
+6. **Serving** — batch inference by the Airflow batch DAG into `ops_ml`, contract
+   keys in `attrs` (the shared prediction schema stays stable), and a governed mart
+   that the dashboards read — dashboards never read `ops_ml` for a product surface.
+7. **Monitoring** — an `actuals` block in the manifest so the performance scorer can
+   compare predictions with what happened; drift checks on the inputs. Surfaces say
+   "backtest performance" until live actuals exist.
+8. **Promotion and audit** — promotion by the gateway's promote route (MLflow alias +
+   audit event), only when the predeclared rule passes; the model card states the
+   evidence.
+9. **Delivery** — package changes reach the cluster through `seed-ml.sh`
+   (`--retrain` when a champion already exists); the runner and packages are not yet
+   rebuilt by CI, which is a known platform gap.
+10. **Model card** — purpose, data, target, exclusions, method, evaluation, limits and
+    owner, kept current with the code.
+
+The PCT forecast contract (`docs/pct-forecast-contract.md`) is this practice applied
+to supply-chain demand forecasting.
