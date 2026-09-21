@@ -133,6 +133,68 @@
     - sv-compliance
     - sv-flagship-table
     - sv-risk-woredas
+
+# The Zambian counterpart of the block above. A geographic role belongs to a
+# COUNTRY, not to the platform: zm-v1 users reference this one and et-v3 users
+# reference R-RHB-OROMIA, so neither profile's cast names a role that means
+# nothing where they work. Same catalogue, plus the PCT page widgets.
+- role: R-PHO-LUSAKA
+  dashboards:
+  - public
+  - internal-bi
+  widgets:
+    public:
+    - pub-articles-list
+    - pub-data-catalogue
+    - pub-hero
+    - pub-insights
+    - pub-newsroom
+    - pub-region
+    - pub-supply
+    internal-bi:
+    - bi-assistant
+    - dz-kpi-strip
+    - dz-outbreaks-table
+    - dz-region-map
+    - dz-signal-chart
+    - dz-woreda-table
+    - pct-kpis
+    - pct-map
+    - ov-brief
+    - ov-benchmarks
+    - ov-reliability-table
+    - ov-act-first-woredas
+    - ov-source-pulse
+    - ov-trust-completeness
+    - ov-trust-mapping
+    - ov-trust-silent
+    - ov-disease-snapshot
+    - rm-equipment
+    - rm-events
+    - rm-facilities
+    - rm-forecast
+    - rm-hero
+    - rm-act-week
+    - rm-hotspots
+    - rm-map
+    - ct-filters
+    - ct-kpis
+    - ct-movement
+    - ct-dispatch
+    - rm-statboard
+    - rm-stock-heatmap
+    - rm-workforce
+    - st-alert-subs
+    - st-display
+    - st-profile
+    - st-security
+    - sv-cascade-hiv
+    - sv-cascade-mnch
+    - sv-zero-dose
+    - sv-cascade-tb
+    - sv-compliance
+    - sv-flagship-table
+    - sv-risk-woredas
 - role: R-PD-HIV
   dashboards:
   - public

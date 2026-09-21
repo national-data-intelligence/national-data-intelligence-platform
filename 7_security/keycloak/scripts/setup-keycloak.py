@@ -997,8 +997,19 @@ def main() -> int:
     print(f"connected to Keycloak at {KC_BASE} as {ADMIN_USERNAME}")
 
     print("\n▸ realm roles")
-    for realm, roles in MISSING_REALM_ROLES.items():
-        for r in roles:
+    # MISSING_REALM_ROLES is the floor, not the list. Every role the loaded cast
+    # actually references must exist in its realm or the assignment silently
+    # fails — and which roles that is depends on the COUNTRY: zm-v1's cast holds
+    # R-PHO-LUSAKA where et-v3's holds R-RHB-OROMIA. Deriving the extras from the
+    # users we just read means a new profile never needs this file edited.
+    needed: dict[str, set[str]] = {r: set(v) for r, v in MISSING_REALM_ROLES.items()}
+    for u in users:
+        realm = u.get("realm")
+        if not realm:
+            continue
+        needed.setdefault(realm, set()).update(u.get("roles") or [])
+    for realm, roles in needed.items():
+        for r in sorted(roles):
             ensure_realm_role(token, realm, r)
 
     print("\n▸ unmanaged user attributes (P1.3 — allow idp_trust to persist)")

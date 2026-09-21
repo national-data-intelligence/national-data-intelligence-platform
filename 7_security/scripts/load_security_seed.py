@@ -43,6 +43,47 @@ log = logging.getLogger("load_security_seed")
 
 # ── ordered seed file list ─────────────────────────────────────────────
 # Order matters: each file's FKs are resolved by earlier files.
+# Which users file the active country profile wants. The appsec layer of a
+# profile travels with the country — Zambian provinces, a Zambian cast, a role
+# scoped to a Zambian province — so this is NOT always users.yaml. zm-v1's
+# profile.yaml declares `layers.appsec.users: seed-pack/app/security/users.zm.yaml`
+# and, until this existed, nothing read it: the file could be written, committed
+# and deployed while the Ethiopian cast went on being seeded.
+#
+# Resolution order, first hit wins:
+#   --users <name>          explicit, for a one-off load
+#   $NHDW_USERS_SEED        what the bootstrap passes
+#   the ACTIVE profile's layers.appsec.users basename
+#   users.yaml              the default that shipped before profiles existed
+def resolve_users_file(explicit: str | None = None) -> str:
+    if explicit:
+        return explicit
+    env = os.environ.get("NHDW_USERS_SEED", "").strip()
+    if env:
+        return Path(env).name
+    try:
+        pdir = Path(os.environ.get("NHDW_PROFILE_DIR", "/opt/nhdw-profiles"))
+        state = Path(os.environ.get("NHDW_PROFILE_STATE_DIR", "/opt/nhdw-state"))
+        key = ""
+        for pointer in (state / "ACTIVE", pdir / "ACTIVE"):
+            if pointer.is_file():
+                key = pointer.read_text(encoding="utf-8").strip()
+                break
+        key = key or os.environ.get("NHDW_PROFILE", "").strip()
+        if key:
+            man = yaml.safe_load((pdir / key / "profile.yaml").read_text(encoding="utf-8"))
+            declared = (((man or {}).get("layers") or {}).get("appsec") or {}).get("users")
+            if declared:
+                return Path(declared).name
+    except Exception as exc:                                    # noqa: BLE001
+        # A profile that cannot be read must not stop the seed — it falls back
+        # to the default cast, which is the behaviour that shipped before.
+        print(f"  (profile appsec layer unreadable, using users.yaml: {exc})")
+    return "users.yaml"
+
+
+USERS_FILE = resolve_users_file()
+
 SEED_FILES_IN_ORDER = [
     "dashboards.yaml",
     "pages.yaml",
@@ -57,7 +98,7 @@ SEED_FILES_IN_ORDER = [
     "identity_sources.yaml",
     "roles.yaml",
     "role_grants.yaml",
-    "users.yaml",
+    USERS_FILE,
 ]
 
 
@@ -915,7 +956,7 @@ def main() -> int:
             log.info("role_dashboard:       %d", counts["role_dashboard"])
             log.info("role_widget:          %d", counts["role_widget"])
 
-            u, g = upsert_users(cur, data.get("users.yaml", []), code_to_id)
+            u, g = upsert_users(cur, data.get(USERS_FILE, []), code_to_id)
             log.info("users:                %d (+%d role grants)", u, g)
 
             # P1.1 — register the platform service-account PAT (act-as-owner)
@@ -940,7 +981,7 @@ def main() -> int:
                                          for r in data.get("mart_attrs.yaml", [])],
                 "ops_identity.identity_source": [(r["code"],) for r in data.get("identity_sources.yaml", [])],
                 "ops_perm.role":      [(r["code"],) for r in data.get("roles.yaml", [])],
-                "ops_identity.user":  [(r["kc_sub"],) for r in data.get("users.yaml", [])],
+                "ops_identity.user":  [(r["kc_sub"],) for r in data.get(USERS_FILE, [])],
             }
             for table, key_cols in PROVENANCE_TABLES:
                 deleted = sync_provenance(cur, table, key_cols, yaml_keys.get(table, []))

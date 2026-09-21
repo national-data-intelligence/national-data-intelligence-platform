@@ -2,8 +2,9 @@
 # ops_perm.role_scope. The 4-axis grants are in role_grants.yaml.
 #
 # 13 existing roles are preserved by code (matches the 13 .rego files in
-# 7_security/opa/policies/). We add a few demo-scope roles (R-RHB-OROMIA,
-# R-PD-HIV, R-PD-MNCH) for the demo scenarios.
+# 7_security/opa/policies/). We add a few demo-scope roles (R-RHB-OROMIA and
+# its Zambian counterpart R-PHO-LUSAKA, R-PD-HIV, R-PD-MNCH) for the demo
+# scenarios.
 #
 # Optional per-role blocks (both loaded by 7_security/scripts/load_security_seed.py):
 #   capabilities:  app-level powers → ops_perm.role_capability. The assistant
@@ -128,6 +129,23 @@
   # the per-user row-enforcement side via OPA).
   scope:
     geography: [OR]
+
+- code: R-PHO-LUSAKA
+  name: PHO Director · Lusaka
+  description: >
+    Provincial Health Office director — Lusaka. The Zambian counterpart of
+    R-RHB-OROMIA: the same widget catalogue as R-DEC with the geography filter
+    constrained to one province. Both exist because a geographic role is a
+    property of the COUNTRY, not of the platform — zm-v1's cast references this
+    one, et-v3's references the other, and neither profile's users can name a
+    role that means nothing where they work.
+  combine_strategy: union
+  capabilities: [assistant:read, assistant:interact]
+  # role_scope (#50b): the role-level cap. '50' is Lusaka in the eLMIS province
+  # coding the zm-v1 reference is built from — NOT a two-letter Ethiopian id,
+  # which would intersect to nothing against the Zambian marts.
+  scope:
+    geography: ['50']
 
 - code: R-PD-HIV
   name: Programme Director · HIV
