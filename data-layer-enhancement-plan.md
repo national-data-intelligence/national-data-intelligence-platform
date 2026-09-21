@@ -26,6 +26,34 @@ shared host. All fixed at the source; details in `docs/k8s-deployment-changelog.
 six are one pattern — a gitignored DERIVED artifact assumed present, which works only on the
 machine where someone once created it by hand.
 
+**It reached GREEN on attempt #12** (50 tasks ok, 0 failed, regression gate passed). The last two
+failures were one bug a level down: `verify-system.sh` probes `https://gateway.$NHDW_HOSTBASE` and
+defaults to the dev base, and the verify role invoked it with no environment — so on a re-homed
+deployment it reported a dead gateway and an empty ML registry while both were serving correctly.
+
+**Then the deeper finding.** Every provision run this week reused the existing PGDATA, and
+`3_storage/postgres/init/*` executes on a FRESH volume only — so the init path had not run in weeks
+and nothing else reads those files. THREE were broken, each fatal on its own (`postgres:16-alpine`
+runs them with `ON_ERROR_STOP=1` and aborts initialisation): a statement in
+`07_marts_schemas_extras.sql` truncated mid-`ALTER DEFAULT PRIVILEGES` since 2026-09-10, and
+`23_perm_admin_grants.sql` + `32_permission_store.sql` both writing `ops_perm` without a
+`\connect nhdw_ops` (each init file starts a fresh psql session against `POSTGRES_DB`). Any cold
+boot onto a fresh volume would have died at postgres init. All three fixed, and
+`bundle/scripts/test-coldboot-initdb.sh` now runs the real init directory through a throwaway
+postgres in CI on every push — verified red-then-green against a reintroduced bug. `provision.yml`
+also gained a `fresh_volumes` option (default off) so the destructive cold boot is a pipeline step
+rather than an ssh ritual.
+
+**Two masking defects, found by actually using the system.** The Supply Control Tower served exact
+GPS to every identity, including a low-trust federated one: the route asked
+`columns_for_mart('marts.bi_supply', …)` while the classification store keys on the bare schema, the
+lookup missed, and a denylist that returns nothing means "nothing classified". And `generalize`
+dropped every numeric column instead of coarsening it — Trino returns NUMERIC as `decimal.Decimal`,
+a type `_generalize` did not handle, so the class was dead for exactly the columns it protects. The
+end-to-end test that would have caught the first existed but nothing ran it; it would NOT have caught
+the second, because its catch-all accepted an absent value as "generalized". Both fixed at the
+contract source, and the test now runs as `verify-system` check 9 on every deploy and provision.
+
 CI grew alongside and is now the quality gate it should have been: a hosted test suite on every
 branch push (opa policy, MDM matcher, loader provenance, vocabulary parity, gateway import, masking
 contract, admin-ui type build), `check-dbt-sql.py` planning 107 dbt models against the live
