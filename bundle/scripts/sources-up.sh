@@ -195,6 +195,13 @@ up_ethioemr() {
 }
 
 up_hcmis_mbrana() {
+  # Ethiopian-only supply/reporting sources; the zm-v1 catalog disables their
+  # widgets and mBrana's restore targets a container that does not exist in the
+  # shared-instance setup. Skip for a non-default profile (same as climate).
+  if [ "${NHDW_PROFILE:-et-v3}" != "et-v3" ] && [ "${NHDW_KEEP_SOURCES:-0}" != "1" ]; then
+    warn "hcmis/mbrana have no ${NHDW_PROFILE} data — skipping (widgets are disabled)"
+    return 0
+  fi
   # ONE SQL Server hosts BOTH HCMISWDM and HCMISWCloud (mBrana). Bring the instance
   # up via the HCMISWDM compose, restore HCMISWDM, then restore mBrana side-by-side.
   step "HCMISWDM + mBrana — shared SQL Server 2025"

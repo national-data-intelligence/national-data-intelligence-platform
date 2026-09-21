@@ -50,7 +50,7 @@ INGEST_JOBS=(dhis2-ingest-metadata dhis2-ingest-dvs climate-ingest ethioemr-inge
 # one skip set, so they cannot disagree. climate has no non-Ethiopian data, so a
 # non-default profile skips it unless NHDW_SKIP_SOURCES says otherwise.
 SKIP_SRC="${NHDW_SKIP_SOURCES:-}"
-if [ -z "$SKIP_SRC" ] && [ "${NHDW_PROFILE:-et-v3}" != "et-v3" ]; then SKIP_SRC="climate"; fi
+if [ -z "$SKIP_SRC" ] && [ "${NHDW_PROFILE:-et-v3}" != "et-v3" ]; then SKIP_SRC="climate hcmiswdm mbrana"; fi
 if [ -n "$SKIP_SRC" ]; then
   _keep=(); for j in "${INGEST_JOBS[@]}"; do
     _drop=0; for s in $SKIP_SRC; do case "$j" in ${s}-ingest*) _drop=1;; esac; done

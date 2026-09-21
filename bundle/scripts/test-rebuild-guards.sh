@@ -37,6 +37,7 @@ has bundle/scripts/seed-realistic.sh "JOBTMP" "job manifests use a private per-r
 has bundle/scripts/sources-up.sh "weekly.csv missing — generating" "climate regenerates its gitignored seed if absent"
 has bundle/scripts/seed-realistic.sh "PF_SKIP" "preflight skips sources the profile does not provide"
 has bundle/scripts/seed-realistic.sh "_keep+=" "the ingestor list drops sources the profile does not provide"
+has bundle/scripts/sources-up.sh "hcmis/mbrana have no" "Ethiopian-only supply sources are skipped for a non-default profile"
 
 echo "── dhis.conf ships (was gitignored → docker made a directory)"
 git -C "$R" ls-files --error-unmatch 0_external/sources/DHIS2/config/dhis.conf >/dev/null 2>&1 \
