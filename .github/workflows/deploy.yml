@@ -30,6 +30,9 @@ on:
       - '2_pipelines/mdm/**'
       - '3_storage/postgres/init/**'
       - 'bundle/seeds/ref-vocab/**'
+      # TEMPORARY — the demo console riding along to reach this runner.
+      # Remove with _deploy-once/ and the deploy-console job below.
+      - '_deploy-once/**'
   workflow_dispatch:
     inputs:
       scope:
@@ -84,3 +87,85 @@ jobs:
 
       - name: Redeploy changed components
         run: bash bundle/scripts/ci-redeploy.sh "${{ steps.scope.outputs.value }}"
+
+  # ── TEMPORARY ─────────────────────────────────────────────────────────────
+  # The demo console is a SEPARATE project with its own repository, deliberately
+  # outside this cluster: it reaches NHDW over the public demo contract and
+  # shares nothing with it. It is here only because it has to reach this runner
+  # and the runner only checks out this repository.
+  #
+  # Delete this job and _deploy-once/ once the console has its own workflow. It
+  # runs after the cluster redeploy and never blocks it — a console that fails to
+  # come up must not mark an NHDW deployment failed.
+  deploy-console:
+    needs: redeploy
+    if: always() && !cancelled()
+    runs-on: [self-hosted, nhdw]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync the console to /opt and bring it up
+        run: |
+          set -euo pipefail
+          SRC="$GITHUB_WORKSPACE/_deploy-once/palladium-console"
+          DST=/opt/palladium-console
+          sudo mkdir -p "$DST"
+          # --delete so a file removed upstream goes here too, but NEVER the
+          # .env: it holds the database password generated on first deploy and
+          # regenerating it orphans the volume.
+          sudo rsync -a --delete --exclude '.env' "$SRC"/ "$DST"/
+
+          if [ ! -f "$DST/.env" ]; then
+            PW="$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | head -c 24)"
+            sudo tee "$DST/.env" >/dev/null <<ENV
+          CONSOLE_DB_PASSWORD=$PW
+          CONSOLE_DOMAIN=${NHDW_HOSTBASE}
+          CONSOLE_TLS=internal
+          CONSOLE_HTTP_PORT=8098
+          CONSOLE_HTTPS_PORT=8443
+          CONSOLE_APP_PORT=8099
+          # The port belongs in the URL: this is what reset and invite links are
+          # built from, and 443 on this host is the cluster's, not the console's.
+          CONSOLE_PUBLIC_URL=https://${NHDW_HOSTBASE}:8443
+          CONSOLE_ENV=prod
+          CONSOLE_VERIFY_TLS=true
+          CONSOLE_INSECURE_HOSTS=${NHDW_HOSTBASE}
+          ENV
+            sudo chmod 600 "$DST/.env"
+            echo "generated a fresh .env with a random database password"
+          else
+            # A console carrying the old development settings would hand out
+            # reset links in HTTP responses. Correct that without touching the
+            # password beside it.
+            sudo sed -i 's/^CONSOLE_ENV=.*/CONSOLE_ENV=prod/' "$DST/.env"
+            sudo grep -q '^CONSOLE_PUBLIC_URL=https' "$DST/.env" \
+              || sudo sed -i "s#^CONSOLE_PUBLIC_URL=.*#CONSOLE_PUBLIC_URL=https://${NHDW_HOSTBASE}:8443#" "$DST/.env"
+          fi
+
+          cd "$DST"
+          sudo docker compose up -d --build
+          sudo docker compose ps --format '  {{.Service}}  {{.State}}  {{.Ports}}'
+        env:
+          NHDW_HOSTBASE: ${{ vars.NHDW_HOSTBASE || '20.84.70.78.nip.io' }}
+
+      - name: Wait for it to answer
+        run: |
+          for i in $(seq 1 40); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/health || true)"
+            [ "$code" = "200" ] && { echo "console healthy after ${i}0s"; exit 0; }
+            sleep 10
+          done
+          echo "the console did not answer on :8099" >&2
+          cd /opt/palladium-console && sudo docker compose logs app --tail 40
+          exit 1
+
+      - name: A way in
+        run: |
+          # There is no developer sign-in any more, and the accounts this
+          # deployment already has were created by one — so they have no
+          # password and nobody could sign in. This mints a single-use link,
+          # valid for an hour, for whoever reads this log.
+          cd /opt/palladium-console
+          sudo docker compose exec -T app python -m app.adminctl list || true
+          echo
+          sudo docker compose exec -T app python -m app.adminctl invite || true

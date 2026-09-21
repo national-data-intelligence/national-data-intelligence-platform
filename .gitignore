@@ -157,4 +157,8 @@ supply-control-tower.zip
 # own git history — it must never enter this repo's.
 # (Not to be confused with bundle/demo-console/, which IS part of NHDW — that is
 # this deployment's operator cockpit.)
-palladium-console/
+#
+# Anchored to the repo root on purpose. An unanchored `palladium-console/` also
+# matches nested copies, which silently emptied the one-off _deploy-once courier
+# — it staged its README and nothing else.
+/palladium-console/

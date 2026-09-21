@@ -1,0 +1,89 @@
+# Palladium Demo Console — standalone stack.
+#
+# DELIBERATELY OUTSIDE every cluster it controls. The console runs as plain
+# containers on the host, with its own database, and reaches each project only
+# over that project's PUBLIC API. Nothing here shares a network, a service name
+# or a database with NHDW or any other project, so moving a project to another
+# server later changes one URL in a form and nothing else.
+
+name: palladium-console
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: demo_console
+      POSTGRES_USER: console
+      POSTGRES_PASSWORD: ${CONSOLE_DB_PASSWORD:?set CONSOLE_DB_PASSWORD in .env}
+    volumes:
+      - console-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U console -d demo_console"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    # No published port: only the app talks to it.
+
+  app:
+    build: .
+    image: palladium-console:dev
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      CONSOLE_DB_DSN: postgresql://console:${CONSOLE_DB_PASSWORD}@db:5432/demo_console
+      CONSOLE_ENV: ${CONSOLE_ENV:-prod}
+      CONSOLE_DATA_DIR: /srv/data
+      CONSOLE_MAX_UPLOAD_MB: ${CONSOLE_MAX_UPLOAD_MB:-200}
+      CONSOLE_PUBLIC_URL: ${CONSOLE_PUBLIC_URL:-http://localhost:8099}
+      # Projects on demo boxes carry self-signed certificates. Naming those hosts
+      # keeps the exception visible and scoped instead of turning verification off
+      # everywhere.
+      CONSOLE_VERIFY_TLS: ${CONSOLE_VERIFY_TLS:-true}
+      CONSOLE_INSECURE_HOSTS: ${CONSOLE_INSECURE_HOSTS:-}
+      # Single sign-on, when configured. Absent → the developer sign-in, which
+      # itself refuses to run unless CONSOLE_ENV=dev.
+      KEYCLOAK_PUBLIC_BASE: ${KEYCLOAK_PUBLIC_BASE:-}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-moh-staff}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-demo-console}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
+    volumes:
+      # Uploaded decks, documents and video. On a volume rather than in the
+      # database: a row the size of a deck turns every backup and every query
+      # plan into a problem.
+      - console-files:/srv/data
+    # Published so the host's edge proxy can reach it. On this box the cloud
+    # firewall admits only 80/443, so this port is effectively host-local and
+    # the k3s ingress — the one edge that IS reachable — forwards to it. Caddy
+    # still fronts it on 8443 for direct access once that port is opened.
+    ports:
+      - "${CONSOLE_APP_PORT:-8099}:8080"
+
+  # TLS terminator. On a real domain it gets a genuine certificate automatically;
+  # on an IP or nip.io host it issues one from its own local CA — still a warning
+  # in the browser, but a one-time trust decision rather than "not secure" on
+  # every page.
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      CONSOLE_DOMAIN: ${CONSOLE_DOMAIN:-localhost}
+      # `internal` = Caddy's own CA (works anywhere, warns once).
+      # An email address = a real Let's Encrypt certificate (needs DNS + 80/443).
+      CONSOLE_TLS: ${CONSOLE_TLS:-internal}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data          # certificates and the local CA — must persist,
+      - caddy-config:/config      # or every restart re-issues and re-warns
+    ports:
+      - "${CONSOLE_HTTP_PORT:-8098}:80"
+      - "${CONSOLE_HTTPS_PORT:-8443}:443"
+
+volumes:
+  console-db:
+  console-files:
+  caddy-data:
+  caddy-config:

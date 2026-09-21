@@ -1,0 +1,42 @@
+# TLS for the console.
+#
+# A plain-HTTP app gets flagged "not secure", which is a poor look on something
+# colleagues are asked to trust with per-project secrets. Caddy terminates TLS
+# in front of the app.
+#
+# ONE knob, CONSOLE_TLS, because Caddy's `tls` directive takes either form:
+#
+#   internal            Caddy issues the certificate from its OWN local CA.
+#                       Real TLS, real encryption — but a browser does not know
+#                       that CA, so it warns once and you accept it. This is the
+#                       only thing that can work on an IP-only host, and it is
+#                       the default here.
+#
+#   you@example.com     Caddy obtains a genuine Let's Encrypt certificate and
+#                       the warning disappears entirely. Needs a real DNS name
+#                       AND ports 80/443 reachable from the internet. Set
+#                       CONSOLE_TLS to a valid email to switch to this.
+#
+# Defaulting to ACME was wrong: on this host it fails, retries for a month, and
+# serves nothing in the meantime. Defaulting to `internal` always works and
+# degrades to a one-time browser prompt.
+{$CONSOLE_DOMAIN:localhost} {
+	tls {$CONSOLE_TLS:internal}
+
+	encode zstd gzip
+
+	# The console carries session cookies and per-project agent tokens. These
+	# headers are free and there is no argument for omitting them.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy app:8080 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+	}
+}

@@ -1,0 +1,1187 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Palladium Demo Console
+
+   The design language, taken from the reference: the application is a WHITE
+   CARD with large rounded corners FLOATING on a dark patterned ground. A white
+   topbar spans the card; the sidebar is inset BELOW that topbar with a rounded
+   top-right corner, flush to the card's left and bottom. The primary action is
+   a white pill on the dark. Search is a soft pill in the white. Section labels
+   are small, uppercase and letterspaced. Cards float on their own shadow; the
+   one in use is solid ink.
+
+   The accent is INK, not a hue — near-black in light, near-white in dark. The
+   only colour in the interface is semantic: a project's status, and the tab
+   colour an operator chose for it. That is deliberate. When everything else is
+   neutral, the one green dot on the page is the thing you look at.
+
+   Everything is token-driven so the dark theme is a palette swap, not a second
+   stylesheet. No element takes a colour from a literal — only from a token —
+   or it would be right in one theme and wrong in the other.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── tokens ─────────────────────────────────────────────────────────────── */
+
+:root {
+  /* the ground the app card floats on */
+  --ground:        #1b1e23;
+  --ground-deep:   #0b0d10;
+  --ground-scrim:  radial-gradient(118% 96% at 50% 40%, rgba(255,255,255,.04) 0%, transparent 46%, rgba(0,0,0,.42) 100%);
+
+  /* surfaces. The neutrals carry a faint cool bias so they read as chosen
+     rather than as a default grey. */
+  --paper:         #ffffff;
+  --canvas-art:    url('/assets/canvas-art.png');
+  /* A 90%-TRANSPARENT wash of paper over the drawing: it takes the artwork's
+     edge off so nothing competes with a table sitting on top of it, while
+     leaving the texture plainly there. Ten percent paper, not ninety. */
+  --canvas-veil:   linear-gradient(rgba(255,255,255,.10), rgba(255,255,255,.10));
+  --paper-2:       #fafbfc;
+  --fill:          #f4f5f8;
+  --fill-2:        #eceef3;
+  --line:          #e8eaf0;
+  --line-2:        #dcdfe7;
+  /* Inputs carry no border. They read as bars lying ON the card — a fill that
+     is not quite the card, and a shadow underneath — which is what separates
+     them without drawing a line around them. */
+  --field:         #f6f7f9;
+  --field-shadow:  0 0 0 1px rgba(18,20,26,.05),
+                   0 0 14px -2px rgba(18,20,26,.11),
+                   0 2px 5px -1px rgba(18,20,26,.08);
+  --field-shadow-h:0 0 0 1px rgba(18,20,26,.07),
+                   0 0 24px -2px rgba(18,20,26,.16),
+                   0 4px 10px -2px rgba(18,20,26,.12);
+  --field-focus:   #14161b;
+  --scroll:        #c8ccd6;
+  --scroll-h:      #a7aebd;
+
+  /* ink */
+  --ink:           #14161b;
+  --ink-2:         #585e6c;
+  --ink-3:         #969dad;
+
+  /* the accent IS ink at full strength */
+  --accent:        #16181d;
+  --accent-press:  #2c313b;
+  --accent-soft:   #eff0f4;
+  --on-accent:     #ffffff;
+
+  /* the sidebar, its own dark field */
+  --side:          #17191e;
+  --side-2:        #101216;
+  --side-3:        #090a0d;
+  /* The project header. It is a gradient with actual range — the old one ran
+     near-black to near-black, which is not a gradient, it is a dark rectangle. */
+  --hero-1:        #4a515f;
+  --hero-2:        #23272f;
+  --hero-3:        #14161b;
+  --side-ink:      #ffffff;
+  --side-ink-2:    rgba(255,255,255,.70);
+  --side-ink-3:    rgba(255,255,255,.46);
+  --side-rule:     rgba(255,255,255,.16);
+  --side-fill:     rgba(255,255,255,.11);
+
+  /* semantic — the only colour in the interface */
+  --live:          #0f7f57;   --live-soft:  #e3f4ec;
+  --busy:          #a1701a;   --busy-soft:  #f8f0dd;
+  --bad:           #b6313f;   --bad-soft:   #fae9eb;
+
+  --shadow-app:    0 2px 6px rgba(0,0,0,.26),
+                   0 18px 40px -12px rgba(0,0,0,.46),
+                   0 60px 120px -30px rgba(0,0,0,.68),
+                   0 0 0 1px rgba(255,255,255,.07);
+  /* An even halo plus a small directional drop: the halo is what makes the
+     shadow read as being AROUND the thing rather than pooled under it, and the
+     drop is what stops it looking like a sticker. */
+  --shadow-card:   0 0 0 1px rgba(16,18,24,.035),
+                   0 0 18px -2px rgba(16,18,24,.13),
+                   0 3px 8px -2px rgba(16,18,24,.10);
+  --shadow-lift:   0 0 0 1px rgba(16,18,24,.045),
+                   0 0 34px -2px rgba(16,18,24,.20),
+                   0 10px 22px -6px rgba(16,18,24,.18);
+  --shadow-pop:    0 30px 70px -24px rgba(6,8,12,.42);
+
+  --r-app:         28px;
+  --r-card:        16px;
+  --r-box:         14px;
+  --r-pill:        999px;
+
+  --font-display:  'Outfit', 'Segoe UI', system-ui, sans-serif;
+  --font-ui:       'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono:     'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --sidew:         244px;
+  --topbarh:       74px;
+  --gutter:        clamp(24px, 5.1vw, 80px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #0a0b0d;   --ground-deep: #050506;
+    --ground-scrim: radial-gradient(112% 92% at 50% 42%, transparent 30%, rgba(0,0,0,.62) 100%);
+    --paper:       #16181c;   --paper-2:     #1b1e23;
+    --canvas-art:  url('/assets/canvas-art-dark.png');
+    --canvas-veil: linear-gradient(rgba(22,24,28,.10), rgba(22,24,28,.10));
+    --fill:        #20242a;   --fill-2:      #282d35;
+    --line:        #282d34;   --line-2:      #333941;
+    --field:       #1c2128;
+    --field-shadow:  0 0 0 1px rgba(255,255,255,.055),
+                     0 0 16px -2px rgba(0,0,0,.6), 0 2px 5px -1px rgba(0,0,0,.5);
+    --field-shadow-h:0 0 0 1px rgba(255,255,255,.09),
+                     0 0 26px -2px rgba(0,0,0,.72), 0 4px 10px -2px rgba(0,0,0,.6);
+    --field-focus: #eef0f4;
+    --scroll:      #39404b;
+    --scroll-h:    #4b5462;
+    --ink:         #eef0f4;   --ink-2:       #a3abb8;   --ink-3: #6f7783;
+    --accent:      #eef0f4;   --accent-press:#ffffff;   --accent-soft: #23272e;
+    --on-accent:   #0f1115;
+    --side:        #141519;   --side-2:      #0d0e11;   --side-3:     #08090b;
+    --hero-1:      #313846;   --hero-2:      #191d25;  --hero-3: #0c0e12;
+    --live:        #45cf95;   --live-soft:   #0f3128;
+    --busy:        #dda75a;   --busy-soft:   #33280f;
+    --bad:         #ef8791;   --bad-soft:    #3a1d21;
+    --shadow-app:  0 2px 6px rgba(0,0,0,.5),
+                   0 18px 44px -12px rgba(0,0,0,.7),
+                   0 70px 130px -30px rgba(0,0,0,.85),
+                   0 0 0 1px rgba(255,255,255,.05);
+    --shadow-card: 0 0 0 1px rgba(255,255,255,.045),
+                   0 0 20px -2px rgba(0,0,0,.55), 0 3px 8px -2px rgba(0,0,0,.45);
+    --shadow-lift: 0 0 0 1px rgba(255,255,255,.07),
+                   0 0 38px -2px rgba(0,0,0,.7), 0 10px 22px -6px rgba(0,0,0,.6);
+    --shadow-pop:  0 30px 70px -24px rgba(0,0,0,.8);
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:      #0a0b0d;   --ground-deep: #050506;
+  --ground-scrim: radial-gradient(112% 92% at 50% 42%, transparent 30%, rgba(0,0,0,.62) 100%);
+  --paper:       #16181c;   --paper-2:     #1b1e23;
+  --canvas-art:  url('/assets/canvas-art-dark.png');
+  --canvas-veil: linear-gradient(rgba(22,24,28,.10), rgba(22,24,28,.10));
+  --fill:        #20242a;   --fill-2:      #282d35;
+  --line:        #282d34;   --line-2:      #333941;
+  --field:       #1c2128;
+  --field-shadow:  0 0 0 1px rgba(255,255,255,.055),
+                   0 0 16px -2px rgba(0,0,0,.6), 0 2px 5px -1px rgba(0,0,0,.5);
+  --field-shadow-h:0 0 0 1px rgba(255,255,255,.09),
+                   0 0 26px -2px rgba(0,0,0,.72), 0 4px 10px -2px rgba(0,0,0,.6);
+  --field-focus: #eef0f4;
+  --scroll:      #39404b;
+  --scroll-h:    #4b5462;
+  --ink:         #eef0f4;   --ink-2:       #a3abb8;   --ink-3: #6f7783;
+  --accent:      #eef0f4;   --accent-press:#ffffff;   --accent-soft: #23272e;
+  --on-accent:   #0f1115;
+  --side:        #141519;   --side-2:      #0d0e11;   --side-3:     #08090b;
+  --hero-1:      #313846;   --hero-2:      #191d25;  --hero-3: #0c0e12;
+  --live:        #45cf95;   --live-soft:   #0f3128;
+  --busy:        #dda75a;   --busy-soft:   #33280f;
+  --bad:         #ef8791;   --bad-soft:    #3a1d21;
+  --shadow-app:  0 2px 6px rgba(0,0,0,.5),
+                 0 18px 44px -12px rgba(0,0,0,.7),
+                 0 70px 130px -30px rgba(0,0,0,.85),
+                 0 0 0 1px rgba(255,255,255,.05);
+  --shadow-card: 0 0 0 1px rgba(255,255,255,.045),
+                 0 0 20px -2px rgba(0,0,0,.55), 0 3px 8px -2px rgba(0,0,0,.45);
+  --shadow-lift: 0 0 0 1px rgba(255,255,255,.07),
+                 0 0 38px -2px rgba(0,0,0,.7), 0 10px 22px -6px rgba(0,0,0,.6);
+  --shadow-pop:  0 30px 70px -24px rgba(0,0,0,.8);
+}
+
+/* ── base ───────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Several shells below set `display`, which would otherwise beat the `hidden`
+   attribute's UA rule and leave the sign-in, the modal and the palette painted
+   on top of the app. */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--ground);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+
+:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.side :focus-visible, .cta:focus-visible, .hero :focus-visible { outline-color: var(--side-ink); }
+::selection { background: var(--accent); color: var(--on-accent); }
+
+/* ── scrollbars ─────────────────────────────────────────────────────────── */
+/* The browser default is a grey trough with a square handle, which is the one
+   piece of chrome that ignores everything else on the page. This is the same
+   pill the rest of the interface uses: no track at all, a thumb that only
+   appears where it is needed, and its own colour on the dark sidebar. */
+* { scrollbar-width: thin; scrollbar-color: var(--scroll) transparent; }
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--scroll);
+  border-radius: var(--r-pill);
+  /* a transparent border with background-clip is how a webkit thumb gets
+     padding, which is what makes it a pill inside the gutter rather than a
+     slab filling it */
+  border: 3.5px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--scroll-h); }
+.side { scrollbar-color: var(--side-ink-3) transparent; }
+.side ::-webkit-scrollbar-thumb, .side::-webkit-scrollbar-thumb {
+  background-color: rgba(255,255,255,.22);
+}
+.side ::-webkit-scrollbar-thumb:hover, .side::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255,255,255,.34);
+}
+.hero { scrollbar-color: rgba(255,255,255,.28) transparent; }
+
+/* The ground: the supplied artwork, which is already almost entirely black with
+   fine line work at the edges — exactly what a background should be.
+
+   It is blurred, and the blur is on its own layer rather than on .ground
+   itself: a filter on the element would blur the card sitting in front of it
+   too, and a blurred image also shrinks away from its own edges, leaving a pale
+   seam all round. The layer is inset past the frame by more than the blur
+   radius and scaled up, so the softened edge falls outside the viewport. */
+.ground {
+  position: fixed; inset: 0; z-index: 0;
+  background: #05060a;
+  overflow: hidden;
+}
+.ground::before {
+  content: ''; position: absolute; inset: -8%;
+  background: #000 url('/assets/app-bg.jpg') center / cover no-repeat;
+  filter: blur(9px) saturate(.9);
+  transform: scale(1.06);
+}
+.ground::after {
+  content: ''; position: absolute; inset: 0;
+  background: var(--ground-scrim);
+}
+
+/* ── the app card ───────────────────────────────────────────────────────── */
+
+.shell {
+  position: relative; z-index: 1;
+  height: calc(100dvh - var(--gutter) * 2);
+  margin: var(--gutter);
+  background: var(--paper);
+  border-radius: var(--r-app);
+  /* The same stack as the sign-in board, and for the same two reasons: the
+     shared token's 0 0 0 1px spread ring reads as a drawn border along the
+     sidebar edge where the card is dark on dark, and the ground is dark enough
+     that only light separates the card from it. */
+  box-shadow:
+    0 3px 8px rgba(0,0,0,.55),
+    0 20px 46px -12px rgba(0,0,0,.7),
+    0 0 52px -4px rgba(255,255,255,.22),
+    0 0 150px -22px rgba(255,255,255,.32);
+  /* The sidebar is a full-height column, so the shell splits left-to-right and
+     the topbar belongs to the content beside it. */
+  display: grid;
+  grid-template-columns: var(--sidew) minmax(0, 1fr);
+  overflow: hidden;
+}
+.main { display: grid; grid-template-rows: var(--topbarh) minmax(0, 1fr); min-width: 0; min-height: 0; }
+
+/* ── topbar ─────────────────────────────────────────────────────────────── */
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px;
+  padding: 0 24px;
+  background: var(--paper);
+}
+
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; margin-bottom: 4px; }
+
+/* The logo is a transparent-background alpha mask, painted in the current ink.
+   One asset, correct in both themes, and nothing to re-export when the palette
+   changes. Both files are derived from the supplied lockup; regenerate them if
+   a newer one arrives. */
+.pal-mark, .pal-logo {
+  display: block; flex: none;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: left center; mask-position: left center;
+  -webkit-mask-size: contain; mask-size: contain;
+}
+.pal-mark {
+  width: 30px; height: 28px; color: var(--ink);
+  -webkit-mask-image: url('/assets/palladium-mark.png');
+  mask-image: url('/assets/palladium-mark.png');
+}
+.pal-logo {
+  width: 132px; height: 53px; color: var(--ink);
+  -webkit-mask-image: url('/assets/palladium-logo.png');
+  mask-image: url('/assets/palladium-logo.png');
+}
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 18.5px; font-weight: 500; letter-spacing: -.02em;
+  color: var(--ink); white-space: nowrap;
+}
+.wordmark b { font-weight: 800; }
+
+/* ── the estate bar ─────────────────────────────────────────────────────── */
+/* Live counts of what the console can actually reach, in the space a search box
+   used to occupy. Every number here is a probe that came back — nothing is
+   claimed before its project has answered. */
+.estatebar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  min-width: 0; overflow: hidden;
+}
+.est {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 30px; padding: 0 12px;
+  border-radius: var(--r-pill);
+  background: var(--fill); color: var(--ink-2);
+  font-size: 12.5px; font-weight: 600; white-space: nowrap;
+}
+.est b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.est .d { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.est.live { background: var(--live-soft); color: var(--live); }
+.est.live .d { animation: beat 2.4s ease-in-out infinite; }
+.est.busy { background: var(--busy-soft); color: var(--busy); }
+.est.bad  { background: var(--bad-soft);  color: var(--bad); }
+.est.quiet { background: transparent; color: var(--ink-3); padding-left: 2px; }
+.est.run { background: var(--accent); color: var(--on-accent); }
+.est.run b { color: var(--on-accent); }
+.est .rbar {
+  width: 54px; height: 4px; border-radius: 3px; flex: none;
+  background: color-mix(in srgb, var(--on-accent) 28%, transparent); overflow: hidden;
+}
+.est .rbar i {
+  display: block; height: 100%; border-radius: 3px;
+  background: var(--on-accent); transition: width .5s ease;
+}
+@media (prefers-reduced-motion: reduce) { .est.live .d { animation: none; } }
+
+kbd {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 600;
+  padding: 3px 7px; border-radius: 7px;
+  background: var(--paper); color: var(--ink-3);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+
+.topright { display: flex; align-items: center; gap: 8px; }
+.iconbtn {
+  width: 38px; height: 38px; flex: none;
+  display: grid; place-items: center;
+  border: 0; border-radius: 12px;
+  background: transparent; color: var(--ink-2);
+  cursor: pointer; transition: background .16s ease, color .16s ease;
+}
+.iconbtn:hover { background: var(--fill); color: var(--ink); }
+.iconbtn svg { width: 20px; height: 20px; }
+
+.who { display: flex; align-items: center; gap: 10px; margin-left: 6px; }
+.who-name { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.avatar {
+  width: 37px; height: 37px; flex: none;
+  /* grid + zero padding, because the avatar is also rendered at 28px in tables
+     and a button's default padding clips the initials at that size */
+  display: grid; place-items: center; padding: 0; overflow: hidden;
+  border: 0; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent);
+  font-family: var(--font-display); font-weight: 700; font-size: 13px;
+  letter-spacing: .02em; cursor: pointer;
+  transition: transform .16s ease, background .16s ease;
+}
+.avatar:hover { background: var(--accent-press); transform: translateY(-1px); }
+
+/* ── body: dark sidebar + white canvas ──────────────────────────────────── */
+
+.side {
+  /* Top-to-bottom and very slight: enough that the column has depth and does
+     not read as a flat swatch, not enough to notice as a gradient. */
+  background: linear-gradient(176deg, var(--side) 0%, var(--side-2) 62%, var(--side-3) 100%);
+  /* No radius, deliberately. The card already clips to its own arc
+     (`.shell { overflow: hidden }`), so a square corner here is cut to exactly
+     the right shape. Rounding the sidebar as well drew a SECOND arc on top of
+     the first, and two antialiased curves never land on the same subpixels —
+     the card's paler ground showed between them as the bright hairline hugging
+     the corner. One curve, one edge, no seam. */
+  color: var(--side-ink);
+  padding: 24px 16px 20px;
+  display: flex; flex-direction: column; gap: 22px;
+  overflow: auto;
+  min-height: 0;
+}
+.side .brand { padding: 8px 8px 0; margin-bottom: 14px; }
+.side .wordmark { color: var(--side-ink); }
+.side .pal-mark { color: var(--side-ink); }
+.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 9px; }
+
+/* the white pill on the dark — the ONE primary action */
+.cta {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 45px; width: 100%;
+  border: 0; border-radius: var(--r-pill);
+  background: var(--side-ink); color: #101216;
+  font-family: var(--font-display); font-weight: 600; font-size: 14.5px;
+  white-space: nowrap; cursor: pointer;
+  box-shadow: 0 8px 20px -12px rgba(0,0,0,.9);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.cta:hover { transform: translateY(-1px); box-shadow: 0 14px 26px -12px rgba(0,0,0,.9); }
+.cta:active { transform: translateY(0); }
+.cta svg { width: 17px; height: 17px; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-i {
+  display: flex; align-items: center; gap: 13px;
+  padding: 11px 13px; border-radius: 11px;
+  color: var(--side-ink-2); font-weight: 500;
+  transition: background .16s ease, color .16s ease;
+}
+.nav-i svg { width: 20px; height: 20px; flex: none; }
+.nav-i:hover { color: var(--side-ink); background: rgba(255,255,255,.07); }
+.nav-i.on { color: var(--side-ink); background: var(--side-fill); font-weight: 600; }
+
+.sidelabel {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--side-ink-3); margin-top: 6px;
+}
+.sidelabel i { flex: 1; height: 1px; background: var(--side-rule); }
+
+.meterbox { display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; }
+.meter-t { display: flex; align-items: baseline; gap: 7px; color: var(--side-ink); font-weight: 600; }
+.meter-t .n { font-family: var(--font-display); font-size: 15px; font-weight: 700; }
+.bar { height: 4px; border-radius: 3px; background: rgba(255,255,255,.16); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--side-ink); border-radius: 3px; transition: width .5s ease; }
+.meter-c { color: var(--side-ink-3); font-size: 11.5px; }
+.meter-quiet { color: var(--side-ink-3); font-size: 12.5px; }
+
+.side-link {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 8px; padding-top: 12px;
+  border-top: 1px solid var(--side-rule);
+  color: var(--side-ink-2); font-weight: 500; font-size: 13px;
+}
+.side-link:hover { color: var(--side-ink); }
+.side-link svg { width: 17px; height: 17px; }
+
+/* ── canvas ─────────────────────────────────────────────────────────────── */
+
+/* The work surface is printed on paper, not on a flat fill: the drawn sweeps
+   sit in two opposite corners and the middle — where the tables and cards go —
+   is left empty, so the texture is felt at the margins and never read through
+   content. `scroll` attachment on an overflow container pins the image to the
+   padding box, so it stays put while the content moves over it. */
+.canvas {
+  overflow: auto; padding: 28px 30px 56px;
+  /* Stretched to the box rather than `cover`: the drawing's whole point is that
+     its middle is empty, and cover crops whichever axis does not fit — which
+     drags a sweep in under the cards. An exact fit keeps the empty middle
+     empty at any window size, and a soft abstract does not mind the scale. */
+  background:
+    var(--canvas-veil) 0 0 / 100% 100% no-repeat,
+    var(--canvas-art) 0 0 / 100% 100% no-repeat,
+    var(--paper);
+  background-attachment: scroll;
+}
+.canvas > * + * { margin-top: 20px; }
+
+.head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ptitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 29px; font-weight: 700; letter-spacing: -.028em;
+  color: var(--ink);
+}
+.psub { margin: 0; color: var(--ink-3); font-size: 13px; max-width: 74ch; }
+.head .spacer { flex: 1; }
+.viewtoggle { display: flex; gap: 4px; padding: 4px; border-radius: 13px; background: var(--fill); }
+.vt {
+  width: 36px; height: 34px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 10px;
+  background: transparent; color: var(--ink-3);
+  cursor: pointer; transition: background .16s ease, color .16s ease;
+}
+.vt:hover { color: var(--ink-2); }
+.vt.on { background: var(--paper); color: var(--ink); box-shadow: var(--shadow-card); }
+.vt svg { width: 18px; height: 18px; }
+
+/* ── one full-width control strip: search, then the two filter selects ──── */
+
+.strip { display: flex; align-items: center; gap: 10px; width: 100%; flex-wrap: wrap; }
+.field {
+  display: flex; align-items: center; gap: 9px;
+  height: 42px; padding: 0 16px;
+  flex: 1 1 240px; min-width: 200px;
+  border-radius: var(--r-pill); background: var(--fill); color: var(--ink-3);
+}
+.field svg { width: 17px; height: 17px; flex: none; }
+.field input {
+  flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink);
+  outline: none; font-size: 13.5px;
+}
+.field input::placeholder { color: var(--ink-3); }
+
+.selpill { position: relative; display: flex; align-items: center; flex: 0 0 auto; }
+.selpill select {
+  appearance: none;
+  height: 42px; padding: 0 36px 0 16px; min-width: 156px;
+  border: 0; border-radius: var(--r-pill);
+  background: var(--fill); color: var(--ink-2);
+  font-size: 13px; font-weight: 600; cursor: pointer; text-overflow: ellipsis;
+}
+.selpill select:disabled { opacity: .45; cursor: not-allowed; }
+.selpill.set select { background: var(--accent); color: var(--on-accent); }
+.selpill::after {
+  content: ''; position: absolute; right: 16px; pointer-events: none;
+  width: 7px; height: 7px;
+  border-right: 2px solid var(--ink-3); border-bottom: 2px solid var(--ink-3);
+  transform: translateY(-2px) rotate(45deg);
+}
+.selpill.set::after { border-color: var(--on-accent); }
+.linkbtn {
+  border: 0; background: transparent; color: var(--ink-2);
+  font-weight: 700; font-size: 13px; cursor: pointer; padding: 8px 6px;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.linkbtn:hover { color: var(--ink); }
+
+/* the small uppercase letterspaced label used throughout the canvas */
+.lbl {
+  display: block;
+  font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.rowlabel { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.rowlabel i { flex: 1; height: 1px; background: var(--line); }
+.muted { color: var(--ink-2); }
+.dim { color: var(--ink-3); }
+.mono { font-family: var(--font-mono); font-size: 12px; }
+
+/* ── status pill ────────────────────────────────────────────────────────── */
+
+.pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 26px; padding: 0 11px;
+  border-radius: var(--r-pill);
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  background: var(--fill); color: var(--ink-2);
+}
+.pill .d { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.pill.live { background: var(--live-soft); color: var(--live); }
+.pill.live .d { animation: beat 2.4s ease-in-out infinite; }
+.pill.busy { background: var(--busy-soft); color: var(--busy); }
+.pill.bad  { background: var(--bad-soft);  color: var(--bad); }
+.pill.info { background: var(--accent-soft); color: var(--ink); }
+@keyframes beat { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .pill.live .d { animation: none; } }
+
+.tag {
+  display: inline-block; padding: 3px 9px; border-radius: 8px;
+  background: var(--fill); color: var(--ink-2);
+  font-size: 11.5px; font-weight: 600;
+}
+
+/* ── project cards — floating, and saying only what a card should ───────── */
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); gap: 34px 22px; }
+
+.pcard {
+  position: relative;
+  margin-top: 22px;
+  background: var(--paper);
+  border-radius: 0 var(--r-card) var(--r-card) var(--r-card);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 18px;
+  transition: transform .2s cubic-bezier(.2,.7,.3,1), box-shadow .2s ease, background .2s ease;
+}
+.pcard:hover { transform: translateY(-4px); box-shadow: var(--shadow-lift); }
+
+/* the folder tab: a project IS a folder of demo material */
+.pcard .tab {
+  position: absolute; top: -22px; left: 0;
+  height: 22px; min-width: 60px; padding: 0 13px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 9px 9px 0 0;
+  background: var(--tabc, var(--accent)); color: #fff;
+  font-family: var(--font-display); font-size: 11px; font-weight: 700; letter-spacing: .08em;
+}
+
+.pname {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px; font-weight: 600; line-height: 1.25; letter-spacing: -.018em;
+  color: var(--ink);
+}
+.pclient { margin: 3px 0 0; font-size: 12.5px; color: var(--ink-2); }
+.pfoot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
+.pmeta {
+  font-size: 12px; color: var(--ink-3); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* in use right now → solid ink, the reference's selected card */
+.pcard.held { background: var(--accent); box-shadow: var(--shadow-lift); }
+.pcard.held .pname { color: var(--on-accent); }
+.pcard.held .pclient, .pcard.held .pmeta { color: color-mix(in srgb, var(--on-accent) 66%, transparent); }
+.pcard.held .pill { background: color-mix(in srgb, var(--on-accent) 16%, transparent); color: var(--on-accent); }
+
+/* ── the empty folder at the end of the shelf ───────────────────────────── */
+/* Same silhouette as a project — tab, body, corners — but drawn as an outline,
+   so it reads as a PLACE for a project rather than as one. */
+.pcard.add {
+  background: var(--paper);
+  /* the same shadow every other folder on the shelf has — it is an empty one,
+     not a ghost of one */
+  box-shadow: var(--shadow-card);
+  border: 1.5px dashed var(--line-2);
+  align-items: center; justify-content: center; text-align: center;
+  gap: 8px; cursor: pointer; font: inherit;
+  min-height: 168px;
+}
+.pcard.add:hover {
+  transform: translateY(-4px);
+  border-color: var(--ink-3);
+  background: var(--fill);
+  box-shadow: var(--shadow-card);
+}
+.pcard.add .tab {
+  background: var(--paper); color: var(--ink-3);
+  border: 1.5px dashed var(--line-2); border-bottom: 0;
+  top: -23.5px;
+  box-shadow: 0 -3px 10px -4px rgba(16,18,24,.16);
+}
+.pcard.add:hover .tab { border-color: var(--ink-3); color: var(--ink-2); }
+.add-mark {
+  width: 38px; height: 38px; display: grid; place-items: center;
+  border-radius: 50%; background: var(--fill-2); color: var(--ink-2);
+  transition: background .18s ease, color .18s ease;
+}
+.pcard.add:hover .add-mark { background: var(--accent); color: var(--on-accent); }
+.add-mark svg { width: 19px; height: 19px; }
+.add-t { font-family: var(--font-display); font-size: 15.5px; font-weight: 600; color: var(--ink); }
+.add-d { font-size: 12px; color: var(--ink-3); max-width: 26ch; line-height: 1.4; }
+
+/* and its equivalent at the foot of the list */
+tr.addrow { cursor: pointer; }
+tr.addrow td { border-top: 1px dashed var(--line-2); padding: 0; }
+.addrow-in {
+  display: flex; align-items: center; gap: 9px;
+  padding: 14px; color: var(--ink-2); font-weight: 600; font-size: 13px;
+}
+.addrow-in svg { width: 17px; height: 17px; }
+tr.addrow:hover td { background: var(--fill); border-radius: 10px; }
+tr.addrow:hover .addrow-in { color: var(--ink); }
+
+/* ── flat list view ─────────────────────────────────────────────────────── */
+
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 700px; }
+thead th {
+  text-align: left; padding: 0 14px 10px;
+  font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-3); white-space: nowrap;
+}
+tbody td { padding: 13px 14px; border-top: 1px solid var(--line); color: var(--ink-2); vertical-align: middle; }
+tbody tr { transition: background .14s ease; }
+tbody tr[data-href] { cursor: pointer; }
+tbody tr[data-href]:hover td { background: var(--fill); }
+tbody tr[data-href]:hover td:first-child { border-radius: 10px 0 0 10px; }
+tbody tr[data-href]:hover td:last-child { border-radius: 0 10px 10px 0; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td strong { color: var(--ink); font-weight: 600; }
+.cellname { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.dot2 {
+  width: 28px; height: 28px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 9px; background: var(--tabc, var(--accent)); color: #fff;
+  font-family: var(--font-display); font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+}
+
+/* ── panels and rows ────────────────────────────────────────────────────── */
+
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-box);
+  overflow: hidden;
+}
+.panel-h {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--paper-2);
+}
+.panel-b { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.panel-b.tight { padding: 6px 8px; gap: 0; }
+
+.row { display: flex; align-items: center; gap: 13px; padding: 11px 10px; border-radius: 10px; }
+.row + .row { border-top: 1px solid var(--line); }
+.row:hover { background: var(--fill); }
+.row-ic {
+  width: 32px; height: 32px; flex: none; display: grid; place-items: center;
+  border-radius: 10px; background: var(--fill); color: var(--ink-2);
+  font-size: 13px; font-weight: 700;
+}
+.row-ic svg { width: 17px; height: 17px; }
+.row-main { flex: 1; min-width: 0; }
+.row-t { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+.row-m { font-size: 12px; color: var(--ink-3); }
+.row-act { display: flex; align-items: center; gap: 7px; flex: none; }
+
+.split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.stack { display: flex; flex-direction: column; gap: 18px; }
+
+/* ── project detail hero ────────────────────────────────────────────────── */
+
+.hero {
+  position: relative; isolation: isolate;
+  background:
+    radial-gradient(120% 150% at 8% -20%, rgba(255,255,255,.14) 0%, transparent 52%),
+    linear-gradient(118deg, var(--hero-1) 0%, var(--hero-2) 46%, var(--hero-3) 100%);
+  border-radius: var(--r-app);
+  color: #fff;
+  padding: 24px 26px;
+  display: flex; flex-direction: column; gap: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+  overflow: hidden;
+}
+/* one broad highlight sweeping the panel, so the gradient reads as lit rather
+   than as a flat ramp */
+.hero::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(118deg, transparent 54%, rgba(255,255,255,.055) 54.4%,
+                              transparent 76%);
+}
+.hero-row { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+.hero-chip {
+  width: 44px; height: 44px; flex: none; display: grid; place-items: center;
+  border-radius: 13px; background: var(--tabc, rgba(255,255,255,.16)); color: #fff;
+  font-family: var(--font-display); font-size: 14px; font-weight: 700; letter-spacing: .06em;
+}
+.hero-name {
+  margin: 0; font-family: var(--font-display);
+  font-size: 24px; font-weight: 700; letter-spacing: -.028em; line-height: 1.15;
+}
+.hero-sub { margin: 2px 0 0; color: rgba(255,255,255,.66); font-size: 13px; }
+.hero-actions { margin-left: auto; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.hero .pill { background: rgba(255,255,255,.14); color: #fff; }
+.hero .pill.live .d { background: #5fe3ae; }
+.hero .pill.bad  .d { background: #ffa9b2; }
+.hero .pill.busy .d { background: #f3ce8e; }
+.hero .lbl { color: rgba(255,255,255,.44); }
+.hero-facts { display: flex; gap: 34px; flex-wrap: wrap; }
+.hero-facts .v { display: block; margin-top: 4px; font-weight: 600; font-size: 13.5px; }
+.hero-facts .v.key { font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; }
+
+.tabs { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.tab-l {
+  padding: 11px 14px; border-bottom: 2.5px solid transparent;
+  color: var(--ink-2); font-weight: 600; font-size: 13.5px;
+  transition: color .16s ease, border-color .16s ease;
+}
+.tab-l:hover { color: var(--ink); }
+.tab-l.on { color: var(--ink); border-bottom-color: var(--accent); }
+
+/* every tab opens by stating the question it answers */
+.tab-q { margin: 0 0 4px; color: var(--ink-3); font-size: 12.5px; }
+
+/* ── the project header, directly on the page ───────────────────────────── */
+/* It used to be a dark slab. A project does not need a masthead — you know
+   which one you opened — and the slab pushed everything that matters below it. */
+.phead { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+.phead-chip {
+  width: 46px; height: 46px; flex: none; display: grid; place-items: center;
+  border-radius: 14px; background: var(--tabc, var(--accent)); color: #fff;
+  font-family: var(--font-display); font-size: 14px; font-weight: 700; letter-spacing: .06em;
+  box-shadow: var(--shadow-card);
+}
+.phead-name {
+  margin: 0; font-family: var(--font-display);
+  font-size: 27px; font-weight: 700; letter-spacing: -.028em; line-height: 1.15;
+  color: var(--ink);
+}
+.phead-sub { margin: 3px 0 0; color: var(--ink-2); font-size: 13px; }
+.phead-act { margin-left: auto; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.phead-facts { display: flex; gap: 32px; flex-wrap: wrap; }
+.phead-facts .v { display: block; margin-top: 5px; font-weight: 600; font-size: 13.5px; color: var(--ink); }
+.phead-facts .v.mono { font-weight: 500; }
+
+/* ── controls: one shape for everything that changes a project ──────────── */
+.control { display: flex; align-items: flex-start; gap: 13px; padding: 15px 10px; border-radius: 10px; }
+.control + .control { border-top: 1px solid var(--line); }
+.control:hover { background: var(--fill); }
+.control.locked { opacity: .72; }
+.control-ic {
+  width: 34px; height: 34px; flex: none; display: grid; place-items: center;
+  border-radius: 11px; background: var(--accent); color: var(--on-accent);
+}
+.control.locked .control-ic { background: var(--fill-2); color: var(--ink-3); }
+.control-ic svg { width: 18px; height: 18px; }
+.control-main { flex: 1; min-width: 0; }
+.control-t { font-family: var(--font-display); font-weight: 600; font-size: 14.5px; color: var(--ink); }
+.control-d { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+.control-act { flex: none; display: flex; align-items: center; gap: 8px; padding-top: 2px; }
+.control-pick { display: flex; align-items: center; gap: 8px; }
+.control-pick .selpill select { height: 32px; min-width: 132px; font-size: 12.5px; padding: 0 30px 0 13px; }
+.control-pick .selpill::after { right: 13px; }
+.blast {
+  display: inline-block; margin-top: 9px; padding: 3px 9px; border-radius: 8px;
+  background: var(--busy-soft); color: var(--busy); font-size: 11.5px; font-weight: 600;
+}
+.rev { margin-left: 7px; color: var(--ink-3); font-size: 11.5px; font-weight: 500; }
+
+/* ── the resource shelf ─────────────────────────────────────────────────── */
+.panel-tools { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.row.res .row-act { gap: 6px; }
+.uploading {
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 14px 18px; border-top: 1px solid var(--line); background: var(--paper-2);
+}
+.uploading .bar { background: var(--fill-2); }
+.uploading .bar i { background: var(--accent); }
+
+/* ── the viewer ─────────────────────────────────────────────────────────── */
+.viewer {
+  position: fixed; inset: 0; z-index: 80;
+  background: rgba(6,8,12,.72); backdrop-filter: blur(4px);
+  display: grid; place-items: center; padding: clamp(12px, 3vw, 44px);
+}
+.viewer-box {
+  width: min(1180px, 100%); height: min(860px, 100%);
+  background: var(--paper); border-radius: var(--r-app);
+  box-shadow: 0 3px 8px rgba(0,0,0,.5), 0 24px 60px -14px rgba(0,0,0,.7),
+              0 0 60px -8px rgba(255,255,255,.14);
+  display: grid; grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+.viewer-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 14px 16px 14px 20px; border-bottom: 1px solid var(--line);
+  background: var(--paper-2);
+}
+.viewer-t { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-m { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+.viewer-act { display: flex; align-items: center; gap: 8px; flex: none; }
+.viewer-body { min-height: 0; background: var(--fill); display: grid; }
+.viewer-frame { width: 100%; height: 100%; border: 0; background: var(--fill); }
+/* The player sits on its own dark stage, because a video on a light panel
+   reads as a picture of a video rather than as something playing. */
+.viewer-body:has(.viewer-video) { background: #0a0b0d; place-items: center; padding: 18px; }
+.viewer-video { width: 100%; height: 100%; max-height: 100%; object-fit: contain;
+  border-radius: 12px; background: #000; }
+.viewer-body:has(.viewer-img) { place-items: center; padding: 20px; overflow: auto; }
+.viewer-img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 10px;
+  box-shadow: var(--shadow-card); }
+.viewer-none { place-self: center; color: var(--ink-2); padding: 40px; text-align: center; max-width: 42ch; }
+
+/* ── buttons ────────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 40px; padding: 0 17px;
+  border: 1px solid var(--line-2); border-radius: var(--r-pill);
+  background: var(--paper); color: var(--ink);
+  font-weight: 600; font-size: 13.5px; white-space: nowrap; cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, transform .16s ease;
+}
+.btn:hover { background: var(--fill); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn svg { width: 16px; height: 16px; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.pri:hover { background: var(--accent-press); border-color: var(--accent-press); }
+.btn.sm { height: 32px; padding: 0 13px; font-size: 12.5px; }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn.ghost:hover { background: var(--fill); color: var(--ink); }
+.btn.danger { color: var(--bad); border-color: transparent; background: transparent; }
+.btn.danger:hover { background: var(--bad-soft); }
+/* a white pill sitting on the dark hero */
+.hero .btn { background: rgba(255,255,255,.14); border-color: transparent; color: #fff; }
+.hero .btn:hover { background: rgba(255,255,255,.24); }
+.hero .btn:disabled:hover { background: rgba(255,255,255,.14); }
+.hero .btn.pri { background: #fff; color: #101216; }
+.hero .btn.pri:hover { background: rgba(255,255,255,.86); }
+
+/* ── empty / loading ────────────────────────────────────────────────────── */
+
+.empty {
+  text-align: center; padding: 54px 24px;
+  border: 1px dashed var(--line-2); border-radius: var(--r-app);
+  background: var(--paper-2);
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+}
+.empty .eh { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--ink); }
+.empty .ed { max-width: 48ch; color: var(--ink-2); }
+.empty .btn, .empty .linkbtn { margin-top: 7px; }
+
+.loading { display: flex; flex-direction: column; gap: 10px; }
+.loading .lbl { text-align: center; }
+.skel {
+  border-radius: var(--r-box);
+  background: linear-gradient(100deg, var(--fill) 30%, var(--fill-2) 50%, var(--fill) 70%);
+  background-size: 300% 100%;
+  animation: shim 1.3s linear infinite;
+}
+@keyframes shim { to { background-position: -300% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+
+/* ── command palette ────────────────────────────────────────────────────── */
+
+.palette {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(8,10,14,.5); backdrop-filter: blur(3px);
+  display: grid; place-items: start center; padding-top: 14vh;
+}
+.palette-box {
+  width: min(560px, 92vw);
+  background: var(--paper); border-radius: 20px;
+  box-shadow: var(--shadow-pop); overflow: hidden;
+}
+.palette-field { display: flex; align-items: center; gap: 11px; padding: 6px 16px; border-bottom: 1px solid var(--line); }
+.palette-field svg { width: 18px; height: 18px; color: var(--ink-3); }
+.palette-field input {
+  flex: 1; height: 52px; border: 0; background: transparent; outline: none;
+  font-size: 15px; color: var(--ink);
+}
+.palette-field input::placeholder { color: var(--ink-3); }
+.palette-list { max-height: 50vh; overflow: auto; padding: 8px; }
+.pitem {
+  display: flex; align-items: center; gap: 11px; justify-content: space-between;
+  padding: 11px 13px; border-radius: 11px; cursor: pointer;
+}
+.pitem.on { background: var(--fill); }
+.pitem .pt { font-weight: 600; color: var(--ink); }
+.pitem .pk { font-size: 12px; color: var(--ink-3); }
+
+/* ── modal ──────────────────────────────────────────────────────────────── */
+
+.modal {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(8,10,14,.5); backdrop-filter: blur(3px);
+  display: grid; place-items: center; padding: 22px;
+}
+.modal-box {
+  width: min(480px, 100%); max-height: 86vh; overflow: auto;
+  background: var(--paper); border-radius: 20px; padding: 24px;
+  box-shadow: var(--shadow-pop);
+}
+.modal-box h3 {
+  margin: 0 0 6px; font-family: var(--font-display);
+  font-size: 20px; font-weight: 700; letter-spacing: -.024em; color: var(--ink);
+}
+.modal-box > p { margin: 0 0 16px; color: var(--ink-2); }
+.field-l { display: block; margin-bottom: 9px; }
+.field-l > span.t { display: block; margin-bottom: 6px; font-weight: 700; font-size: 13px; color: var(--ink); }
+.field-l input, .field-l select {
+  width: 100%; height: 46px; padding: 0 16px;
+  border: 0; border-radius: 12px;
+  background: var(--field); color: var(--ink); outline: none;
+  font-size: 14.5px; font-weight: 500;
+  box-shadow: var(--field-shadow);
+  transition: box-shadow .16s ease, transform .16s ease;
+}
+.field-l input::placeholder { color: var(--ink-3); font-weight: 400; }
+.field-l input:hover, .field-l select:hover { box-shadow: var(--field-shadow-h); }
+.field-l input:focus, .field-l select:focus {
+  /* the ring is the ink at reduced strength: present enough to be unmistakable,
+     not a black bar drawn round the field */
+  box-shadow: var(--field-shadow-h),
+              0 0 0 2px color-mix(in srgb, var(--field-focus) 55%, transparent);
+  transform: translateY(-1px);
+}
+.field-l input[type="color"] { padding: 3px; height: 42px; }
+.hint { display: block; margin-top: 6px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; }
+.callout {
+  padding: 13px 15px; border-radius: 12px;
+  background: var(--fill); color: var(--ink-2); font-size: 13px; margin-bottom: 16px;
+}
+.callout b { color: var(--ink); }
+
+/* ── toasts ─────────────────────────────────────────────────────────────── */
+
+.toasts {
+  position: fixed; right: 22px; bottom: 22px; z-index: 90;
+  display: flex; flex-direction: column; gap: 9px; align-items: flex-end;
+}
+.toast {
+  min-width: 250px; max-width: 380px;
+  padding: 13px 16px; border-radius: 14px;
+  background: var(--paper); border-left: 4px solid var(--accent);
+  box-shadow: var(--shadow-pop);
+  transition: opacity .25s ease;
+}
+.toast.ok  { border-left-color: var(--live); }
+.toast.bad { border-left-color: var(--bad); }
+.toast .tt { display: block; font-weight: 700; color: var(--ink); }
+.toast .td { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+
+/* ── sign in ────────────────────────────────────────────────────────────── */
+
+.signin { position: relative; z-index: 1; min-height: 100dvh; display: grid; place-items: center; padding: var(--gutter); }
+
+.login {
+  width: min(1000px, 100%);
+  height: min(628px, calc(100dvh - var(--gutter) * 2));
+  background: var(--paper); border-radius: var(--r-app);
+  /* The dark drop that gives it weight, plus a faint WHITE halo. The artwork
+     half is nearly as dark as the ground behind it, so without the halo the
+     card's right edge simply dissolves — the board stops having a shape. Kept
+     low: enough to find the edge, not enough to look lit from within. */
+  /* Its own stack rather than the shared token, because that token carries a
+     1px spread ring — which on this board reads as a drawn border rather than
+     as light. Here the separation comes only from the glow: a weighted dark
+     drop underneath for gravity, then two white blooms wide enough that the
+     artwork half stops dissolving into the ground behind it. */
+  box-shadow:
+    0 3px 8px rgba(0,0,0,.55),
+    0 20px 46px -12px rgba(0,0,0,.7),
+    0 0 52px -4px rgba(255,255,255,.26),
+    0 0 150px -22px rgba(255,255,255,.36);
+  overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1.02fr) minmax(0, 1fr);
+  animation: liftin .7s cubic-bezier(.2,.8,.25,1) both;
+}
+@keyframes liftin {
+  from { opacity: 0; transform: translateY(18px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .login { animation: none; } }
+
+/* THREE ZONES, not a stack. The mark is anchored at the top, the form is
+   optically centred in what is left, and the ways out are pinned to the foot
+   behind a hairline. The zones hold while the middle one changes between the
+   four forms, which is what stops the panel jumping as you move between them. */
+.login-form {
+  display: grid; grid-template-rows: auto 1fr auto;
+  /* The zones keep their distance whatever the middle one is doing, so a tall
+     form cannot slide its heading up under the mark. */
+  row-gap: 18px;
+  padding: 36px 54px 30px;
+  overflow: hidden;
+}
+.login-head { }
+.login-main { align-self: center; display: flex; flex-direction: column; gap: 13px; padding: 10px 0; min-height: 0; }
+/* The display size belongs to the thesis line on the way in. The other three
+   forms are TASKS — they carry more fields and need less headline, so the
+   heading steps down rather than the card growing to accommodate a shout. */
+.login-form.compact .login-main { gap: 10px; padding: 10px 0; }
+.login-form.compact h1 { font-size: 23px; letter-spacing: -.028em; }
+.login-form.compact .login-lede { font-size: 13px; margin: -2px 0 2px; }
+.login-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding-top: 14px; border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.brand-lg { display: flex; flex-direction: column; gap: 6px; }
+.pal-sub {
+  font-size: 10px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.login-form h1 {
+  margin: 0; font-family: var(--font-display);
+  font-size: 30px; font-weight: 800; line-height: 1.08; letter-spacing: -.035em;
+  color: var(--ink);
+}
+.login-lede {
+  margin: -4px 0 4px; color: var(--ink-2); max-width: 40ch;
+  font-size: 13.5px; font-weight: 500; line-height: 1.5;
+}
+
+/* The login borrows the console's own label idiom — small, uppercase,
+   letterspaced — so the way in looks like the thing it leads to. */
+.login-form .field-l { margin-bottom: 0; }
+.login-form .field-l > span.t {
+  margin-bottom: 6px;
+  font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+#login-body { display: flex; flex-direction: column; gap: 10px; }
+.frow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn.wide { width: 100%; height: 46px; font-size: 14.5px; font-weight: 700; margin-top: 3px; }
+
+.login-art {
+  position: relative;
+  background: #07080a;
+  min-height: 260px;
+  overflow: hidden;
+}
+.login-art canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* The artwork is on black. `screen` makes that black transparent against the
+   panel, so the piece reads as light ON the panel rather than as a photograph
+   pasted into a rectangle — the background is gone without keying a single
+   pixel. The slow drift keeps it from looking like a static hero image. */
+.login-art-img {
+  position: absolute; inset: -6%;
+  background: var(--login-art) center / cover no-repeat;
+  animation: artdrift 48s ease-in-out infinite alternate;
+}
+@keyframes artdrift {
+  from { transform: scale(1) translate3d(0, 0, 0); }
+  to   { transform: scale(1.07) translate3d(-1.5%, 1.5%, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .login-art-img { animation: none; } }
+
+/* ── responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  :root { --sidew: 212px; }
+  .canvas { padding: 24px 20px 48px; }
+  .split { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  :root { --gutter: 14px; }
+  .shell { grid-template-rows: auto 1fr; }
+  .topbar { gap: 12px; padding: 12px 14px; }
+  .wordmark { display: none; }
+  .searchpill { width: 44px; justify-content: center; padding: 0; }
+  .searchpill span, .searchpill kbd { display: none; }
+  .who-name { display: none; }
+  .shell { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .side {
+    border-radius: var(--r-app) var(--r-app) 0 0;
+    flex-direction: row; align-items: center; gap: 12px;
+    padding: 10px 14px; overflow-x: auto; overflow-y: hidden;
+  }
+  .side .brand { padding: 0; margin: 0; }
+  .cta { width: auto; height: 40px; padding: 0 16px; }
+  .nav { flex-direction: row; }
+  .nav-i { padding: 9px 11px; white-space: nowrap; }
+  .nav-i span { display: none; }
+  .side-foot { margin: 0 0 0 auto; flex-direction: row; align-items: center; gap: 12px; }
+  .sidelabel, .side-link, .meter-c, #fleet { display: none; }
+  .meterbox { min-width: 120px; }
+  .login { grid-template-columns: 1fr; grid-template-rows: 130px minmax(0, 1fr); height: min(620px, calc(100dvh - var(--gutter) * 2)); }
+  .login-art { min-height: 0; order: -1; }
+  .login-form { padding: 24px 26px 20px; }
+  .login-form h1 { font-size: 23px; }
+  .login-main { padding: 12px 0; gap: 11px; }
+  .estatebar { display: none; }
+}
+
+@media (max-width: 560px) {
+  :root { --gutter: 0px; }
+  .shell { border-radius: 0; height: 100dvh; }
+  .canvas { padding: 20px 16px 44px; }
+  .ptitle { font-size: 25px; }
+  .grid { grid-template-columns: 1fr; }
+  .hero { padding: 20px; border-radius: 18px; }
+  .hero-actions { margin-left: 0; width: 100%; }
+  .hero-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; }
+  .selpill, .selpill select { flex: 1 1 100%; min-width: 0; width: 100%; }
+  .toasts { right: 12px; left: 12px; bottom: 12px; align-items: stretch; }
+  .signin { padding: 0; }
+  .login { border-radius: 0; height: 100dvh; grid-template-rows: 120px minmax(0, 1fr); }
+}

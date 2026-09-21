@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.log
+
+# The browser suite installs playwright into this directory when it runs in the
+# container; it is a build artifact of running the tests, not source.
+node_modules/
+package.json
+package-lock.json
+
+# Uploaded files live in a volume, never in the tree.
+data/

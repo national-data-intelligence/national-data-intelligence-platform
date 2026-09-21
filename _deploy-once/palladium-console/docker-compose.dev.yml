@@ -1,0 +1,11 @@
+# Local iteration overlay. Opt in explicitly:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db app
+#
+# The base stack bakes web/ into the image, which is right for a deployment but
+# means a CSS tweak costs a rebuild. This mounts the served files instead, so a
+# save is a refresh. Nothing here is used by the deployed stack.
+services:
+  app:
+    volumes:
+      - ./web:/srv/web:ro
