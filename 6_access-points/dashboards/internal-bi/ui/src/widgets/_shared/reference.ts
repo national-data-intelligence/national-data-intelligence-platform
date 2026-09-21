@@ -20,11 +20,14 @@
  * the first render, so a widget never sees a half-filled table.
  */
 
-export const REGIONS: string[] = [
-  'Addis Ababa', 'Afar', 'Amhara', 'Benishangul Gumuz', 'Central Ethiopia',
-  'Dire Dawa', 'Gambella', 'Harari', 'Oromia', 'Sidama', 'Somali',
-  'South Ethiopia', 'South West Ethiopia', 'Tigray',
-];
+/* EMPTY on purpose. These were Ethiopia's fourteen regions, and a fallback that
+ * names a country is the bug this whole mechanism exists to remove: it renders
+ * that country's regions on a deployment configured for a different one, every
+ * time the gateway blinks. `main.tsx` awaits loadReference() before the first
+ * render, so the only way to see this state is a gateway that is unreachable —
+ * and a dashboard whose every data fetch is failing is not improved by offering
+ * the wrong country's filter options. Empty is honest; wrong is not. */
+export const REGIONS: string[] = [];
 
 /** Display name (and region code) → the name the boundary file uses, resolved
  *  at profile BUILD time by the one process that has both lists in front of it.
@@ -38,15 +41,7 @@ export const REGION_GEO_NAME: Record<string, string> = {};
  *  CODE is the value the marts key on (region_id) and the name is only a label.
  *  Kept here so `biApp.ts` can consume it instead of declaring the list a second
  *  time in a second shape. */
-export const REGION_OPTIONS: Array<{ code: string; name: string }> = [
-  { code: 'AA', name: 'Addis Ababa' },       { code: 'AF', name: 'Afar' },
-  { code: 'AM', name: 'Amhara' },            { code: 'BG', name: 'Benishangul-Gumuz' },
-  { code: 'CE', name: 'Central Ethiopia' },  { code: 'DD', name: 'Dire Dawa' },
-  { code: 'GA', name: 'Gambella' },          { code: 'HA', name: 'Harari' },
-  { code: 'OR', name: 'Oromia' },            { code: 'SE', name: 'South Ethiopia' },
-  { code: 'SI', name: 'Sidama' },            { code: 'SO', name: 'Somali' },
-  { code: 'SW', name: 'South West Ethiopia' },{ code: 'TI', name: 'Tigray' },
-];
+export const REGION_OPTIONS: Array<{ code: string; name: string }> = [];
 
 /** Commodities, for the supply filters. Refilled from the profile; this list is
  *  the fallback, so the filter still populates when the gateway is unreachable.
@@ -91,15 +86,12 @@ export const COMMODITIES: Array<{ code: string; name: string }> = [
 
 /** What the geography filter's wildcard option is called. "All Ethiopia" was a
  *  country name sitting inside a UI string; it comes from the profile now. */
-export const scopeLabels = { allGeography: 'All Ethiopia' };
+export const scopeLabels = { allGeography: 'All areas' };
 
 /** 2-letter mart region_id → SPA region name (matches MFR/IDSR org-unit codes). */
-export const REGION_BY_ID: Record<string, string> = {
-  AA: 'Addis Ababa', AF: 'Afar', AM: 'Amhara', BG: 'Benishangul Gumuz',
-  CE: 'Central Ethiopia', DD: 'Dire Dawa', GA: 'Gambella', HA: 'Harari',
-  OR: 'Oromia', SI: 'Sidama', SO: 'Somali', SE: 'South Ethiopia',
-  SW: 'South West Ethiopia', TI: 'Tigray',
-};
+/* Also empty, and for the same reason. `regionName` falls back to the id, so an
+ * unresolved code shows as its code rather than as another country's region. */
+export const REGION_BY_ID: Record<string, string> = {};
 export const regionName = (id: string): string => REGION_BY_ID[id] || id || '-';
 
 // ── profile loading ─────────────────────────────────────────────────────────
@@ -123,7 +115,7 @@ let loaded = false;
  * Fill the tables from the active country profile. Awaited by main.tsx before
  * the first render.
  *
- * Never throws and never blocks for long: on any failure the bundled Ethiopian
+ * Never throws and never blocks for long: on any failure the bundled
  * tables stay in place and the dashboard renders exactly as it did before
  * profiles existed. A dashboard whose region filter is one deploy stale is a
  * working dashboard; one that will not paint because a fetch hung is not.
