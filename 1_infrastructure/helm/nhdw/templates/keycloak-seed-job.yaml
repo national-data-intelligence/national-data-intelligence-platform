@@ -98,6 +98,8 @@ spec:
               valueFrom: { secretKeyRef: { name: alertmanager-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             - name: HEADLAMP_GATE_OIDC_SECRET
               valueFrom: { secretKeyRef: { name: headlamp-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
+            - name: SEAWEEDFS_GATE_OIDC_SECRET
+              valueFrom: { secretKeyRef: { name: seaweedfs-gate-secrets, key: OIDC_CLIENT_SECRET, optional: true } }
             # Realm SMTP (execute-actions-email) → external Google SMTP relay.
             # HOST/PORT/TLS default to Gmail in setup-keycloak; USER/PASS are the
             # app-password (Mailpit fallback retired 2026-07-06).

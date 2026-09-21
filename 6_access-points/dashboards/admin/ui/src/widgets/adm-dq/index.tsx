@@ -54,8 +54,11 @@ const TOOLS = [
   // (/static/assets/brand/ — local, nothing fetched at runtime).
   { label: 'dbt Docs', sub: 'Full interactive lineage DAG',
     href: toolUrl('dbt-docs', '/'), brand: '/static/assets/brand/dbt.svg' },
-  // (The MinIO console tile was removed with MinIO on 2026-09-09; SeaweedFS ships no console —
-  //  the lake is browsed through dbt Docs, the DQ manifests and the gateway.)
+  // Lake console = the SeaweedFS filer's own file browser behind seaweedfs-gate
+  // (SSO, admin roles only — the UI is write-capable). Succeeds the MinIO
+  // console retired 2026-09-09.
+  { label: 'Lake browser', sub: 'Object store console (SeaweedFS)',
+    href: toolUrl('seaweedfs', '/'), brand: '/static/assets/brand/seaweedfs.svg' },
   { label: 'Airflow', sub: 'Ingestion + build run history',
     href: toolUrl('airflow', '/'), brand: '/static/assets/brand/airflow.svg' },
 ];
