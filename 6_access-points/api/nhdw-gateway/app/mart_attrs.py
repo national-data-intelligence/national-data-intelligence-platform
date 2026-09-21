@@ -127,13 +127,25 @@ async def columns_for_mart(schema: str, table: str) -> dict[str, ColumnClass]:
     """The CLASSIFIED columns of one relation ({} when none are classified —
     denylist semantics). The caller pushes {name: sensitivity} into OPA input
     so the policy decides which land in masked_columns, then applies each
-    masked column's mask_class via app/masking.py."""
+    masked column's mask_class via app/masking.py.
+
+    The schema is normalised to its bare name first. Callers hold it in two
+    forms — the bare `bi_supply` that ops_perm.column_classification keys on,
+    and the Trino-qualified `marts.bi_supply` used to build SQL — and because
+    this is a denylist, a key that does not match returns {} and every
+    classified column is then served in the clear. That is a fail-OPEN, and it
+    is silent, so the normalisation happens here rather than being each
+    caller's job to remember."""
     global _col_cache
     if _col_cache is None:
         _col_cache = await _load_col_cache()
         log.info("column_classification cache loaded · %d relations · %d columns",
                  len(_col_cache), sum(len(v) for v in _col_cache.values()))
-    return _col_cache.get((schema, table), {})
+    bare = schema.rsplit(".", 1)[-1] if "." in schema else schema
+    if bare != schema:
+        log.warning("columns_for_mart: catalog-qualified schema %r normalised "
+                    "to %r — pass the bare schema name", schema, bare)
+    return _col_cache.get((bare, table), {})
 
 
 async def invalidate() -> None:

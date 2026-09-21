@@ -30,6 +30,7 @@ from .. import mart_attrs, masking, opa, ops_db, permissions, trino_client
 router = APIRouter(prefix="/api/ct", tags=["ct"])
 
 _SCHEMA = "marts.bi_supply"
+_BARE_SCHEMA = _SCHEMA.split(".", 1)[1]
 _OPA_ATTRS = {"data_class": "DC.STK", "granularity": "aggregate", "sensitivity": "default"}
 
 
@@ -143,7 +144,9 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
     # THIS caller sees exact coordinates; masking applied to the node rows below.
     async with pool.acquire() as _c:
         scope = await permissions.effective_user_scope(_c, user)
-    node_colclass = await mart_attrs.columns_for_mart(_SCHEMA, "mart_ct_nodes")
+    # _SCHEMA is Trino-qualified for the queries below; the classification
+    # store keys on the bare schema name.
+    node_colclass = await mart_attrs.columns_for_mart(_BARE_SCHEMA, "mart_ct_nodes")
     decision = await opa.decide(user, action="read", resource="PRD",
                                 attributes=_OPA_ATTRS, scope=scope,
                                 columns={n: c.sensitivity for n, c in node_colclass.items()})

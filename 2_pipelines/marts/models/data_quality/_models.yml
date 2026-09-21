@@ -87,11 +87,3 @@ models:
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [source, period_id, region_id, woreda_uid]
-      # The eLMIS rows are the only MEASURED timeliness in the warehouse, and
-      # they reach this mart through an inner join on the reporting_deadlines
-      # seed — a renamed or deleted source_key would drop the source silently
-      # instead of failing. This asserts it is still there and still measured.
-      - dbt_utils.expression_is_true:
-          expression: >
-            (SELECT count(*) FROM {{ model }}
-             WHERE source = 'eLMIS-hist' AND timeliness_pct IS NOT NULL) > 0

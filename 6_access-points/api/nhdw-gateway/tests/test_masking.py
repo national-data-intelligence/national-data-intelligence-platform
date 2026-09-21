@@ -86,6 +86,30 @@ def main() -> int:
                            {"dt": ColumnClass("dt", "restricted", "generalize", False)}, ["dt"])
     check("generalize truncates dates to month", e[0]["dt"] == "2026-09-01")
 
+    # ── the LOOKUP key, not the transform ────────────────────────────────
+    # Masking is a denylist, so columns_for_mart returning {} means "nothing
+    # classified here" and every column is served in the clear. A caller
+    # holding the Trino-qualified schema ('marts.bi_supply') instead of the
+    # bare one therefore silently disabled masking on that whole feed — which
+    # is exactly what happened to the Supply Control Tower GPS columns. The
+    # policy self-tests could not catch it: the policy was always right, the
+    # lookup never reached it.
+    import asyncio
+    from app import mart_attrs as ma
+
+    ma._col_cache = {("bi_supply", "mart_ct_nodes"): {
+        "lat": ColumnClass("lat", "restricted", "generalize", False)}}
+    try:
+        bare = asyncio.run(ma.columns_for_mart("bi_supply", "mart_ct_nodes"))
+        qual = asyncio.run(ma.columns_for_mart("marts.bi_supply", "mart_ct_nodes"))
+        check("bare schema finds the classified column", "lat" in bare)
+        check("catalog-qualified schema finds it too (no silent fail-open)",
+              "lat" in qual)
+        check("a genuinely unclassified relation still returns {}",
+              asyncio.run(ma.columns_for_mart("bi_supply", "mart_nothing")) == {})
+    finally:
+        ma._col_cache = None
+
     print("PASS" if not FAILS else f"FAIL: {FAILS}")
     return 0 if not FAILS else 1
 
