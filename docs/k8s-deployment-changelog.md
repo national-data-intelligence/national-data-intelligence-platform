@@ -219,3 +219,32 @@ later are unreadable by the BI reader role until granted explicitly.
 
 **Fix.** Completed the statement. Verified by applying the file against the live
 database with `ON_ERROR_STOP=1`: clean exit, `ALTER DEFAULT PRIVILEGES` succeeds.
+
+## 2026-09-21 — two more init files wrote to the wrong database
+
+**Symptom.** With the truncated statement fixed, a full-scope deploy got one file
+further and stopped: `✗ DDL apply failed for 23_perm_admin_grants.sql`,
+`ERROR: schema "ops_perm" does not exist`.
+
+**Root cause.** `23_perm_admin_grants.sql` and `32_permission_store.sql` both
+create or grant on `ops_perm`, which lives in `nhdw_ops`, and neither carried a
+`\connect`. Each init file starts a FRESH psql session against `POSTGRES_DB`
+(`nhdw_vault`); an earlier file's `\connect` does not carry over. Seventeen other
+init files get this right — these two were the exceptions.
+
+**Fix.** Added `\connect nhdw_ops` to both, with the reason written next to it so
+the next author does not have to rediscover the session rule.
+
+**The pattern behind all three of today's init defects.** `3_storage/postgres/init/*`
+executes on a FRESH volume only. Re-provisioning an existing host keeps its PVC, so
+these files never run, and nothing else reads them — a broken one is invisible until
+someone wipes a volume. Three had accumulated, each fatal on its own
+(`ON_ERROR_STOP=1` aborts initialisation).
+
+**What now catches it.** `bundle/scripts/test-coldboot-initdb.sh` runs the real init
+directory through a throwaway `postgres:16-alpine` with the env the StatefulSet
+supplies, then asserts the six databases, the four `ops_*` schemas, the three
+`ops_perm` tables and the `bi_mdm` default privileges landed where they belong. It
+needs Docker and nothing else, so it runs in the hosted CI job on every push.
+Verified both ways: green on the fixed tree, and red — naming the file and the
+error — on a copy with one `\connect` removed.

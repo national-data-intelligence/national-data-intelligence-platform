@@ -391,3 +391,36 @@ contract to satisfy a rule about role-local variables. That one carries a `noqa`
 with the reason written next to it.
 
 **Reverse.** Drop the lint step from `.github/workflows/test.yml`.
+
+---
+
+## 18. Tested the cold boot in a container instead of wiping the shared server
+
+**Decided.** Built `bundle/scripts/test-coldboot-initdb.sh`, which runs the real
+init directory through a throwaway postgres container, and did NOT run the
+destructive `fresh_volumes` provision unattended.
+
+**Why.** The pre-authorisation was for "the cold boot", given when that meant
+`provision.yml` — which is what ran as attempt #12. Deleting every PVC is strictly
+more destructive than what was authorised, and the SeaweedFS volume holds test
+residue the migration ledger explicitly marks "left for human review". Destroying
+that while the owner is asleep is not a call to make on their behalf.
+
+The container test gives the SAME signal for the part that was actually broken —
+whether postgres init survives a fresh volume — at zero risk, in about forty
+seconds, with no cluster needed. It found nothing that a wipe would have found
+differently, and unlike a wipe it now runs on every push.
+
+**What this does NOT cover, stated plainly.** It proves the database initialises. It
+does not prove the rest of a fresh-volume boot: an empty object store, an empty
+ClickHouse, an empty OpenSearch index, and the seed run that has to repopulate all
+of them. That still needs the real thing.
+
+**Recommended next step for the owner.** Trigger `provision.yml` with
+`fresh_volumes=true` and `run_seed=true` when you are around to watch it. Secrets
+(including the OpenMetadata ingestion-bot token) live outside the PVCs and survive;
+what is lost is the SeaweedFS validation residue and the stale
+`dsw-superadmin-…` notebook volume. Everything else is reproducible from seeds by
+design — which is exactly the claim the test would be checking.
+
+**Reverse.** Nothing to undo. The destructive option exists and is off by default.
