@@ -110,6 +110,12 @@ export default function MovementPanel({ movement, slicer, onSelect }: Props) {
           {stop && stop.etaMin != null && <div className="ct-fact"><span className="k">Delivery ETA</span><span className="v">{hhmm(stop.etaMin)}</span></div>}
           <div className="ct-fact"><span className="k">{run && run.vehicleType == null ? 'Straight-line distance' : 'Road distance'}</span><span className="v">{fmt(movement.laneKm)} km</span></div>
           {movement.demandBasis && <div className="ct-fact"><span className="k">Demand basis</span><span className="v">{DEMAND_BASIS[movement.demandBasis] ?? movement.demandBasis}</span></div>}
+          {movement.forecastP10 != null && movement.forecastP90 != null && (
+            <div className="ct-fact" title={`Backtested model, version ${movement.forecastVersion ?? ''} · MLflow run ${(movement.forecastRun ?? '').slice(0, 12)} · for ${movement.period}`}>
+              <span className="k">Forecast range</span>
+              <span className="v">{fmt(movement.forecastP10)} – {fmt(movement.forecastP90)}</span>
+            </div>
+          )}
           {overflow && <div className="ct-fact"><span className="k">Rerouted from</span><span className="v">{nearest.short}, +{fmt(movement.assignDeltaKm)} km</span></div>}
         </div>
 

@@ -11,7 +11,7 @@ import DispatchRoutes from './components/DispatchRoutes';
 import { useEffect } from 'react';
 import { filterMovements, rankedShipments } from './lib/select';
 import { MOVEMENTS, ensurePlanLoaded } from './data/runtime';
-import { IconRoute, IconHubSpoke, IconSankey, IconFocus } from './icons';
+import { IconRoute, IconHubSpoke, IconSankey, IconFocus, IconMovement } from './icons';
 import { useCT, setCT, setSlice, resetSlice, bumpFocus, bumpData, type CTView } from './store';
 import './styles/base.css';
 import './styles/control-tower.css';
@@ -43,9 +43,9 @@ export function CTDispatch() {
 }
 
 const VIEWS: { id: CTView; label: string; Icon: (p: any) => JSX.Element }[] = [
-  { id: 'routes', label: 'Optimized routes', Icon: IconRoute },
-  { id: 'network', label: 'Distribution network', Icon: IconHubSpoke },
-  { id: 'flow', label: 'Flow volumes', Icon: IconSankey },
+  { id: 'routes', label: 'Routes', Icon: IconRoute },
+  { id: 'network', label: 'Network', Icon: IconHubSpoke },
+  { id: 'flow', label: 'Flow', Icon: IconSankey },
 ];
 
 /** The centrepiece: the movement-network map card (three views) + the right rail —
@@ -67,7 +67,7 @@ export function CTMovement() {
       <section id="sec-network" className="ct-grid">
         <section className="ct-mapcard">
           <div className="ct-mapcard-hdr">
-            <div className="ttl"><h3>Movement network</h3></div>
+            <div className="ttl ct-card-hd"><span className="ct-card-ico sm"><IconMovement /></span><h3>Movement network</h3></div>
             <div className="ct-mapctrls">
               <div className="ct-seg">
                 {VIEWS.map(v => (
@@ -76,23 +76,22 @@ export function CTMovement() {
                   </button>
                 ))}
               </div>
+              <button className="ct-focusbtn" onClick={() => bumpFocus()}><IconFocus /> Focus view</button>
             </div>
           </div>
           <div className="ct-legend">
             {view === 'routes' && (<>
               <span className="lg"><span className="ln" /> Delivery run</span>
-              <span className="lg"><span className="wh" /> District store</span>
-              <span className="lg"><span className="dn" /> Facility</span>
-              <span className="spacer" />
-              <button className="ct-focusbtn" onClick={() => bumpFocus()}><IconFocus /> Focus view</button>
             </>)}
             {view === 'network' && (<>
-              <span className="lg"><span className="ln" /> Supply lane (width is units)</span>
+              <span className="lg"><span className="ln net" /> Supply lane</span>
+            </>)}
+            {view !== 'flow' && (<>
               <span className="lg"><span className="wh" /> District store</span>
+              <span className="lg"><span className="dn urgent" /> Stock-out under 22 days</span>
+              <span className="lg"><span className="dn soon" /> Under 45 days</span>
               <span className="lg"><span className="dn" /> Facility</span>
-              <span className="spacer" />
-              <span className="ct-frame">Direct lanes, not road routes</span>
-              <button className="ct-focusbtn" onClick={() => bumpFocus()}><IconFocus /> Focus view</button>
+              <span className="lg"><span className="shade" /> Planned units</span>
             </>)}
             {view === 'flow' && (<>
               <span className="lg"><span className="dn" style={{ background: 'var(--ink-2)' }} /> District store</span>
@@ -106,6 +105,7 @@ export function CTMovement() {
               ? <FlowView slicer={slicer} />
               : <MapView layer={view as any} slicer={slicer} selectedId={selected.id} onSelect={onSelect} focusNonce={focusNonce} />}
           </div>
+          {view === 'network' && <div className="ct-map-footnote">Lane width is units. Direct lanes, not road routes.</div>}
         </section>
         <MovementPanel movement={selected} slicer={slicer} onSelect={onSelect} />
       </section>

@@ -93,6 +93,11 @@ Internal BI). The standard, binding for any future access point:
    catalog-only — an access point must work identically with OM at 0 replicas.
 6. **Idempotent** (createOrUpdate PUTs) with a `--dry-run` flag, and wired
    into `seed-openmetadata.sh` so a reseed converges the catalog.
+   The org lineage view depth (8 upstream / 3 downstream — the full chain is
+   ~6 hops each way) is also seeded there: system settings are admin-only over
+   the API and the SSO admin has no scriptable login, so the seed writes the
+   setting where OpenMetadata persists it (its own database row) and restarts
+   OpenMetadata; no change, no restart.
 
 7. **Every widget declares its marts where it is served.** Registry-served
    widgets bind in `fetchers.py` (any of its three forms: the dict literal,

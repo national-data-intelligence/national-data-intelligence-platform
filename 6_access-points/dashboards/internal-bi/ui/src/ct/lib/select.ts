@@ -1,5 +1,5 @@
 /** Shared slicer + selection + dynamic-metric helpers (map, rail, dispatch). */
-import { MOVEMENTS, NODE_BY_ID, RUN_BY_ID, CURRENT_PERIOD, COMMODITIES as ALL_COMMODITIES,
+import { MOVEMENTS, NODE_BY_ID, RUN_BY_ID, CURRENT_PERIOD,
   type Movement, type VehicleRun } from '../data/runtime';
 
 export interface Slicer { hub: string; region: string; commodity: string; period: string }
@@ -64,5 +64,6 @@ export function summarize(all: Movement[]) {
   };
 }
 
-/** Static, so the dropdown does not shrink when a slice happens to lack a commodity. */
-export const COMMODITIES = ALL_COMMODITIES;
+/** Re-exported live binding: the full list from the loaded plan (never sliced),
+ *  so the dropdown does not shrink when a slice happens to lack a commodity. */
+export { COMMODITIES } from '../data/runtime';

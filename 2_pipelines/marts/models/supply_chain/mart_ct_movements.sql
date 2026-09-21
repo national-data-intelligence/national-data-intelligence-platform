@@ -65,15 +65,26 @@ hub AS (
     FROM district d LEFT JOIN dho USING (district_code)
 ),
 
+fc AS (
+    -- the forecast behind a pure forecast-sized line (same grain, unique per side)
+    SELECT facility_code, product_code, p10, p90, model_version, mlflow_run_id
+    FROM {{ ref('mart_pct_forecast') }}
+),
+
 leg AS (
     SELECT p.*, g.region_name, g.region_id, g.district_code, h.hub_id,
            to_char((p.as_of_month || '-01')::date + interval '1 month', 'YYYY-MM') AS period_id,
+           CASE WHEN p.demand_basis = 'forecast' THEN fc.p10 END AS fc_p10,
+           CASE WHEN p.demand_basis = 'forecast' THEN fc.p90 END AS fc_p90,
+           CASE WHEN p.demand_basis = 'forecast' THEN fc.model_version END AS fc_model_version,
+           CASE WHEN p.demand_basis = 'forecast' THEN fc.mlflow_run_id END AS fc_mlflow_run_id,
            2 * 6371 * asin(sqrt(power(sin(radians(g.lat - h.lat) / 2), 2)
                + cos(radians(h.lat)) * cos(radians(g.lat)) * power(sin(radians(g.lng - h.lng) / 2), 2))) AS km,
            atan2(g.lat - h.lat, g.lng - h.lng) AS bearing
     FROM pos p
     JOIN geo g USING (facility_code)
     JOIN hub h USING (district_code)
+    LEFT JOIN fc USING (facility_code, product_code)
 ),
 
 seq AS (
@@ -120,5 +131,9 @@ SELECT
                       'inbound', ceil(coalesce(greatest(units, 0), 0)),
                       'postPlan', round(soh - rate) + ceil(coalesce(greatest(units, 0), 0)))::text AS why_json,
     demand_basis,
+    round(fc_p10)::int                                  AS forecast_p10,
+    round(fc_p90)::int                                  AS forecast_p90,
+    fc_model_version                                    AS forecast_model_version,
+    fc_mlflow_run_id                                    AS forecast_mlflow_run_id,
     at_risk
 FROM seq

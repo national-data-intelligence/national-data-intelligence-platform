@@ -110,6 +110,8 @@ def _movement(r: dict) -> dict:
         "planned": _b(r.get("planned")), "repaired": _b(r.get("repaired")),
         "capped": _b(r.get("capped")), "why": _j(r.get("why_json"), {}),
         "atRisk": _b(r.get("at_risk")), "demandBasis": r.get("demand_basis"),
+        "forecastP10": _i(r.get("forecast_p10")), "forecastP90": _i(r.get("forecast_p90")),
+        "forecastVersion": r.get("forecast_model_version"), "forecastRun": r.get("forecast_mlflow_run_id"),
     }
 
 
@@ -361,12 +363,14 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
         # numerator/denominator so the cards pool exactly as the KPI definitions
         # say under any Region filter (same access attributes as the plan marts).
         kpi_rows = (await trino_client.query(
-            f"SELECT region_id, kpi_code, coalesce(category, '') AS category, "
+            f"WITH mx AS (SELECT max(month_id) AS m FROM {_SCHEMA}.mart_pct_kpi) "
+            f"SELECT region_id, kpi_code, coalesce(category, '') AS category, month_id, "
             f"sum(numerator) AS numerator, sum(denominator) AS denominator, max(target) AS target "
-            f"FROM {_SCHEMA}.mart_pct_kpi WHERE month_id = (SELECT max(month_id) FROM {_SCHEMA}.mart_pct_kpi)"
+            f"FROM {_SCHEMA}.mart_pct_kpi, mx "
+            f"WHERE month_id IN (mx.m, format_datetime(date_add('month', -1, CAST(mx.m || '-01' AS date)), 'yyyy-MM'))"
             f"{geo_clause.replace(' WHERE ', ' AND ')} "
             f"AND kpi_code IN ('osa_s8', 'stockout_exposure', 'stockout_days_rate', 'mos_band') "
-            f"GROUP BY region_id, kpi_code, coalesce(category, '')")).get("rows") or []
+            f"GROUP BY region_id, kpi_code, coalesce(category, ''), month_id")).get("rows") or []
     except HTTPException:
         raise
     except Exception as exc:
@@ -437,6 +441,7 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
         "baseline": _baseline(cur_stat) if cur_stat else None,
         "canDecide": _decide_gate(user).allow,
         "kpis": [{"regionId": r.get("region_id"), "kpi": r.get("kpi_code"), "category": r.get("category"),
+                  "month": r.get("month_id"),
                   "numerator": _f(r.get("numerator")), "denominator": _f(r.get("denominator")),
                   "target": _f(r.get("target"))} for r in kpi_rows],
     }

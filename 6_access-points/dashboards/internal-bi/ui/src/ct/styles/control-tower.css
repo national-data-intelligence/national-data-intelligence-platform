@@ -15,17 +15,29 @@
 .ct-scope .pct-reset svg { width: 14px; height: 14px; }
 .ct-scope .pct-reset:hover { border-color: var(--info); }
 .ct-scope .pct-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
-.ct-scope .pct-kpi { position: relative; background: var(--paper); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); padding: 1.1rem 1.3rem; display: flex; align-items: center; gap: 1.05rem; min-height: 118px; }
+.ct-scope .pct-kpi { position: relative; background: var(--paper); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); padding: 1.1rem 1.3rem; display: flex; align-items: center; gap: 1.05rem; min-height: 126px; }
 .ct-scope .pct-kpi-ico { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
 .ct-scope .pct-kpi-ico svg { width: 30px; height: 30px; display: block; }
 .ct-scope .pct-kpi-ico.blue { background: #E8F1FF; color: #3B82F6; }
 .ct-scope .pct-kpi-ico.green { background: #EAF7F0; color: #22A06B; }
 .ct-scope .pct-kpi-ico.amber { background: #FFF4D6; color: #F59E0B; }
 .ct-scope .pct-kpi-ico.violet { background: #EDE9FE; color: #8B5CF6; }
-.ct-scope .pct-kpi-body { display: flex; flex-direction: column; gap: 0.12rem; min-width: 0; }
-.ct-scope .pct-kpi-lbl { font-size: 0.8rem; font-weight: 600; color: var(--ink-2); }
+.ct-scope .pct-kpi-body { display: flex; flex-direction: column; gap: 0.18rem; min-width: 0; }
+.ct-scope .pct-kpi-lbl { font-size: 0.95rem; font-weight: 600; color: var(--ink-2); letter-spacing: -0.005em; line-height: 1.25; min-height: 2.5em; display: flex; align-items: flex-end; }
 .ct-scope .pct-kpi-val { font-size: 2rem; font-weight: 700; color: var(--ink); line-height: 1.05; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .ct-scope .pct-kpi-sub { font-size: 0.72rem; color: var(--ink-3); }
+.ct-scope .pct-kpi-ring { position: relative; width: 58px; height: 58px; flex-shrink: 0; }
+.ct-scope .pct-kpi-ring svg.ring { position: absolute; inset: 0; }
+.ct-scope .pct-kpi-ring svg.ring circle:last-child { transition: stroke-dashoffset 0.45s cubic-bezier(0.4, 0, 0.2, 1); }
+.ct-scope .pct-kpi-ring > svg:not(.ring) { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; transform: translate(-50%, -50%); }
+.ct-scope .pct-kpi-valrow { display: flex; align-items: baseline; gap: 0.5rem; }
+.ct-scope .pct-kpi-delta { font-size: 0.82rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ct-scope .ct-legend .lg { white-space: nowrap; }
+.ct-scope .ct-legend .lg .ln.net { background: #2F6FB0; }
+.ct-scope .ct-legend .lg .dn.urgent { background: #a8483c; }
+.ct-scope .ct-legend .lg .dn.soon { background: #7f6ea8; }
+.ct-scope .ct-legend .lg .shade { display: inline-block; width: 34px; height: 9px; border-radius: 2px; background: linear-gradient(90deg, #F1F5F9, #94A3B8); border: 1px solid var(--border-2); }
+.ct-scope .ct-map-footnote { font-size: 0.72rem; color: var(--ink-3); padding: 0.4rem 0.2rem 0; }
 .ct-scope .pct-kpi-chip { position: absolute; right: 1.2rem; bottom: 1.05rem; display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.72rem; font-weight: 600; color: var(--ink-3); }
 .ct-scope .pct-kpi-chip.good { color: var(--good); }
 .ct-scope .pct-kpi-chip svg { width: 13px; height: 13px; }

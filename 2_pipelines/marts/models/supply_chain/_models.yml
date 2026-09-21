@@ -331,6 +331,11 @@ models:
         tests:
           - not_null
           - accepted_values: {values: [nearest, capacity-overflow, district]}
+      - name: forecast_p10
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: '<= forecast_p90 OR forecast_p10 IS NULL'
   - name: mart_ct_vehicle_runs
     description: |
       One row per dispatch vehicle run, reproducing plan.ts VEHICLE_RUNS. The
