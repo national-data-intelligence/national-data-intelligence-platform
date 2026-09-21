@@ -38,7 +38,7 @@ export default function DispatchRoutes({ slicer }: { slicer: Slicer }) {
             <tr>
               <th></th><th>Run</th>{hasVehicle && <th>Vehicle</th>}<th>Origin</th><th className="num">Stops</th>
               <th className="num">Units</th>{hasFill && <th className="num">Fill</th>}
-              <th className="num">{hasVehicle ? 'Route km' : 'Distance km'}</th>{hasCost && <th className="num">Cost/unit</th>}<th className="num">{hasVehicle ? 'Km saved' : 'Km saved vs direct'}</th><th>Status</th>
+              <th className="num">{hasVehicle ? 'Route km' : 'Distance km'}</th>{hasCost && <th className="num">Cost/unit</th>}<th className="num">{hasVehicle ? 'Km saved' : 'Km saved vs direct'}</th><th>Run status</th>
             </tr>
           </thead>
           <tbody>

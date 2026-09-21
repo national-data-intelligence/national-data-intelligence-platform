@@ -55,3 +55,9 @@
 - {schema_name: bi_staging, table_name: bi_demo_patient_observations, column_name: observation,
    sensitivity: privileged, mask_class: drop, pii: true,
    note: "clinical observation text — dropped for anyone without a privileged reveal grant"}
+- {schema_name: bi_supply, table_name: mart_pct_plan_decisions, column_name: decided_by,
+   sensitivity: restricted, mask_class: tokenize, pii: true,
+   note: "planner identity on a plan decision — pseudonym unless the caller may see restricted fields"}
+- {schema_name: bi_supply, table_name: mart_pct_plan_decisions, column_name: note,
+   sensitivity: restricted, mask_class: drop, pii: true,
+   note: "free-text planner note — dropped unless the caller may see restricted fields"}

@@ -21,6 +21,7 @@ export interface Movement {
   assignDeltaKm: number; assignDeltaCost: number | null; baselineHubId: string; baselineKm: number;
   planned: boolean; repaired: boolean; capped: boolean; why: Why;
   atRisk?: boolean; demandBasis?: string | null;
+  decision?: { id: string; decision: 'approve' | 'reject'; by: string; at: string } | null;
 }
 export interface StopLine { drugShort: string; units: number; }
 export interface VehicleStop { nodeId: string; seq: number; legKm: number; cumKm: number; dropUnits: number;

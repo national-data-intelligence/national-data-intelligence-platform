@@ -210,6 +210,23 @@
 .ct-scope .ct-sel-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
 .ct-scope .ct-sel-planned { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; font-weight: 600; color: var(--good); }
 .ct-scope .ct-sel-planned svg { width: 13px; height: 13px; }
+.ct-scope .ct-sel-planned.pending { color: var(--ink-3); }
+.ct-scope .ct-sel-planned.ok { color: var(--good); }
+.ct-scope .ct-sel-planned.off { color: var(--alert); }
+.ct-scope .ct-sel-planned.warn { color: var(--watch); }
+.ct-scope .ct-decide { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.9rem 0 0.2rem; }
+.ct-scope .ct-decide-btn {
+  flex: 1; display: inline-flex; justify-content: center; align-items: center; white-space: nowrap;
+  padding: 0.45rem 0.7rem; background: #fff; border: 1px solid var(--border-2);
+  border-radius: var(--radius); font-size: 0.82rem; font-weight: 600; color: var(--ink-2); cursor: pointer;
+}
+.ct-scope .ct-decide-btn.primary { background: var(--navy-800); border-color: var(--navy-800); color: #fff; }
+.ct-scope .ct-decide-btn:hover:not(:disabled) { border-color: var(--navy-500); }
+.ct-scope .ct-decide-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.ct-scope .ct-decide-meta { flex: 2; font-size: 0.8rem; color: var(--ink-3); }
+.ct-scope .ct-decide-err { flex-basis: 100%; font-size: 0.76rem; color: var(--alert); }
+.ct-scope .ct-selcard.rejected .ct-sel-units { color: var(--ink-4); }
+.ct-scope .ct-selcard.rejected .ct-step.total { background: var(--paper-2); border-color: var(--border-2); }
 .ct-scope .ct-sel-from { font-size: 0.86rem; color: var(--ink-3); font-weight: 500; }
 .ct-scope .ct-sel-to { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; margin-top: 0.15rem; }
 .ct-scope .ct-sel-to h2 { font-size: 1.22rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }

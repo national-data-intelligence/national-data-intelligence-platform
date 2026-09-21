@@ -19,10 +19,12 @@ fetchers. Warehouses + facilities (fixed reference geography) are returned whole
 from __future__ import annotations
 
 import json
+import re
 import time
+from uuid import UUID
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path as PathParam, Query
 
 from ..auth import UserCtx, get_user
 from .. import mart_attrs, masking, opa, ops_db, permissions, trino_client
@@ -150,6 +152,163 @@ def _baseline(r: dict) -> dict:
             "vehiclesSaved": _i(r.get("vehicles_saved"))}
 
 
+# ── plan decisions (ops_plan.plan_decision, init 42) ─────────────────────────
+# Decision makers approve or reject a planned line; the log is append-only and
+# bitemporal like the MDM decision log, and each row snapshots the line.
+DECIDER_ROLES = ("R-DEC", "R-SUPER")
+_MOVEMENT_ID = re.compile(r"^[A-Za-z0-9_.-]{1,40}:[A-Za-z0-9_.-]{1,40}$")
+
+
+def _decide_gate(user: UserCtx) -> opa.Decision:
+    allowed = any(r in DECIDER_ROLES for r in user.roles)
+    return opa.Decision(
+        allow=allowed,
+        reason=f"plan decision gate: roles {user.roles} "
+               f"{'allowed' if allowed else 'denied'} (decision makers only)")
+
+
+def _jsonable(v: Any) -> Any:
+    if isinstance(v, dict):
+        return {k: _jsonable(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_jsonable(x) for x in v]
+    if v is None or isinstance(v, (str, bool, int, float)):
+        return v
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return str(v)
+
+
+async def _current_decisions(pool, periods: list[str]) -> dict[tuple[str, str], dict]:
+    """Current verdict per (period, movement). Empty when the store is absent."""
+    if not periods:
+        return {}
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT decision_id, plan_period, movement_id, decision, decided_by, recorded_from
+                FROM ops_plan.plan_decision
+                WHERE recorded_to IS NULL AND plan_period = ANY($1::text[])
+            """, periods)
+    except Exception:                                            # noqa: BLE001
+        return {}
+    return {(r["plan_period"], r["movement_id"]): {
+                "id": str(r["decision_id"]), "decision": r["decision"],
+                "by": r["decided_by"], "at": r["recorded_from"].isoformat()} for r in rows}
+
+
+async def _read_scope(user: UserCtx) -> list[str]:
+    """The same read gate as the plan: OPA on the plan marts + the caller's scope."""
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as _c:
+        scope = await permissions.effective_user_scope(_c, user)
+    decision = await opa.decide(user, action="read", resource="PRD",
+                                attributes=_OPA_ATTRS, scope=scope, columns={})
+    if not decision.allow:
+        raise HTTPException(403, "Supply Control Tower denied by policy: " + (decision.reason or ""))
+    return decision.row_filter.get("geography") or []
+
+
+@router.post("/plan/lines/{movement_id}/decide")
+async def decide_line(movement_id: str = PathParam(...),
+                      decision: str = Body(..., embed=True),
+                      note: str | None = Body(default=None, embed=True),
+                      user: UserCtx = Depends(get_user)) -> dict:
+    """Approve or reject one planned line. Any current verdict on the line is
+    superseded (recorded_to stamped), never updated in place."""
+    gate = _decide_gate(user)
+    if not gate.allow:
+        raise HTTPException(403, gate.reason)
+    if decision not in ("approve", "reject"):
+        raise HTTPException(422, "decision must be approve or reject")
+    if note is not None and len(note) > 500:
+        raise HTTPException(422, "note is limited to 500 characters")
+    if not _MOVEMENT_ID.match(movement_id):
+        raise HTTPException(404, "not found")
+    geo = await _read_scope(user)
+
+    rows = (await trino_client.query(
+        f"SELECT * FROM {_SCHEMA}.mart_ct_movements WHERE movement_id = ?", [movement_id])).get("rows") or []
+    if not rows or (geo and rows[0].get("region_id") not in geo):
+        raise HTTPException(404, "not found")
+    mv = rows[0]
+    if not _b(mv.get("planned")):
+        raise HTTPException(409, "this line has no planned order to decide")
+    facility, product = movement_id.split(":", 1)
+    fc = (await trino_client.query(
+        f"SELECT model_version, mlflow_run_id, CAST(predict_run_id AS varchar) AS predict_run_id, "
+        f"CAST(predicted_at AS varchar) AS predicted_at, as_of_month, target_month, p10, p50, p90, "
+        f"method, demand_class FROM {_SCHEMA}.mart_pct_forecast WHERE facility_code = ? AND product_code = ?",
+        [facility, product])).get("rows") or []
+    stat = (await trino_client.query(
+        f"SELECT max_months FROM {_SCHEMA}.mart_ct_plan_stats WHERE period_id = ?",
+        [mv["period_id"]])).get("rows") or []
+    snapshot = _jsonable({
+        "line": {k: mv.get(k) for k in ("movement_id", "period_id", "from_hub_id", "to_node_id", "region_id",
+                                        "drug", "units", "amc", "mos", "days_to_stockout", "priority",
+                                        "lane_km", "demand_basis", "at_risk")},
+        "why": _j(mv.get("why_json"), {}),
+        "forecast": fc[0] if fc else None,
+        "policy": {"max_stock_months": stat[0]["max_months"] if stat else None,
+                   "distance_basis": "straight_line", "hub_basis": "district_store_inferred"},
+    })
+
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("""
+                UPDATE ops_plan.plan_decision SET recorded_to = now()
+                 WHERE plan_period = $1 AND movement_id = $2 AND recorded_to IS NULL
+            """, mv["period_id"], movement_id)
+            row = await conn.fetchrow("""
+                INSERT INTO ops_plan.plan_decision
+                    (plan_period, movement_id, facility_code, product_code, from_hub_id,
+                     decision, units_recommended, snapshot, note, decided_by)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                RETURNING decision_id, recorded_from
+            """, mv["period_id"], movement_id, facility, product, mv["from_hub_id"],
+                 decision, _i(mv.get("units")) or 0, snapshot, note, user.username)
+    await ops_db.log_policy_decision(
+        user=user, action="pct.plan.decide", resource=movement_id, decision="allow",
+        rule_hits=gate.rule_hits, explanation={"verdict": decision, "period": mv["period_id"],
+                                               "units": _i(mv.get("units")), "note": note})
+    return {"id": str(row["decision_id"]), "movement": movement_id, "period": mv["period_id"],
+            "decision": decision, "by": user.username, "at": row["recorded_from"].isoformat()}
+
+
+@router.post("/decisions/{decision_id}/revert")
+async def revert_decision(decision_id: str = PathParam(...),
+                          note: str | None = Body(default=None, embed=True),
+                          user: UserCtx = Depends(get_user)) -> dict:
+    """Withdraw a current verdict: stamp recorded_to; the line is open again."""
+    gate = _decide_gate(user)
+    if not gate.allow:
+        raise HTTPException(403, gate.reason)
+    try:
+        UUID(decision_id)
+    except (ValueError, TypeError):
+        raise HTTPException(404, "not found")
+    geo = await _read_scope(user)
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        dec = await conn.fetchrow(
+            "SELECT * FROM ops_plan.plan_decision WHERE decision_id = $1::uuid", decision_id)
+        snap = dec["snapshot"] if dec is not None else None
+        snap = json.loads(snap) if isinstance(snap, str) else (snap or {})
+        if dec is None or (geo and snap.get("line", {}).get("region_id") not in geo):
+            raise HTTPException(404, "not found")
+        if dec["recorded_to"] is not None:
+            raise HTTPException(409, "decision already superseded")
+        await conn.execute(
+            "UPDATE ops_plan.plan_decision SET recorded_to = now() WHERE decision_id = $1::uuid", decision_id)
+    await ops_db.log_policy_decision(
+        user=user, action="pct.plan.revert", resource=decision_id, decision="allow",
+        rule_hits=gate.rule_hits, explanation={"reverted_verdict": dec["decision"],
+                                               "movement": dec["movement_id"], "note": note})
+    return {"id": decision_id, "reverted": True}
+
+
 @router.get("/plan")
 async def ct_plan(period: str | None = Query(None, description="planning period id, e.g. 2025-M11"),
                   user: UserCtx = Depends(get_user)) -> dict:
@@ -250,6 +409,10 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
         selected_id = max(cur_moves, key=lambda m: (bool(m.get("planned")), m.get("priority") or 0,
                                                     m.get("units") or 0, m["id"]))["id"]
 
+    decisions = await _current_decisions(pool, sorted({m["period"] for m in movements}))
+    for m in movements:
+        m["decision"] = decisions.get((m["period"], m["id"]))
+
     await ops_db.log_gateway_query(
         user=user, method="GET", path="/api/ct/plan",
         mart_scope=[f"{_SCHEMA}.mart_ct_movements"],
@@ -272,6 +435,7 @@ async def ct_plan(period: str | None = Query(None, description="planning period 
         "periodStats": period_stats,
         "summary": _summary(cur_stat) if cur_stat else None,
         "baseline": _baseline(cur_stat) if cur_stat else None,
+        "canDecide": _decide_gate(user).allow,
         "kpis": [{"regionId": r.get("region_id"), "kpi": r.get("kpi_code"), "category": r.get("category"),
                   "numerator": _f(r.get("numerator")), "denominator": _f(r.get("denominator")),
                   "target": _f(r.get("target"))} for r in kpi_rows],

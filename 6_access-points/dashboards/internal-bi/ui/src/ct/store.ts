@@ -16,6 +16,8 @@ export const setCT = (patch: Partial<CTState>): void => { state = { ...state, ..
 export const setSlice = (patch: Partial<Slicer>): void => setCT({ slicer: { ...state.slicer, ...patch } });
 export const resetSlice = (): void => setCT({ slicer: allSlicer() });
 export const bumpFocus = (): void => setCT({ focusNonce: state.focusNonce + 1 });
+/** Re-render after a local data change (a recorded decision) without re-scoping. */
+export const bumpView = (): void => setCT({ dataNonce: state.dataNonce + 1 });
 /** Real data landed: re-scope the view to the plan's own period and selection
  *  (the pre-load state has neither), keeping any place/product the user already chose. */
 export const bumpData = (): void => setCT({

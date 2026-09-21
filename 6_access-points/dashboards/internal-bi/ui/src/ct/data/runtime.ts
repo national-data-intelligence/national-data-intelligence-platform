@@ -8,6 +8,7 @@
  * all read the mart-backed data once it arrives.
  */
 import * as STATIC from './plan';
+import type { Movement } from './plan';
 import { authFetch } from '../../api/useAuth';
 
 // Re-export the (unchanging) type surface + helper so importers need nothing from plan.ts.
@@ -37,6 +38,14 @@ export let RUN_BY_ID: typeof STATIC.RUN_BY_ID = {} as typeof STATIC.RUN_BY_ID;
  *  denominator), pooled by the cards under the current Region filter. */
 export interface KpiInput { regionId: string | null; kpi: string; category: string; numerator: number; denominator: number; target: number | null; }
 export let KPIS: KpiInput[] = [];
+/** Whether the caller may approve / reject plan lines (the gateway's decision gate). */
+export let CAN_DECIDE = false;
+
+/** Record a verdict on a plan line locally after the gateway accepted it. */
+export function setDecision(movementId: string, decision: Movement['decision']): void {
+  const m = MOVEMENTS.find(x => x.id === movementId);
+  if (m) m.decision = decision;
+}
 
 const _byId = (xs: any[]): Record<string, any> =>
   Object.fromEntries((xs || []).map((x: any) => [x.id, x]));
@@ -58,6 +67,7 @@ export function applyPlan(p: any): void {
   if (p.summary) SUMMARY = p.summary;
   if (p.baseline) BASELINE = p.baseline;
   if (p.kpis) KPIS = p.kpis;
+  if (typeof p.canDecide === 'boolean') CAN_DECIDE = p.canDecide;
 }
 
 let _load: Promise<boolean> | null = null;
