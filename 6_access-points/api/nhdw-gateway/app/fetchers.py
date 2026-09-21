@@ -1270,6 +1270,19 @@ FETCHERS["sv-agreement-donut"] = Fetcher(
         f"round(100.0 * count_if(agreement_pct < 50) / nullif(count(*), 0), 0) AS low_pct, "
         f"round(avg(agreement_pct) - (SELECT a FROM prev), 1) AS delta_pp "
         f"FROM cur"))
+# sv-rr-timeliness: MEASURED reporting timeliness, from the eLMIS archive — the
+# only source that records when each report actually arrived. No geo_col: the
+# mart is month × programme with no geography, so a scoped user sees the same
+# national figure rather than an empty table (the widget is national by design).
+FETCHERS["sv-rr-timeliness"] = Fetcher(
+    schema="bi_supply", table="mart_elmis_hist_timeliness",
+    subject="PRD", data_class="DC.STK",
+    period_col="month_id", period_kind="month",
+    sql=lambda t, w: (
+        f"SELECT month_id, programme_name, requisitions, on_time_requisitions, "
+        f"on_time_pct, median_lag_days FROM {t}{w} "
+        f"ORDER BY month_id DESC, programme_name"))
+
 FETCHERS["sv-data-trust-table"] = Fetcher(
     schema="bi_service", table="mart_reported_vs_recorded",
     subject="PRG", data_class="DC.PRO", geo_col="region_id",

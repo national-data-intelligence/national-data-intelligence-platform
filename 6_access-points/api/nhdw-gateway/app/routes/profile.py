@@ -385,6 +385,69 @@ async def get_geo(name: str) -> Response:
     raise HTTPException(404, f"no geometry {name} in profile {key}")
 
 
+def catalog_disabled() -> list[tuple[str, str]]:
+    """What the active profile turns off, as (kind, scope_id) pairs.
+
+    A country profile carries `catalog.yaml`:
+
+        disable:
+          widget:
+            - id: ov-act-first-woredas
+              why: Zambia reports at district grain; there is no woreda level
+          page:
+            - id: internal-bi/some-page
+
+    `why` is required by convention and rendered nowhere — it exists so the next
+    person reading the file learns why a widget is missing instead of assuming
+    it broke.
+
+    Only DISABLE is expressible, deliberately. The override seam the gateway
+    applies this through can only subtract visibility, and an `enable` here
+    would be a second, weaker grant path competing with the role model. A widget
+    that should appear for one country and not another is listed in the catalog
+    for everyone and disabled by the profiles it does not suit."""
+    key = active_key()
+
+    def produce() -> list[tuple[str, str]]:
+        path = _safe_join(PROFILE_DIR, key, "catalog.yaml")
+        if not path.is_file():
+            return []
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception as exc:                                # noqa: BLE001
+            log.error("profile: catalog.yaml unreadable (%s)", exc)
+            return []
+        pairs: list[tuple[str, str]] = []
+        valid = {"dashboard", "page", "section", "widget", "placement"}
+        for kind, entries in (doc.get("disable") or {}).items():
+            if kind not in valid:
+                log.warning("profile: catalog.yaml has unknown kind %r — ignored", kind)
+                continue
+            for e in entries or []:
+                scope_id = e.get("id") if isinstance(e, dict) else e
+                if scope_id:
+                    pairs.append((kind, str(scope_id)))
+        return pairs
+
+    return _cached(f"catalog:{key}", produce)
+
+
+@router.get("/catalog")
+async def get_catalog_layer() -> dict[str, Any]:
+    """What this profile turns off, so the admin surface can show WHY a widget
+    is absent rather than leaving someone hunting a bug."""
+    key = active_key()
+    path = _safe_join(PROFILE_DIR, key, "catalog.yaml")
+    doc: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:                                       # noqa: BLE001
+            doc = {}
+    return {"active": key, "disable": doc.get("disable") or {},
+            "count": len(catalog_disabled())}
+
+
 @router.get("/reference")
 async def get_reference() -> dict[str, Any]:
     """Regions, programmes, diseases and commodities — the tables the SPAs used

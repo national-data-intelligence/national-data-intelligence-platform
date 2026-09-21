@@ -1,0 +1,20 @@
+# Widgets this country's shape does not support.
+#
+# Only DISABLE is expressible. The seam the gateway applies this through can
+# only subtract visibility, and an `enable` here would be a second, weaker grant
+# path competing with the role model. A widget that suits one country and not
+# another is listed in the catalog for everyone and disabled by the profiles it
+# does not suit.
+#
+# `why` is rendered nowhere. It exists so the next person reading this file
+# learns why a widget is missing instead of assuming it broke.
+disable:
+  widget:
+    - id: sv-rr-timeliness
+      why: >-
+        Measured reporting timeliness needs a per-report arrival time at the
+        source. Ethiopia's six sources land as bulk snapshots — DHIS2's `created`
+        column holds 143 distinct values across 701,338 rows, all inside a
+        five-minute window on the seed date — so a percentage from it would
+        measure the loader, not the reporter. Shown only where the source
+        records when a report actually arrived.

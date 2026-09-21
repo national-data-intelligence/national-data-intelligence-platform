@@ -1,0 +1,26 @@
+# Widgets this country's shape does not support.
+#
+# See the et-v3 file for why only DISABLE is expressible.
+#
+# Zambia's administrative hierarchy is Province -> District -> Facility. Ethiopia
+# adds Zone and Kebele below Region, so widgets built at woreda grain have no
+# Zambian equivalent: they would render empty and read as a broken dashboard
+# rather than an inapplicable one.
+disable:
+  widget:
+    - id: ov-act-first-woredas
+      why: >-
+        Ranks woredas for action. Zambia has no woreda level; the equivalent
+        national view would rank districts, which is a different widget against
+        a different mart rather than a relabelling of this one.
+    - id: dz-woreda-table
+      why: >-
+        Woreda-grain disease surveillance. The eLMIS archive is a supply
+        archive and carries no notifiable-disease surveillance at all, so this
+        has neither the grain nor the data.
+    - id: dz-region-map
+      why: >-
+        Draws the Ethiopian region choropleth from eth-regions geometry
+        registered under the echarts map name 'ethiopia'. Until that helper
+        reads the profile's geometry it would draw the wrong country, which is
+        worse than drawing nothing.
