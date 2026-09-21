@@ -104,3 +104,9 @@ jobs:
         run: |
           pip install --quiet ansible-lint
           cd 1_infrastructure/ansible && ansible-lint .
+      # postgres init runs on a FRESH volume only, so nothing exercised these
+      # files between cold boots — three broken ones had accumulated unnoticed,
+      # each of which aborts initialisation outright. Runs in a container, needs
+      # no cluster.
+      - name: database initialises from zero
+        run: bash bundle/scripts/test-coldboot-initdb.sh

@@ -11,6 +11,11 @@
 -- populates these from the role YAMLs (deduped), compile.py then sources them from
 -- the DB, and the emitted rego must match the YAML-sourced rego byte-for-byte
 -- before cutover (equivalence gate). Runs after 17_perm_schemas.sql (ops_perm.role).
+--
+-- ops_perm lives in nhdw_ops, and each init file starts a fresh psql session
+-- against POSTGRES_DB (nhdw_vault); an earlier file's \connect does not carry
+-- over. Without this the CREATE TABLEs land in the wrong database.
+\connect nhdw_ops
 -- Idempotent.
 
 -- ── permission: one row per distinct allow-rule tuple ───────────────────────
