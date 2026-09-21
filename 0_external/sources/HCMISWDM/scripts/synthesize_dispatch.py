@@ -357,6 +357,23 @@ def build_period_rows(periods, movements, runs, summary, baseline, current_perio
 
 
 # ─── Execution ───────────────────────────────────────────────────────────────
+
+def _synth_profile() -> str:
+    """The country this synthesis is FOR — stamped beside the version so a
+    packed dump can be trusted on a boot for the same country and rejected on
+    one for another. Mirrors the build-dir resolution above."""
+    import os
+    key = os.environ.get("NHDW_PROFILE", "").strip()
+    if key:
+        return key[:32]
+    eb = os.environ.get("NHDW_ENTITY_BUILD", "").strip()
+    if eb:
+        from pathlib import Path as _P
+        stem = _P(eb).name.replace("_build-entity-model", "").lstrip(".-")
+        return (stem or "et-v3")[:32]
+    return "et-v3"
+
+
 def main() -> int:
     print(f"==> Parsing dispatch plan from {PLAN_TS}")
     lines = _plan_lines()
@@ -397,8 +414,10 @@ def main() -> int:
     stmts += gen_movements(movements)
     stmts += [
         "IF OBJECT_ID('dbo.DispatchSynthMeta','U') IS NULL CREATE TABLE dbo.DispatchSynthMeta "
-        "(SynthVersion INT NOT NULL, StampedAt DATETIME NOT NULL);",
-        f"INSERT INTO dbo.DispatchSynthMeta (SynthVersion, StampedAt) VALUES ({DISPATCH_SYNTH_VERSION}, GETDATE());",
+        "(SynthVersion INT NOT NULL, StampedAt DATETIME NOT NULL, Profile NVARCHAR(32) NULL);",
+        "IF COL_LENGTH('dbo.DispatchSynthMeta','Profile') IS NULL "
+        "ALTER TABLE dbo.DispatchSynthMeta ADD Profile NVARCHAR(32) NULL;",
+        f"INSERT INTO dbo.DispatchSynthMeta (SynthVersion, StampedAt, Profile) VALUES ({DISPATCH_SYNTH_VERSION}, GETDATE(), '{_synth_profile()}');",
     ]
 
     # Chunk into bounded sqlcmd batches (GO every BATCH_STMTS) — same memory-safety

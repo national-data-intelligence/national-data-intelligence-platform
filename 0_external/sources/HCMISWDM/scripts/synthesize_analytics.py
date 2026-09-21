@@ -696,6 +696,23 @@ def gen_fact_inventory() -> list[str]:
 
 
 # ─── Execution ──────────────────────────────────────────────────────────────
+
+def _synth_profile() -> str:
+    """The country this synthesis is FOR — stamped beside the version so a
+    packed dump can be trusted on a boot for the same country and rejected on
+    one for another. Mirrors the build-dir resolution above."""
+    import os
+    key = os.environ.get("NHDW_PROFILE", "").strip()
+    if key:
+        return key[:32]
+    eb = os.environ.get("NHDW_ENTITY_BUILD", "").strip()
+    if eb:
+        from pathlib import Path as _P
+        stem = _P(eb).name.replace("_build-entity-model", "").lstrip(".-")
+        return (stem or "et-v3")[:32]
+    return "et-v3"
+
+
 def main() -> int:
     print(f"==> Loading shared entity model from {SHARED_BUILD}")
     print(f"    hubs={len(EPSS_HUBS)}  programmes={len(PROGRAMMES)}  "
@@ -748,9 +765,11 @@ def main() -> int:
     # Stamp the synth marker LAST — it only exists if every batch above ran.
     lines.extend([
         "IF OBJECT_ID('dbo.SynthMeta','U') IS NULL CREATE TABLE dbo.SynthMeta "
-        "(SynthVersion INT NOT NULL, StampedAt DATETIME NOT NULL);",
-        f"INSERT INTO dbo.SynthMeta (SynthVersion, StampedAt) "
-        f"VALUES ({SYNTH_VERSION}, GETDATE());",
+        "(SynthVersion INT NOT NULL, StampedAt DATETIME NOT NULL, Profile NVARCHAR(32) NULL);",
+        "IF COL_LENGTH('dbo.SynthMeta','Profile') IS NULL "
+        "ALTER TABLE dbo.SynthMeta ADD Profile NVARCHAR(32) NULL;",
+        f"INSERT INTO dbo.SynthMeta (SynthVersion, StampedAt, Profile) "
+        f"VALUES ({SYNTH_VERSION}, GETDATE(), '{_synth_profile()}');",
     ])
 
     # Chunk into bounded sqlcmd batches: a GO every BATCH_STMTS statements lets

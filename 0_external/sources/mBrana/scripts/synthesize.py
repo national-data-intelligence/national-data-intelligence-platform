@@ -940,6 +940,23 @@ def build_mflowussd(
     lines.append("SET IDENTITY_INSERT mFlowUSSD.ASNLines OFF;")
 
 
+
+def _synth_profile() -> str:
+    """The country this synthesis is FOR — stamped beside the version so a
+    packed dump can be trusted on a boot for the same country and rejected on
+    one for another. Mirrors the build-dir resolution above."""
+    import os
+    key = os.environ.get("NHDW_PROFILE", "").strip()
+    if key:
+        return key[:32]
+    eb = os.environ.get("NHDW_ENTITY_BUILD", "").strip()
+    if eb:
+        from pathlib import Path as _P
+        stem = _P(eb).name.replace("_build-entity-model", "").lstrip(".-")
+        return (stem or "et-v3")[:32]
+    return "et-v3"
+
+
 def main() -> int:
     shared = load_shared()
     print(f"==> Loaded shared model: "
@@ -967,11 +984,16 @@ def main() -> int:
     # Synth marker rides the SAME transaction as the data: a failed run rolls
     # back to the previous data+marker pair, which stay mutually consistent.
     lines.extend([
+        # Version AND country: a packed dump stamped only with a version is
+        # trusted by the seed-only-if-current check no matter which country it
+        # holds. Profile is added idempotently for pre-existing tables.
         "IF OBJECT_ID('dbo.SynthMeta','U') IS NULL CREATE TABLE dbo.SynthMeta "
-        "(SynthVersion INT NOT NULL, StampedAt DATETIME NOT NULL);",
+        "(SynthVersion INT NOT NULL, StampedAt DATETIME NOT NULL, Profile NVARCHAR(32) NULL);",
+        "IF COL_LENGTH('dbo.SynthMeta','Profile') IS NULL "
+        "ALTER TABLE dbo.SynthMeta ADD Profile NVARCHAR(32) NULL;",
         "DELETE FROM dbo.SynthMeta;",
-        f"INSERT INTO dbo.SynthMeta (SynthVersion, StampedAt) "
-        f"VALUES ({SYNTH_VERSION}, GETDATE());",
+        f"INSERT INTO dbo.SynthMeta (SynthVersion, StampedAt, Profile) "
+        f"VALUES ({SYNTH_VERSION}, GETDATE(), '{_synth_profile()}');",
     ])
     lines.append("COMMIT;")
 

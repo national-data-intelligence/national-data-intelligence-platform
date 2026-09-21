@@ -64,12 +64,11 @@ wait_healthy() { # container timeout_s
 # Until the marker carries the country, a non-default entity build forces a
 # re-synthesis: a packed dump is only trustworthy for the country it was packed
 # for, and we cannot currently tell which that was.
-COUNTRY_FORCES_SYNTH=0
-if [ -n "${NHDW_ENTITY_BUILD:-}" ] || { [ -n "${NHDW_PROFILE:-}" ] && [ "${NHDW_PROFILE}" != "et-v3" ]; }; then
-  COUNTRY_FORCES_SYNTH=1
-  echo "  ▸ profile ${NHDW_PROFILE:-?} requested — ignoring packed dumps and re-synthesizing"
-  echo "    (a packed dump records its synth version, not its country)"
-fi
+# Country trust for packed dumps — one definition, shared with the test.
+. "$(dirname "${BASH_SOURCE[0]}")/lib-country-guard.sh"
+country_guard_init
+[ "$COUNTRY_FORCES_SYNTH" = "1" ] \
+  && echo "  ▸ profile ${WANT_PROFILE} requested — packs are trusted only if stamped for it"
 
 # The SYNTH_VERSION a synthesizer script declares (its data contract). Compared
 # against the marker the synthesizer stamps into the DB (dbo.SynthMeta /
@@ -159,10 +158,13 @@ up_ethioemr() {
   # A marker-LESS non-empty dump is trusted with a warning (pre-marker packs
   # may carry runtime clinical edits that a blind re-synth would destroy).
   MYQ() { docker exec ethioemr-mysql mysql -h127.0.0.1 -uroot -p"${ETHIOEMR_MYSQL_ROOT_PASSWORD:-changeme-ethioemr-root}" -N -e "$1" 2>/dev/null | tr -dc 0-9; }
+  # text-safe twin: the country stamp is a word, and tr -dc 0-9 would eat it
+  MYQT() { docker exec ethioemr-mysql mysql -h127.0.0.1 -uroot -p"${ETHIOEMR_MYSQL_ROOT_PASSWORD:-changeme-ethioemr-root}" -N -e "$1" 2>/dev/null | tr -cd 'a-zA-Z0-9._-'; }
   OBS=$(MYQ "SELECT COUNT(*) FROM openmrs.obs;")
   EMR_HAVE=$(MYQ "SELECT COALESCE(MAX(synth_version),0) FROM openmrs.synth_meta;")
+  EMR_PROF=$(MYQT "SELECT COALESCE(MAX(profile),'') FROM openmrs.synth_meta;")
   EMR_WANT=$(synth_ver "$SRC/EthioEMR/scripts/synthesize.py")
-  if [ "$COUNTRY_FORCES_SYNTH" = "0" ] && [ "${OBS:-0}" -gt 0 ] && [ "${EMR_HAVE:-0}" = "${EMR_WANT:-1}" ]; then
+  if profile_matches "${EMR_PROF:-}" && [ "${OBS:-0}" -gt 0 ] && [ "${EMR_HAVE:-0}" = "${EMR_WANT:-1}" ]; then
     log "EthioEMR already carries current clinical data (obs=${OBS}, synth v${EMR_HAVE}) — skipping synthesize"
   elif [ "${OBS:-0}" -gt 0 ] && [ "${EMR_HAVE:-0}" = "0" ]; then
     warn "EthioEMR carries data (obs=${OBS}) but NO synth marker (pre-marker pack) — trusting it; re-pack to stamp"
@@ -185,14 +187,16 @@ up_hcmis_mbrana() {
   # with the CURRENT synthesizer contract count — a version-drifted (or
   # marker-less) pack is re-synthesized in place (idempotent DELETE+INSERT).
   SQLQ() { docker exec hcmiswdm-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${HCMISWDM_SA_PASSWORD:-ChangeMe-MUST-be-strong-Aa1!}" -C -h -1 -Q "SET NOCOUNT ON; $1" 2>/dev/null | tr -dc 0-9; }
+  SQLQT() { docker exec hcmiswdm-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${HCMISWDM_SA_PASSWORD:-ChangeMe-MUST-be-strong-Aa1!}" -C -h -1 -Q "SET NOCOUNT ON; $1" 2>/dev/null | tr -cd 'a-zA-Z0-9._-'; }
   FACTS=$(SQLQ "SELECT COUNT(*) FROM HCMISWDM.Fact.DailyRecord")
   WDM_HAVE=$(SQLQ "SELECT ISNULL(MAX(SynthVersion),0) FROM HCMISWDM.dbo.SynthMeta")
+  WDM_PROF=$(SQLQT "SELECT ISNULL(MAX(Profile),'') FROM HCMISWDM.dbo.SynthMeta")
   WDM_WANT=$(synth_ver "$SRC/HCMISWDM/scripts/synthesize_analytics.py")
   # Dispatch plan (Supply Control Tower) rides the same restore — its own marker
   # so a pack that predates the dispatch loader re-synthesizes to add it.
   DISP_HAVE=$(SQLQ "SELECT ISNULL(MAX(SynthVersion),0) FROM HCMISWDM.dbo.DispatchSynthMeta")
   DISP_WANT=$(grep -oE 'DISPATCH_SYNTH_VERSION *= *[0-9]+' "$SRC/HCMISWDM/scripts/synthesize_dispatch.py" | head -1 | grep -oE '[0-9]+')
-  if [ "$COUNTRY_FORCES_SYNTH" = "0" ] && [ "${FACTS:-0}" -gt 0 ] && [ "${WDM_HAVE:-0}" = "${WDM_WANT:-1}" ] && [ "${DISP_HAVE:-0}" = "${DISP_WANT:-1}" ]; then
+  if profile_matches "${WDM_PROF:-}" && [ "${FACTS:-0}" -gt 0 ] && [ "${WDM_HAVE:-0}" = "${WDM_WANT:-1}" ] && [ "${DISP_HAVE:-0}" = "${DISP_WANT:-1}" ]; then
     log "HCMISWDM already carries current facts (DailyRecord=${FACTS}, synth v${WDM_HAVE}, dispatch v${DISP_HAVE}) — skipping synthesize"
   else
     [ "${FACTS:-0}" -gt 0 ] && log "HCMISWDM synth-version drift (analytics have v${WDM_HAVE:-0}/want v${WDM_WANT:-1}, dispatch have v${DISP_HAVE:-0}/want v${DISP_WANT:-1}) — re-synthesizing"
@@ -203,8 +207,9 @@ up_hcmis_mbrana() {
   ( cd "$SRC/mBrana" && bash scripts/restore.sh ) && log "mBrana restored" || warn "mBrana restore.sh failed"
   MBR=$(SQLQ "SELECT COUNT(*) FROM HCMISWCloud.mFlowUSSD.SOHLogs")
   MBR_HAVE=$(SQLQ "SELECT ISNULL(MAX(SynthVersion),0) FROM HCMISWCloud.dbo.SynthMeta")
+  MBR_PROF=$(SQLQT "SELECT ISNULL(MAX(Profile),'') FROM HCMISWCloud.dbo.SynthMeta")
   MBR_WANT=$(synth_ver "$SRC/mBrana/scripts/synthesize.py")
-  if [ "$COUNTRY_FORCES_SYNTH" = "0" ] && [ "${MBR:-0}" -gt 0 ] && [ "${MBR_HAVE:-0}" = "${MBR_WANT:-1}" ]; then
+  if profile_matches "${MBR_PROF:-}" && [ "${MBR:-0}" -gt 0 ] && [ "${MBR_HAVE:-0}" = "${MBR_WANT:-1}" ]; then
     log "mBrana already carries current data (SOHLogs=${MBR}, synth v${MBR_HAVE}) — skipping synthesize"
   else
     [ "${MBR:-0}" -gt 0 ] && log "mBrana synth-version drift (have v${MBR_HAVE:-0}, want v${MBR_WANT:-1}) — re-synthesizing"
@@ -260,6 +265,8 @@ up_dhis2() {
   wait_http "http://admin:district@127.0.0.1:8080/api/system/info.json" "version" 900 \
     || { warn "DHIS2 never became ready (schema init can take >10 min)"; return 1; }
   # Skip the expensive seed if IDSR is already present (idempotent re-runs).
+  # DHIS2 has no synth marker to stamp a country into, so the coarse gate
+  # remains here: any non-default profile re-seeds it.
   if [ "$COUNTRY_FORCES_SYNTH" = "0" ] && curl -fs "http://admin:district@127.0.0.1:8080/api/dataElements.json?filter=code:like:IDSR&fields=id&paging=false" 2>/dev/null | grep -q '"id"'; then
     log "DHIS2 already seeded (IDSR data elements present) — skipping seed_ethiopia.py"
     return 0

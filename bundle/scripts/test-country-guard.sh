@@ -19,34 +19,38 @@ PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); echo "  ✓ $1"; }
 bad()  { FAIL=$((FAIL+1)); echo "  ✗ $1"; [ -n "${2:-}" ] && echo "      $2"; }
 
-# Evaluate the guard exactly as sources-up.sh defines it, with no side effects.
-guard_for() {
+# Evaluate profile_matches exactly as sources-up.sh defines it: extract the
+# function and WANT_PROFILE derivation from the script itself, so this tests
+# what ships rather than a copy that drifts.
+match_for() {
   ( export NHDW_PROFILE="${1:-}" NHDW_ENTITY_BUILD="${2:-}"
-    COUNTRY_FORCES_SYNTH=0
-    if [ -n "${NHDW_ENTITY_BUILD:-}" ] || { [ -n "${NHDW_PROFILE:-}" ] && [ "${NHDW_PROFILE}" != "et-v3" ]; }; then
-      COUNTRY_FORCES_SYNTH=1
-    fi
-    echo "$COUNTRY_FORCES_SYNTH" )
+    . "$REPO/bundle/scripts/lib-country-guard.sh"
+    country_guard_init
+    profile_matches "${3:-}" >/dev/null 2>&1 && echo trust || echo synth )
 }
 
-echo "── the guard itself"
-[ "$(guard_for '' '')"          = "0" ] && ok "no profile → packed dumps are trusted (unchanged default)" \
-                                        || bad "no profile should not force re-synthesis"
-[ "$(guard_for 'et-v3' '')"     = "0" ] && ok "et-v3 → packed dumps are trusted" \
-                                        || bad "et-v3 should not force re-synthesis"
-[ "$(guard_for 'zm-v1' '')"     = "1" ] && ok "a non-default profile forces re-synthesis" \
-                                        || bad "zm-v1 must force re-synthesis"
-[ "$(guard_for '' '/x/_build-entity-model.zm')" = "1" ] \
-    && ok "an explicit entity build forces re-synthesis" \
-    || bad "NHDW_ENTITY_BUILD must force re-synthesis"
+echo "── the stamped-country contract"
+[ "$(match_for '' '' '')"            = "trust" ] && ok "default boot, unstamped pack → trusted (pre-stamp behaviour)" \
+                                                || bad "default + unstamped should be trusted"
+[ "$(match_for 'zm-v1' '' '')"       = "synth" ] && ok "zm-v1 boot, unstamped pack → rebuilt (cannot tell its country)" \
+                                                || bad "zm-v1 + unstamped must rebuild"
+[ "$(match_for 'zm-v1' '' 'zm-v1')"  = "trust" ] && ok "zm-v1 boot, zm-v1-stamped pack → TRUSTED (the durable upgrade)" \
+                                                || bad "a matching stamp must be trusted"
+[ "$(match_for 'zm-v1' '' 'et-v3')"  = "synth" ] && ok "zm-v1 boot, et-v3-stamped pack → rebuilt" \
+                                                || bad "a mismatched stamp must rebuild"
+[ "$(match_for '' '' 'zm-v1')"       = "synth" ] && ok "default boot, zm-v1-stamped pack → rebuilt" \
+                                                || bad "a foreign stamp must rebuild even on default"
+[ "$(match_for '' '/x/_build-entity-model.zm' 'zm')" = "trust" ] \
+    && ok "entity-build boot matches the stem it stamps" \
+    || bad "NHDW_ENTITY_BUILD stem should match its own stamp"
 
 echo "── every skip branch consults it"
 # A branch that decides whether to skip synthesis MUST be gated. A new source
 # added without the guard is the way this bug comes back.
 BRANCHES=$(grep -cE 'skipping synthesize|already seeded .*skipping' "$SRC" || true)
-GATED=$(grep -cE 'COUNTRY_FORCES_SYNTH' "$SRC" || true)
-[ "$GATED" -ge 5 ] && ok "guard referenced $GATED times for $BRANCHES skip messages" \
-                   || bad "only $GATED guard references — a skip branch is unguarded"
+GATED=$(grep -cE 'profile_matches |COUNTRY_FORCES_SYNTH' "$SRC" || true)
+[ "$GATED" -ge 5 ] && ok "country consulted $GATED times for $BRANCHES skip messages" \
+                   || bad "only $GATED country checks — a skip branch is unguarded"
 
 # The eLMIS branch is deliberately NOT guarded: that archive IS the Zambian
 # data, so re-restoring it is wasted work rather than wrong data. Assert the

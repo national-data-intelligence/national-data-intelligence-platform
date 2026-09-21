@@ -731,6 +731,23 @@ def gen_allergies(patients: list[dict]) -> list[str]:
 
 
 # ─── Execution ──────────────────────────────────────────────────────────────
+
+def _synth_profile() -> str:
+    """The country this synthesis is FOR — stamped beside the version so a
+    packed dump can be trusted on a boot for the same country and rejected on
+    one for another. Mirrors the build-dir resolution above."""
+    import os
+    key = os.environ.get("NHDW_PROFILE", "").strip()
+    if key:
+        return key[:32]
+    eb = os.environ.get("NHDW_ENTITY_BUILD", "").strip()
+    if eb:
+        from pathlib import Path as _P
+        stem = _P(eb).name.replace("_build-entity-model", "").lstrip(".-")
+        return (stem or "et-v3")[:32]
+    return "et-v3"
+
+
 def main() -> int:
     print(f"==> Seed = {SEED} | patients = {PATIENT_COUNT} | history = {YEARS_HISTORY}y")
 
@@ -743,7 +760,9 @@ def main() -> int:
         # ride the transaction — a failed run rolls back to the previous
         # data+marker pair, which stay mutually consistent.
         "CREATE TABLE IF NOT EXISTS synth_meta "
-        "(synth_version INT NOT NULL, stamped_at DATETIME NOT NULL);",
+        "(synth_version INT NOT NULL, stamped_at DATETIME NOT NULL, profile VARCHAR(32) NULL);",
+        # idempotent column add for pre-existing packs (MySQL 8+)
+        "ALTER TABLE synth_meta ADD COLUMN IF NOT EXISTS profile VARCHAR(32) NULL;",
         "SET FOREIGN_KEY_CHECKS = 0;",
         "SET UNIQUE_CHECKS = 0;",
         "SET autocommit = 0;",
@@ -809,8 +828,8 @@ def main() -> int:
     out.extend(gen_allergies(patients))
 
     out.extend([
-        f"INSERT INTO synth_meta (synth_version, stamped_at) "
-        f"VALUES ({SYNTH_VERSION}, NOW());",
+        f"INSERT INTO synth_meta (synth_version, stamped_at, profile) "
+        f"VALUES ({SYNTH_VERSION}, NOW(), '{_synth_profile()}');",
         "COMMIT;",
         "SET FOREIGN_KEY_CHECKS = 1;",
         "SET UNIQUE_CHECKS = 1;",
