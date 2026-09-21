@@ -64,7 +64,13 @@ layers:
     note: a Zambian cast of demo users and their provincial scopes
   data:
     sources: bundle/seeds/sources
+    entity_model: bundle/seeds/entity-model/entity-model.zm.yaml
     note: >-
-      the eLMIS 2016–2018 archive is ALREADY ingested and is genuinely Zambian;
-      the other six sources still carry Ethiopian synthetic data and are the
-      remaining work for a full data-layer swap
+      the eLMIS 2016–2018 archive is ALREADY ingested and is genuinely Zambian —
+      provinces, districts, facilities, facility types, programmes and tracer
+      products all come from it. The entity model above carries those real
+      tables and synthesises what the archive does not hold (it is a SUPPLY
+      archive: no surveillance, no service indicators, no workforce), marking
+      each. The six generated source replicas still hold Ethiopian rows until
+      their generators are run against this model and the pipeline re-run —
+      that is the remaining work, and it costs a full pipeline run

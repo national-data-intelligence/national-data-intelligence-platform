@@ -1,0 +1,322 @@
+[
+  {
+    "id": "LAB0010",
+    "name": "Abx Alphalse",
+    "programme": null
+  },
+  {
+    "id": "WB0001",
+    "name": "Acetyl Salicylic Acid  Tab 300Mg",
+    "programme": null
+  },
+  {
+    "id": "EM0003",
+    "name": "Acetazolamide Sodium, Tab 250Mg",
+    "programme": null
+  },
+  {
+    "id": "EM0023",
+    "name": "Aminophylline",
+    "programme": null
+  },
+  {
+    "id": "EQP0009",
+    "name": "Autoclave Tape",
+    "programme": null
+  },
+  {
+    "id": "LAB0467",
+    "name": "Bd Tritest Cd3/Cd4/Cd45 + Trucount Tubes",
+    "programme": null
+  },
+  {
+    "id": "WB0005",
+    "name": "Benzyl Penicillin Sodium  5Mu  Pwd For Inj",
+    "programme": null
+  },
+  {
+    "id": "LAB0542",
+    "name": "Bag Biohazard, Autoclavable Red Printed 1.5Mil 19 X 23In",
+    "programme": null
+  },
+  {
+    "id": "LAB1016",
+    "name": "Biohazard Bags",
+    "programme": null
+  },
+  {
+    "id": "TBA",
+    "name": "Biospot  Nadcc 2.5G Effervescent Tab",
+    "programme": null
+  },
+  {
+    "id": "LAB0539",
+    "name": "Cobas Ampliprep (Cobas Taqman) Hiv-1 Qualitative Test",
+    "programme": null
+  },
+  {
+    "id": "LAB0967",
+    "name": "Cobas Integra Precinorm L",
+    "programme": null
+  },
+  {
+    "id": "LAB1017",
+    "name": "Cobas,Taqman,Ampliprep, Spec Pre-Extraction Reag",
+    "programme": null
+  },
+  {
+    "id": "MS0002",
+    "name": "Cannular 18G",
+    "programme": null
+  },
+  {
+    "id": "EM1217",
+    "name": "Cefixime 100Mg/5Ml",
+    "programme": null
+  },
+  {
+    "id": "MS0206",
+    "name": "Chlorhexidine Gluconate ( Savlon )",
+    "programme": null
+  },
+  {
+    "id": "MS0038",
+    "name": "Chlorhexidine Gluconate ( Savlon )",
+    "programme": null
+  },
+  {
+    "id": "WB0038",
+    "name": "Condoms-Male  144 Pieces",
+    "programme": null
+  },
+  {
+    "id": "MS0164",
+    "name": "Cord Clamps 100 Each",
+    "programme": null
+  },
+  {
+    "id": "LAB0913",
+    "name": "Dbs Pcr",
+    "programme": null
+  },
+  {
+    "id": "HTK0002",
+    "name": "Determine Hiv 1/2 Rapid Test Inc Chase Buffer",
+    "programme": null
+  },
+  {
+    "id": "RH0014",
+    "name": "Depo Provera Injection With Needles & Syringes  150Mg/Ml",
+    "programme": null
+  },
+  {
+    "id": "EM0166",
+    "name": "Diazepam",
+    "programme": null
+  },
+  {
+    "id": "ARV0042",
+    "name": "Didanosine 25Mg Tablets",
+    "programme": null
+  },
+  {
+    "id": "ARV0040",
+    "name": "Didanosine 50 Mg Tab",
+    "programme": null
+  },
+  {
+    "id": "EM0662",
+    "name": "Digoxin 250Ug Injection",
+    "programme": null
+  },
+  {
+    "id": "ARV0078",
+    "name": "Dolutegravir Tablets",
+    "programme": null
+  },
+  {
+    "id": "WB0012",
+    "name": "Erythromycin Stearate  Tab 250Mg",
+    "programme": null
+  },
+  {
+    "id": "WB0069",
+    "name": "Gauze Bandage Bp13",
+    "programme": null
+  },
+  {
+    "id": "EM0741",
+    "name": "Gentamycin 0.3% Eyedrops",
+    "programme": null
+  },
+  {
+    "id": "EM0231",
+    "name": "Griseofulvin Tablets",
+    "programme": null
+  },
+  {
+    "id": "ARV0043",
+    "name": "Lopinavir/Ritonavir (Kaletra)  100Mg/25Mg",
+    "programme": null
+  },
+  {
+    "id": "EM1032",
+    "name": "Lignocaine",
+    "programme": null
+  },
+  {
+    "id": "WB0021",
+    "name": "Metronidazole Hcl  Tab 200Mg",
+    "programme": null
+  },
+  {
+    "id": "NCEM0064",
+    "name": "Multivitamin Tablets",
+    "programme": null
+  },
+  {
+    "id": "EQP1378",
+    "name": "Male Circumcision Essential Consumable Pack Dorsal Slit Method",
+    "programme": null
+  },
+  {
+    "id": "EQP0906",
+    "name": "Male Circumcision Re-Usable Instrument Kit (Option2 ) Dorsal Slit Method",
+    "programme": null
+  },
+  {
+    "id": "WB0025",
+    "name": "Oral Rehydration Salts  Who Formula  Sachet To Mak",
+    "programme": null
+  },
+  {
+    "id": "EM0342",
+    "name": "Paracetamol 120Mg/5Ml Suspension 100Ml Btl",
+    "programme": null
+  },
+  {
+    "id": "EM0835",
+    "name": "Povidine Iodine 10%",
+    "programme": null
+  },
+  {
+    "id": "EM0809",
+    "name": "Povidone Iodine 10%",
+    "programme": null
+  },
+  {
+    "id": "WB0030",
+    "name": "Quinine Sulphate  Tab 300Mg Sugar Coated",
+    "programme": null
+  },
+  {
+    "id": "MAL0015",
+    "name": "Rdt For Malaria (P Falciparum)",
+    "programme": null
+  },
+  {
+    "id": "MS0294",
+    "name": "Sodium Dichloroiscocyanulate",
+    "programme": null
+  },
+  {
+    "id": "MS0214",
+    "name": "Sodium Hypochloride Jik",
+    "programme": null
+  },
+  {
+    "id": "LAB1005",
+    "name": "Sputum Container, 40Ml With Screw Cap Polypropylne",
+    "programme": null
+  },
+  {
+    "id": "ARV0027",
+    "name": "Stavudine 15Mg Capsules",
+    "programme": null
+  },
+  {
+    "id": "ARV0028",
+    "name": "Stavudine 20Mg Tablet",
+    "programme": null
+  },
+  {
+    "id": "ARV0041",
+    "name": "Stavudine/Lamivudine 30/150Mg Tablets",
+    "programme": null
+  },
+  {
+    "id": "ARV0030",
+    "name": "Stavudine/Lamivudine 40/150Mg Tablets",
+    "programme": null
+  },
+  {
+    "id": "LAB0579",
+    "name": "Stool Containers  28 Ml  Screw Cap  With Scoop",
+    "programme": null
+  },
+  {
+    "id": "MS0059",
+    "name": "Surgical Gloves",
+    "programme": null
+  },
+  {
+    "id": "MS0102",
+    "name": "Syringes Disposable",
+    "programme": null
+  },
+  {
+    "id": "ARV0031",
+    "name": "Tenofovir 300Mg Tablets",
+    "programme": null
+  },
+  {
+    "id": "ARV0077",
+    "name": "Tenofovir/Lamivudine /Dolutegravir Tablets",
+    "programme": null
+  },
+  {
+    "id": "ARV0063",
+    "name": "Tenofovir/Lamivudine/Efavirenz Tablets",
+    "programme": null
+  },
+  {
+    "id": "ARV0074",
+    "name": "Tenofovir/Lamivudine/Efavirenz,300/300/400",
+    "programme": null
+  },
+  {
+    "id": "HTK0001",
+    "name": "Unigold Hiv 1/2 Rapid Test",
+    "programme": null
+  },
+  {
+    "id": "ARV0035",
+    "name": "Zidovudine 100Mg Capsules",
+    "programme": null
+  },
+  {
+    "id": "ARV0036",
+    "name": "Zidovudine 300Mg Tablets",
+    "programme": null
+  },
+  {
+    "id": "ARV0034",
+    "name": "Zidovudine Oral Solution 10Mg/Ml 100 Mls",
+    "programme": null
+  },
+  {
+    "id": "ARV0033",
+    "name": "Zidovudine Oral Solution 50Mg/Ml 240 Mls",
+    "programme": null
+  },
+  {
+    "id": "WB0035",
+    "name": "Zinc Oxide Adhesive Tape",
+    "programme": null
+  },
+  {
+    "id": "WB0036",
+    "name": "Zinc Oxide Adhesive Tape",
+    "programme": null
+  }
+]

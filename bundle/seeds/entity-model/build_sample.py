@@ -31,11 +31,86 @@ except ImportError:
     sys.exit(1)
 
 ROOT       = Path(__file__).resolve().parent
-MODEL_PATH = ROOT / "entity-model.yaml"
-BUILD_DIR  = ROOT / "_build"
+
+# WHICH COUNTRY this sample is for. The entity model is the data layer of a
+# country profile — et-v3 declares entity-model.yaml, and a second country
+# declares its own — so the model is chosen the same way every other profile
+# input is, rather than being the one file in the chain that is hardwired.
+#
+# Resolution: --model <path>, then $NHDW_ENTITY_MODEL, then the ACTIVE profile's
+# layers.data.entity_model, then entity-model.yaml. A deployment with no profile
+# therefore behaves exactly as it did before this existed.
+def _resolve_model() -> Path:
+    argv = sys.argv
+    if "--model" in argv:
+        return Path(argv[argv.index("--model") + 1])
+    env = os.environ.get("NHDW_ENTITY_MODEL", "").strip()
+    if env:
+        return Path(env)
+    try:
+        import yaml as _y
+        pdir  = Path(os.environ.get("NHDW_PROFILE_DIR", "/opt/nhdw-profiles"))
+        state = Path(os.environ.get("NHDW_PROFILE_STATE_DIR", "/opt/nhdw-state"))
+        key = ""
+        for pointer in (state / "ACTIVE", pdir / "ACTIVE"):
+            if pointer.is_file():
+                key = pointer.read_text(encoding="utf-8").strip()
+                break
+        key = key or os.environ.get("NHDW_PROFILE", "").strip()
+        if key:
+            man = _y.safe_load((pdir / key / "profile.yaml").read_text(encoding="utf-8"))
+            declared = (((man or {}).get("layers") or {}).get("data") or {}).get("entity_model")
+            if declared:
+                cand = Path(declared)
+                return cand if cand.is_absolute() else ROOT.parents[2] / declared
+    except Exception:
+        pass                       # an unreadable profile falls back to the default
+    return ROOT / "entity-model.yaml"
+
+
+MODEL_PATH = _resolve_model()
+
+
+def _marts_seed_path(name: str) -> Path:
+    """Where a generated dbt seed goes.
+
+    The DEFAULT model owns the canonical seed names, because those are what
+    dbt's seed config and every model referencing them expect. A non-default
+    model writes alongside them under its own suffix instead of ON them —
+    running the Zambian sampler once silently replaced Ethiopia's hub catchment
+    with Zambian rows, in a tracked file, which is the kind of change that ships
+    to a demo unnoticed.
+
+    A country whose seeds should become canonical is promoted deliberately, by
+    pointing dbt at the suffixed file — not by whichever sampler ran last."""
+    base = REPO_ROOT / "2_pipelines" / "marts" / "seeds"
+    if _STEM == "entity-model":
+        return base / name
+    suffix = _STEM.replace("entity-model", "").lstrip(".-") or _STEM
+    return base / f"{Path(name).stem}.{suffix}{Path(name).suffix}"
+
+
+# Peek at the model early: the registry path is one of its fields, and MFR_PATH
+# below needs it. The full load still happens in main() as before.
+try:
+    import yaml as _yaml_peek
+    _MODEL_DOC = _yaml_peek.safe_load(MODEL_PATH.read_text(encoding="utf-8")) or {}
+except Exception:
+    _MODEL_DOC = {}
+# One _build per model, so two countries' samples never overwrite each other and
+# a generator cannot silently consume the wrong country's geography.
+_STEM      = MODEL_PATH.stem
+BUILD_DIR  = ROOT / "_build" if _STEM == "entity-model" else ROOT / f"_build-{_STEM}"
 REPO_ROOT  = ROOT.parents[2]   # bundle/seeds/entity-model → repo root
 # In-repo copy (the old absolute path pointed at a machine that no longer exists).
-MFR_PATH   = Path(__file__).resolve().parent / "sample-data" / "facilities_2026-07-07.json"
+# The real facility registry the sample is drawn from. Ethiopia's is the MFR
+# export; Zambia's is the eLMIS registry pulled from the warehouse. The model
+# names its own via `facility_registry`, so the sampler is no longer bound to
+# one country's registry file.
+_registry  = (_MODEL_DOC.get("facility_registry")
+              if isinstance(_MODEL_DOC, dict) else None) or \
+             "sample-data/facilities_2026-07-07.json"
+MFR_PATH   = Path(_registry) if Path(_registry).is_absolute() else ROOT / _registry
 
 # ──────────────────────────────────────────────────────────────────────────
 # Tier ↔ MFR facilityType crosswalk
@@ -97,8 +172,65 @@ def load_model() -> dict:
 
 
 def load_mfr() -> list[dict]:
+    """The facility registry. Ethiopia's MFR export wraps its rows in `data`;
+    a registry pulled straight from the warehouse is a bare array. Accept
+    either rather than making every future registry adopt one export's
+    envelope."""
     with open(MFR_PATH) as f:
-        return json.load(f)["data"]
+        doc = json.load(f)
+    return doc["data"] if isinstance(doc, dict) else doc
+
+
+def population_facility_set(model: dict, registry: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+    """Use the registry AS the facility set, rather than sampling from it.
+
+    Ethiopia's registry is 64,745 facilities and the demo wants 900, so
+    `stratified_facility_sample` draws a sample that mirrors the real pyramid.
+    Zambia's registry is the 2,807 facilities the eLMIS archive actually
+    contains — that IS the population, and sampling it would throw away real
+    rows to synthesise a smaller imitation of them.
+
+    Recognised by the model declaring `facility_registry_is_population: true`.
+    Returns the same (facilities, districts, provinces) triple the stratified
+    path returns, so every caller downstream is unchanged."""
+    rnd = random.Random(model["random_seed"])
+    mix_by_tier = {t["id"]: t.get("ownership_mix") or {"public": 1.0}
+                   for t in model.get("facility_tiers", [])}
+
+    def own(tier_id: str) -> str:
+        mix = mix_by_tier.get(tier_id) or {"public": 1.0}
+        r, acc = rnd.random(), 0.0
+        for k, v in mix.items():
+            acc += v
+            if r <= acc:
+                return k
+        return "public"
+
+    facilities, districts, provinces = [], {}, {}
+    for f in registry:
+        rid  = f"ZM-{f['region_id']}" if not str(f.get("region_id", "")).startswith("ZM-") \
+               else f["region_id"]
+        did  = str(f.get("district_code") or "")
+        tier = f.get("facility_type_code") or "UNK"
+        facilities.append({
+            "facility_id": f.get("facility_code"),
+            "mfr_uuid":    f.get("facility_code"),
+            "name":        f.get("facility_name"),
+            "tier_id":     tier,
+            "woreda_id":   did,
+            "region_id":   rid,
+            "ownership":   own(tier),
+            "opened_year": rnd.randint(1975, model.get("target_year", 2018) - 1),
+            "lat":         f.get("lat"),
+            "lng":         f.get("lng"),
+            "coord_basis": f.get("coord_basis"),
+        })
+        districts.setdefault(did, {
+            "woreda_id": did, "region_id": rid, "zone": f.get("region_name"),
+            "name": f.get("district_name"), "urban_rural": "urban" if rnd.random() < .25 else "rural",
+        })
+        provinces.setdefault(rid, {"zone_id": rid, "region_id": rid, "name": f.get("region_name")})
+    return facilities, list(districts.values()), list(provinces.values())
 
 
 def stratified_facility_sample(model: dict, mfr: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
@@ -348,7 +480,12 @@ def main() -> None:
     mfr = load_mfr()
     print(f"loaded MFR · {len(mfr):,} real facilities")
 
-    facilities, woredas, zones = stratified_facility_sample(model, mfr)
+    if model.get("facility_registry_is_population"):
+        facilities, woredas, zones = population_facility_set(model, mfr)
+        print(f"registry IS the population · {len(facilities)} facilities, "
+              f"{len(woredas)} districts, {len(zones)} provinces — not sampled")
+    else:
+        facilities, woredas, zones = stratified_facility_sample(model, mfr)
     periods = build_periods(model["target_year"], model["history_years"])
 
     BUILD_DIR.mkdir(exist_ok=True)
@@ -386,7 +523,7 @@ def main() -> None:
             wgt = (fac_by_region.get(r, 0) / tot) if tot else 1.0 / len(served)
             catch_lines.append(
                 f"{h['id']},{h['name'].replace(',', ' ')},{region_code[r]},{round(wgt, 4)}")
-    marts_seed = REPO_ROOT / "2_pipelines" / "marts" / "seeds" / "epss_hub_catchment.csv"
+    marts_seed = _marts_seed_path("epss_hub_catchment.csv")
     marts_seed.write_text("\n".join(catch_lines) + "\n", encoding="utf-8")
     print(f"wrote hub catchment seed → {marts_seed} ({len(catch_lines) - 1} rows)")
 
@@ -402,7 +539,7 @@ def main() -> None:
             raise SystemExit(f"disease_response maps unknown commodity {m['commodity']}")
         resp_lines.append(
             f"{m['disease']},{m['commodity']},{cname.replace(',', ' ')},{m['role']}")
-    resp_seed = REPO_ROOT / "2_pipelines" / "marts" / "seeds" / "disease_response_map.csv"
+    resp_seed = _marts_seed_path("disease_response_map.csv")
     resp_seed.write_text("\n".join(resp_lines) + "\n", encoding="utf-8")
     print(f"wrote disease response seed → {resp_seed} ({len(resp_lines) - 1} rows)")
 
@@ -416,7 +553,7 @@ def main() -> None:
     for c in model["commodities"]:
         ref_lines.append(
             f"{c['id']},{c['name'].replace(',', ' ')},{c['programme']},{c.get('enables', '')}")
-    ref_seed = REPO_ROOT / "2_pipelines" / "marts" / "seeds" / "commodity_reference.csv"
+    ref_seed = _marts_seed_path("commodity_reference.csv")
     ref_seed.write_text("\n".join(ref_lines) + "\n", encoding="utf-8")
     print(f"wrote commodity reference seed → {ref_seed} ({len(ref_lines) - 1} rows)")
 
@@ -468,7 +605,12 @@ def main() -> None:
             dd.append("")
             dd.append(desc or "(no description)")
             dd.append("")
-    dict_path = REPO_ROOT / "docs" / "data-dictionary.md"
+    # Same rule as the dbt seeds: the default model owns the canonical name,
+    # another country writes beside it. This file is the served data dictionary,
+    # so a Zambian run silently rewriting Ethiopia's is a documentation change
+    # nobody asked for and nobody would notice.
+    dict_path = (REPO_ROOT / "docs" / "data-dictionary.md" if _STEM == "entity-model"
+                 else REPO_ROOT / "docs" / f"data-dictionary.{_STEM.replace('entity-model', '').lstrip('.-')}.md")
     dict_path.write_text("\n".join(dd) + "\n", encoding="utf-8")
     print(f"wrote data dictionary → {dict_path} ({len(dd)} lines)")
 
