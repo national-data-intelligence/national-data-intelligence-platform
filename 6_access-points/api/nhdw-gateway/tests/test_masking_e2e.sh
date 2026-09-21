@@ -15,6 +15,13 @@
 # The low-trust case is the one that proves masking TRANSFORMS rather than
 # merely logging: same role, same mart, coordinates rounded.
 #
+# It is checked on TWO read paths — the Control Tower feed and the generic
+# mart reader — because they look the classification up independently, and a
+# denylist lookup that misses fails OPEN and silent. That is not theoretical:
+# the CT route once passed a Trino-qualified schema where the classification
+# store keys on the bare name, so the lookup returned "nothing classified"
+# and the GPS went out in the clear on every request.
+#
 # Usage (from the k3s host, or anywhere with cluster + ingress access):
 #   NHDW_HOSTBASE=20.84.70.78.nip.io bundle-or-repo/tests/test_masking_e2e.sh
 # The impersonation secret is read from the cluster; it never appears in args.
@@ -72,6 +79,37 @@ prt="$(ct_lat R-CONS-PRT high 4)"
 case "$prt" in
   HTTP-403) pass "partner role denied the CT feed outright (403)" ;;
   *) fail "partner role expected 403, got $prt" ;;
+esac
+
+# ── the SAME classified columns through the generic mart reader ──────────
+# Second, independent classification lookup; a per-route mistake shows up here
+# and nowhere else.
+mart_lat() {
+  local body status
+  body="$(curl -sk --max-time 20 -w '\n%{http_code}' \
+      -H "X-Mock-User: 00000000-0000-0000-0000-00000000001$3" \
+      -H "X-Mock-Role: $1" -H "X-Mock-Trust: $2" -H "X-Mock-Secret: $SECRET" \
+      "$GW/api/marts/bi_supply/mart_ct_nodes")"
+  status="$(printf '%s' "$body" | tail -1)"
+  if [ "$status" != "200" ]; then printf 'HTTP-%s' "$status"; return; fi
+  printf '%s' "$body" | sed '$d' | python3 -c "
+import sys, json
+r = (json.load(sys.stdin).get('rows') or [])
+print(r[0].get('lat') if r else 'NO-ROWS')"
+}
+
+m_ana="$(mart_lat R-CONS-ANA high 1)"
+case "$m_ana" in
+  HTTP-*|NO-ROWS) fail "analyst could not read mart_ct_nodes ($m_ana)" ;;
+  *.*[0-9][0-9][0-9]*) pass "mart reader: analyst sees EXACT coordinates ($m_ana)" ;;
+  *) fail "mart reader: analyst coordinates look generalized ($m_ana)" ;;
+esac
+
+m_low="$(mart_lat R-CONS-ANA low 2)"
+case "$m_low" in
+  HTTP-*|NO-ROWS) fail "low-trust analyst could not read mart_ct_nodes ($m_low)" ;;
+  *.*[0-9][0-9][0-9]*) fail "MART READER SERVED EXACT COORDINATES TO A LOW-TRUST IDENTITY ($m_low)" ;;
+  *) pass "mart reader: low-trust sees GENERALIZED coordinates ($m_low vs $m_ana)" ;;
 esac
 
 anon="$(curl -sk --max-time 20 -o /dev/null -w '%{http_code}' "$GW/api/ct/plan")"

@@ -20,6 +20,9 @@
 #      bundled mc binary is executable
 #   8. no retired names outside _archive (1_sources, fake-fayda image refs,
 #      1_infrastructure/{scripts,docker}) — replacement-means-removal guard
+#   9. masking negative path: a low-trust identity gets GENERALIZED coordinates
+#      on both the Control Tower feed and the generic mart reader, an analyst
+#      with the reveal grant gets exact ones, a partner role is denied
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS=nhdw
@@ -215,6 +218,25 @@ stale=$(grep -rIl --exclude-dir='.*' "1_sources/\|nhdw/fake-fayda\|1_infrastruct
   | grep -v "_archive/" | grep -v "k8s-deployment-changelog" | grep -v "bundle/state/" \
   | grep -v "verify-system.sh" || true)   # this script necessarily contains the patterns
 [ -z "$stale" ] && pass "no retired names outside _archive" || fail "retired names still referenced: $stale"
+
+# 9. masking negative path — the ONE check that proves column masking
+# transforms rather than merely logging. It lived as a standalone script that
+# nothing ran, which is how a fail-open on the Control Tower GPS survived a
+# deploy: the policy self-tests passed because the policy was right, and no
+# gate ever asked what a low-trust caller actually received.
+MASK_E2E="$REPO/6_access-points/api/nhdw-gateway/tests/test_masking_e2e.sh"
+if [ -x "$MASK_E2E" ] || [ -f "$MASK_E2E" ]; then
+  mask_out="$(NHDW_HOSTBASE="$NHDW_HOSTBASE" NS="$NS" bash "$MASK_E2E" 2>&1)"
+  mask_rc=$?
+  if [ "$mask_rc" -eq 0 ]; then
+    pass "masking negative path enforced on both read paths"
+  else
+    fail "masking negative path FAILED:"
+    printf '%s\n' "$mask_out" | sed 's/^/      /'
+  fi
+else
+  fail "masking e2e test missing at $MASK_E2E"
+fi
 
 echo
 if [ "$FAIL" -ne 0 ]; then echo "== verify-system: FAILURES above =="; exit 1; fi
