@@ -113,6 +113,11 @@ if [ "$INGEST" = 1 ]; then
   # port>. Probe from INSIDE the cluster (an imported ingestor image has python3),
   # so a broken host route fails loudly here instead of as 0-row marts later.
   echo "▸ [preflight] source reachability from inside the cluster (host.k3d.internal)"
+    # Sources are host containers slow to accept connections — a fresh DHIS2 /
+    # SQL Server is not listening the instant docker reports up, and a country
+    # switch that just recreated them widens that window. Retry with backoff.
+    PF_TRIES="${NHDW_PREFLIGHT_TRIES:-20}"; pf_ok=0
+    for pf_i in $(seq 1 "$PF_TRIES"); do
   if kubectl -n "$NS" run src-preflight --rm -i --restart=Never \
       --image=nhdw/dhis2-ingestor:1.0.0 --image-pull-policy=IfNotPresent --quiet \
       --command -- python3 -c '
@@ -129,11 +134,11 @@ for name, p in ports.items():
     finally:
         s.close()
 sys.exit(1 if bad else 0)' 2>/dev/null; then
-    echo "  ✓ all sources reachable"
-  else
-    echo "  ✗ one or more sources unreachable — run bundle/scripts/sources-up.sh up"
-    exit 1
-  fi
+      pf_ok=1; echo "  ✓ all sources reachable (attempt ${pf_i})"; break
+    fi
+    echo "    sources not all ready (attempt ${pf_i}/${PF_TRIES}) — waiting 15s"; sleep 15
+    done
+    if [ "$pf_ok" != 1 ]; then echo "  ✗ sources still unreachable after ${PF_TRIES} attempts"; exit 1; fi
 
   # Optional guaranteed-clean rebuild: purge each source's whole lake prefix —
   # data AND _dlt state, so append+incremental cursors restart from the floor and
