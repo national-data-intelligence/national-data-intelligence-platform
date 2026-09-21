@@ -341,6 +341,20 @@
   granularity: aggregate
   default_sensitivity: default
   description: "PCT KPI contracts (seed) — numerator, denominator, formula, grain, source, target, exclusions, reference, limitation per KPI."
+- schema_name: bi_supply
+  table_name: mart_pct_facility_geo
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed like the other facility-grain eLMIS marts; lat/lng masked by column_classification
+  description: "PCT facility geography (Zambia eLMIS) — every facility located, with coord_basis saying how (source / repaired / inferred)."
+- schema_name: bi_supply
+  table_name: mart_pct_demand_month
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional
+  description: "PCT demand base (Zambia eLMIS) — facility × product × month: adjusted demand, stock state, orders, labelled pipeline assumption."
 # ── MDM augmentation (PCT dataflow design): golden records + discovered relationships ──
 - schema_name: bi_mdm
   table_name: mdm_commodity_match_candidates
