@@ -55,6 +55,8 @@ jobs:
         run: cd 7_security/scripts && python3 test_column_classification_loader.py
       - name: nhdw_ref vocabulary suite
         run: cd bundle/seeds/ref-vocab && python3 test_build_vocab.py
+      - name: widget-binding contract (lineage for every catalog widget)
+        run: python3 bundle/scripts/test_gen_exposures.py
 
   gateway:
     runs-on: ubuntu-latest

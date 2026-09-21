@@ -11,6 +11,6 @@ RUN pip install --no-cache-dir \
         psycopg2-binary==2.9.10
 
 WORKDIR /bridge
-COPY sync.py /bridge/sync.py
+COPY sync.py lineage.py /bridge/
 
 ENTRYPOINT ["python", "/bridge/sync.py"]
