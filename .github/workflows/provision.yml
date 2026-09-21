@@ -21,7 +21,11 @@ on:
         default: true
 
 concurrency:
-  group: nhdw-provision
+  # ONE group for every workflow that mutates the cluster. Provisioning and a
+  # redeploy both drive helm against the same release; running them at once
+  # races two `helm upgrade`s and can leave the release wedged mid-transaction.
+  # Queue instead of cancel — an interrupted deploy is worse than a slow one.
+  group: nhdw-cluster
   cancel-in-progress: false
 
 permissions:

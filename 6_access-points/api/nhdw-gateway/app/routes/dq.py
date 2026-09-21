@@ -60,6 +60,9 @@ from .. import opa, ops_db, trino_client
 # Admin ops-console surfaces gate on the RBAC capability, NOT opa.decide:
 # no rego rule matches admin.* verbs, so opa.decide denies under OPA_ENFORCE (see #53).
 from .perm_admin import _require_capability
+# the gap scan lives with the classification endpoints; the detector reuses it
+# so the on-demand list and the raised flag can never disagree
+from . import classification
 
 log = logging.getLogger("gateway.dq")
 router = APIRouter(prefix="/api/dq", tags=["dq"])
@@ -980,6 +983,36 @@ async def _detect_mdm_backlog(conn) -> list[dict[str, Any]]:
     }]
 
 
+async def _detect_classification_gaps() -> list[dict[str, Any]]:
+    """Mart columns that LOOK sensitive and carry no classification row.
+
+    Masking is a denylist, so an unclassified column is served in the clear.
+    The steward endpoint can already list these on demand; raising a flag is
+    what makes the gap arrive on its own instead of waiting to be looked for.
+    One flag for the whole scan, not one per column — the work item is "review
+    the gap list", and per-column flags would swamp the queue on a rename."""
+    try:
+        scanned, gaps = await classification.scan_unclassified()
+    except Exception as exc:                                    # noqa: BLE001
+        log.debug("detector: mart catalog unreadable (%s) — skipping gap scan", exc)
+        return []
+    if not gaps:
+        return []
+    sample = ", ".join(f"{g['table_name']}.{g['column_name']}" for g in gaps[:5])
+    return [{
+        "source": "governance", "table_name": "column_classification",
+        "error_class": "classification_gap",
+        "severity": "warn" if len(gaps) > 10 else "info",
+        "description": (f"{len(gaps)} of {scanned} mart columns look sensitive but "
+                        f"are unclassified (served in the clear): {sample}"
+                        + (" …" if len(gaps) > 5 else "")),
+        "key": {"gaps": len(gaps), "scanned": scanned,
+                "columns": [f"{g['schema_name']}.{g['table_name']}.{g['column_name']}"
+                            for g in gaps[:50]]},
+        "fingerprint": _fingerprint("classification", "gap"),
+    }]
+
+
 async def _upsert_flags(conn, findings: list[dict[str, Any]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for f in findings:
@@ -1012,6 +1045,7 @@ async def _run_detection() -> dict[str, Any]:
         findings = _detect_dbt_failures()
         findings += _detect_freshness_and_volume(slas)
         findings += await _detect_mdm_backlog(conn)
+        findings += await _detect_classification_gaps()
         counts = await _upsert_flags(conn, findings)
         open_total = await conn.fetchval(
             "SELECT count(*) FROM ops_governance.dq_flag WHERE status = 'open'")

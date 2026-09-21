@@ -138,6 +138,24 @@ async def unclassified(user: UserCtx = Depends(get_user),
     is a REVIEW ITEM, never an automatic mask — the steward classifies (or
     dismisses by classifying it 'default'/'none')."""
     await _require_steward(user)
+    try:
+        scanned, findings = await scan_unclassified()
+    except Exception as exc:                                      # noqa: BLE001
+        log.warning("unclassified scan failed: %s", exc)
+        raise HTTPException(502, f"could not read mart columns: {exc}")
+    return {"findings": findings[:limit], "total": len(findings),
+            "scanned_columns": scanned,
+            "note": "name-pattern review flags — a finding is served in the CLEAR "
+                    "until classified; classify as 'default'/'none' to dismiss"}
+
+
+async def scan_unclassified() -> tuple[int, list[dict]]:
+    """The gap scan itself — (columns scanned, findings).
+
+    Shared with the DQ detector so the steward endpoint and the nightly flag
+    can never disagree about what counts as a gap. Raises on an unreadable
+    mart catalog: a scan that silently returns nothing would report "no gaps"
+    for a warehouse it never looked at."""
     pool = await ops_db.ensure_pool()
     async with pool.acquire() as conn:
         known = {(r["schema_name"], r["table_name"], r["column_name"])
@@ -145,14 +163,10 @@ async def unclassified(user: UserCtx = Depends(get_user),
                      SELECT schema_name, table_name, column_name
                      FROM ops_perm.column_classification
                  """)}
-    try:
-        res = await trino_client.query(
-            "SELECT table_schema, table_name, column_name "
-            "FROM marts.information_schema.columns "
-            "WHERE table_schema LIKE 'bi\\_%' ESCAPE '\\'")
-    except Exception as exc:                                      # noqa: BLE001
-        log.warning("unclassified scan failed: %s", exc)
-        raise HTTPException(502, f"could not read mart columns: {exc}")
+    res = await trino_client.query(
+        "SELECT table_schema, table_name, column_name "
+        "FROM marts.information_schema.columns "
+        "WHERE table_schema LIKE 'bi\\_%' ESCAPE '\\'")
 
     findings = []
     for r in res.get("rows", []):
@@ -168,10 +182,7 @@ async def unclassified(user: UserCtx = Depends(get_user),
                 })
                 break
     findings.sort(key=lambda f: (f["schema_name"], f["table_name"], f["column_name"]))
-    return {"findings": findings[:limit], "total": len(findings),
-            "scanned_columns": len(res.get("rows", [])),
-            "note": "name-pattern review flags — a finding is served in the CLEAR "
-                    "until classified; classify as 'default'/'none' to dismiss"}
+    return len(res.get("rows", [])), findings
 
 
 @router.put("/column")

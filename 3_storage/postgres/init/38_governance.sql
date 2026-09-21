@@ -56,7 +56,7 @@ ALTER TABLE ops_governance.dq_flag
     ADD COLUMN IF NOT EXISTS fingerprint text;
 
 COMMENT ON COLUMN ops_governance.dq_flag.fingerprint IS
-    $c$Stable detector dedupe hash. Schemes: dbt->("dbt", unique_id); stale->("stale", source); volume->("volume", source, table); mdm->("mdm","backlog"). Unique while status <> 'resolved' - a wontfix flag DELIBERATELY keeps absorbing upserts and never re-surfaces; only resolved may re-open as a new row.$c$;
+    $c$Stable detector dedupe hash. Schemes: dbt->("dbt", unique_id); stale->("stale", source); volume->("volume", source, table); mdm->("mdm","backlog"); classification->("classification","gap"). Unique while status <> 'resolved' - a wontfix flag DELIBERATELY keeps absorbing upserts and never re-surfaces; only resolved may re-open as a new row.$c$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS dq_flag_fingerprint_open_uq
     ON ops_governance.dq_flag (fingerprint)
@@ -67,9 +67,9 @@ COMMENT ON SCHEMA ops_governance IS
 COMMENT ON COLUMN ops_governance.dq_flag.raised_by IS
     $c$'system' | 'detector' (POST /api/dq/detect) | <kc_sub::text> (operator ack path)$c$;
 COMMENT ON COLUMN ops_governance.dq_flag.source IS
-    $c$Gateway SOURCES registry key (DHIS2, EthioEMR, HCMIS, mBrana, eLMIS-hist, MFR, Climate) | 'dbt' | 'mdm' | 'cross'$c$;
+    $c$Gateway SOURCES registry key (DHIS2, EthioEMR, HCMIS, mBrana, eLMIS-hist, MFR, Climate) | 'dbt' | 'mdm' | 'governance' | 'cross'$c$;
 COMMENT ON COLUMN ops_governance.dq_flag.error_class IS
-    $c$'dbt_test' (dbt failures incl. fk_orphan/not_null - finer class in key->>'test_class') | 'stale_ingest' | 'volume_outlier' | 'mdm_backlog' | legacy 'null_in_required'/'outlier'/'fk_orphan'/'timeliness'$c$;
+    $c$'dbt_test' (dbt failures incl. fk_orphan/not_null - finer class in key->>'test_class') | 'stale_ingest' | 'volume_outlier' | 'mdm_backlog' | 'classification_gap' (sensitive-looking mart columns with no classification row - masking is a denylist, so these are served in the clear) | legacy 'null_in_required'/'outlier'/'fk_orphan'/'timeliness'$c$;
 
 -- Governance HISTORY substrate (Abenezer 2026-09-20): incidents are a durable
 -- record, not a queue that forgets. Every status transition is appended to
