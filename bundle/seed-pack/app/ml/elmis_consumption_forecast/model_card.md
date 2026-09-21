@@ -26,9 +26,12 @@ class (scale = the series' mean training demand), clipped at 0.
 Holdout (Aug 2018, 5,967 series): WAPE 0.598 vs naive-last 0.630, trailing-3 0.616 and
 eLMIS AMC 0.627; bias −3.0%; P10–P90 coverage 81.0% (nominal 80%). Tuning WAPE 0.573.
 MASE 2.23 is high because many histories are nearly flat, which makes their
-training-only scale tiny — it is reported, not hidden. The predeclared champion rule
+training-only scale tiny — it is reported, not hidden; pooled RMSSE (23.5) is dominated
+by the same series and is not shown on surfaces. The predeclared champion rule
 passed (`champion_rule_passed = 1`). These are **historical backtest** results; the
-forecast months have no observed accuracy.
+forecast months have no observed accuracy. The same backtest, one row per fold window
+(metrics named `backtest_*`), is written to `ops_ml.model_performance` under the
+registered version and read by `bi_supply.mart_pct_forecast_accuracy`.
 
 **Limits.** 12 months of history: no seasonality is learnable. Only H1 is produced.
 Demand in stockout months is a floor. Comparator parameters are fixed; the fold ledger,
@@ -36,6 +39,8 @@ not per-series fitting, decides which method serves each class.
 
 **Serving.** Batch, flat forecast schema; contract keys in `attrs`
 (`forecast_contract.yaml`); the Gaussian lwr95/upr95 columns are retired (empty).
+`bi_supply.mart_pct_forecast` serves the latest batch run of a version that carries this
+backtest, with the version and MLflow run on every row.
 Registered as a challenger; promotion follows the contract's rule.
 
 **Owner.** PCT (Abenezer).

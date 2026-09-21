@@ -84,6 +84,17 @@ def test_predict_contract_keys_and_flat_schema():
     assert out.method.isin(METHODS).all()
 
 
+def test_performance_rows_one_per_fold_window():
+    m = train(_frame(), {})
+    led = m.evaluation["fold_ledger"]
+    assert len(m.performance_rows) == len(led)
+    for r in m.performance_rows:
+        assert r["window_start"] < r["window_end"] and r["sample_size"] > 0
+        assert all(k.startswith("backtest_") for k in r["metrics"])
+        split = "holdout" if any(k.startswith("backtest_holdout_") for k in r["metrics"]) else "tuning"
+        assert f"backtest_{split}_wape" in r["metrics"]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

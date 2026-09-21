@@ -189,6 +189,7 @@ class ElmisConsumptionForecastModel(mlflow.pyfunc.PythonModel):
         self.quantiles: dict[str, tuple[float, float, float]] = {}
         self.metrics: dict[str, float] = {}
         self.evaluation: dict[str, list] = {}
+        self.performance_rows: list[dict] = []
 
     # ── frame → series matrix on the calendar grid ───────────────────────────
     @staticmethod
@@ -335,6 +336,27 @@ class ElmisConsumptionForecastModel(mlflow.pyfunc.PythonModel):
             ledger.append({"split": split, "as_of_month": as_of, "target_month": g.target_month.iloc[0],
                            "n_points": int(len(g)), "wape_p50": round(wape(g, "p50"), 4),
                            **{f"wape_{mth}": round(wape(g, f"fc_{mth}"), 4) for mth in METHODS}})
+        # Backtest rows for ops_ml.model_performance (runner writes them under the new
+        # version): one per fold window as_of → target, split named in every metric.
+        rows = []
+        for (split, as_of), g in pd.concat([tun, hol]).groupby(["split", "as_of_month"]):
+            a = g.actual.to_numpy(float)
+            pm = point_metrics(a, g.p50.to_numpy(float), g.s_mase.to_numpy(float), g.s_rmsse.to_numpy(float))
+            im = interval_metrics(a, g.p10.to_numpy(float), g.p90.to_numpy(float))
+            met = {f"backtest_{split}_{k}": v for k, v in {**pm, **im}.items() if k not in ("n_points", "volume")}
+            met.update({f"backtest_{split}_wape_{mth}": wape(g, f"fc_{mth}") for mth in METHODS})
+            amc = g[g.amc_origin.notna()]
+            if len(amc):
+                met[f"backtest_{split}_wape_elmis_amc"] = wape(amc, "amc_origin")
+            for cls, gc in g.groupby("demand_class"):
+                met[f"backtest_{split}_wape_class_{cls}"] = wape(gc, "p50")
+            met[f"backtest_{split}_volume"] = pm["volume"]
+            rows.append({"window_start": pd.Period(as_of, freq="M").start_time.date(),
+                         "window_end": pd.Period(g.target_month.iloc[0], freq="M").start_time.date(),
+                         "metrics": {k: float(v) for k, v in met.items() if v is not None and np.isfinite(v)},
+                         "sample_size": int(len(g))})
+        self.performance_rows = rows
+
         self.evaluation = {
             "fold_ledger": ledger, "per_class": per_class,
             "quantiles_scaled": [{"demand_class": c, "q10": round(q[0], 4), "q50": round(q[1], 4), "q90": round(q[2], 4)}

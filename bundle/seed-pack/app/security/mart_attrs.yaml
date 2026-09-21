@@ -369,6 +369,20 @@
   granularity: aggregate
   default_sensitivity: default
   description: "PCT planning parameters (seed) — each marked SOURCED or ASSUMPTION with its source; shown beside every recommendation."
+- schema_name: bi_supply
+  table_name: mart_pct_forecast
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default   # governed by role/subject rules (R-DEC, R-CONS-ANA only); facility identities are institutional
+  description: "PCT demand forecast (Zambia eLMIS, H1) — P10/P50/P90 per facility × tracer product with model version and MLflow run provenance."
+- schema_name: bi_supply
+  table_name: mart_pct_forecast_accuracy
+  subject: PRD
+  data_class: DC.STK
+  granularity: aggregate
+  default_sensitivity: default
+  description: "PCT forecast backtest accuracy (historical, not live) — fold ledger by split, comparator and demand class."
 # ── MDM augmentation (PCT dataflow design): golden records + discovered relationships ──
 - schema_name: bi_mdm
   table_name: mdm_commodity_match_candidates

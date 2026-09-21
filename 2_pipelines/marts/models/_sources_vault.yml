@@ -119,3 +119,16 @@ sources:
         description: "Operator acknowledgements of flags."
       - name: dq_threshold
         description: "Central SLA/band thresholds (seed-reconciled, runtime-editable)."
+
+  # Model predictions + performance, read through the FDW seam in init
+  # 41_ml_read.sql (same seam as the steward decisions and the DQ record).
+  # Written only by the ML runner (ops_ml in nhdw_ops); read-only here.
+  - name: vault_ml
+    schema: nhdw_vault_ml
+    tables:
+      - name: ml_predictions
+        description: "Batch predictions — the shared flat forecast schema; contract keys in attrs."
+      - name: ml_run
+        description: "Runner executions (train / predict-batch) with version and MLflow run id."
+      - name: model_performance
+        description: "Per-window model metrics — backtest_* rows written at training, live rows by the scorer."

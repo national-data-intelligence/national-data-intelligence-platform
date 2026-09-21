@@ -566,3 +566,41 @@ models:
           - dbt_utils.expression_is_true:
               arguments: { expression: "<= replenishment_units_excl_pipeline OR replenishment_units_incl_pipeline IS NULL" }
 
+  - name: mart_pct_forecast
+    description: |
+      PCT demand forecast (H1) per facility × tracer product from the latest contract-conforming run of
+      elmis_consumption_forecast (P10/P50/P90, demand class, method), with provenance (model_version,
+      predict run, MLflow run of the version's training) and geography from mart_pct_facility_geo.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [facility_code, product_code]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "p10 <= p50 AND p50 <= p90 AND p10 >= 0"
+    columns:
+      - name: horizon
+        tests:
+          - accepted_values:
+              arguments: { values: [1] }
+      - name: mlflow_run_id
+        tests: [not_null]
+      - name: demand_class
+        tests:
+          - accepted_values:
+              arguments: { values: ['smooth', 'erratic', 'intermittent', 'lumpy'] }
+  - name: mart_pct_forecast_accuracy
+    description: |
+      Historical BACKTEST accuracy of the model version behind the current forecast (fold ledger written at
+      training into ops_ml.model_performance): split × measure × subject (selected portfolio, each comparator
+      incl. eLMIS AMC, each demand class). Never observed accuracy for the forecast months.
+    columns:
+      - name: split
+        tests:
+          - accepted_values:
+              arguments: { values: ['tuning', 'holdout'] }
+      - name: subject_type
+        tests:
+          - accepted_values:
+              arguments: { values: ['portfolio', 'method', 'demand_class'] }
+

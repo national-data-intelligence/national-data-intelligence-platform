@@ -86,7 +86,7 @@ source:
     config:
       type: DatabaseMetadata
       schemaFilterPattern:
-        includes: ["bi_.*", "nhdw_vault_raw", "nhdw_vault_business", "nhdw_landing"]
+        includes: ["bi_.*", "nhdw_vault_raw", "nhdw_vault_business", "nhdw_landing", "nhdw_vault_governance", "nhdw_vault_ml"]
 """,
     },
     "clickhouse": {
