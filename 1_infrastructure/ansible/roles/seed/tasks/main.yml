@@ -19,14 +19,26 @@
     executable: /bin/bash
   changed_when: false
 
+# The COUNTRY threads through here or nowhere: sources-up.sh consults the
+# profile to decide whether packed dumps may be trusted, and the synthesizers
+# stamp it into their markers. Without this environment block the remote seed
+# always behaved as the default country regardless of what the host's ACTIVE
+# pointer said — the k3d bootstrap gained profile awareness and the ansible
+# path silently did not.
 - name: Bring up the external source replicas (dhis2/openmrs/hcmis/mbrana/mfr/fayda)
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/sources-up.sh up"
   args: { chdir: "{{ nhdw_repo_root }}" }
+  environment:
+    NHDW_PROFILE: "{{ nhdw_profile | default('et-v3') }}"
+    NHDW_PROFILE_DIR: "{{ nhdw_profile_dir | default('/opt/nhdw-profiles') }}"
   changed_when: true
 
 - name: DATA seed — source replicas + the real pipeline (sources -> lake -> CH -> vault -> marts)
   ansible.builtin.command: "bash {{ nhdw_scripts_dir }}/seed-realistic.sh"
   args: { chdir: "{{ nhdw_repo_root }}" }
+  environment:
+    NHDW_PROFILE: "{{ nhdw_profile | default('et-v3') }}"
+    NHDW_PROFILE_DIR: "{{ nhdw_profile_dir | default('/opt/nhdw-profiles') }}"
   changed_when: true
 
 - name: APP/SECURITY seed — ops DB, Keycloak, roles, OPA, program-demo (seed-pack, compat-gated)
