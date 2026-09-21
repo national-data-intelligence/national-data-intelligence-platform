@@ -28,6 +28,12 @@
 - {schema_name: bi_supply, table_name: mart_ct_nodes, column_name: lng,
    sensitivity: restricted, mask_class: generalize, pii: false,
    note: "facility GPS longitude — generalize to region centroid for unprivileged roles"}
+- {schema_name: bi_supply, table_name: mart_pct_facility_geo, column_name: lat,
+   sensitivity: restricted, mask_class: generalize, pii: false,
+   note: "PCT facility GPS latitude (Zambia eLMIS) — classified before data lands, same policy as mart_ct_nodes"}
+- {schema_name: bi_supply, table_name: mart_pct_facility_geo, column_name: lng,
+   sensitivity: restricted, mask_class: generalize, pii: false,
+   note: "PCT facility GPS longitude (Zambia eLMIS) — classified before data lands, same policy as mart_ct_nodes"}
 
 # ── facility capacity: GPS + contact (columns present, data arriving later —
 #    classify BEFORE data lands so nothing is ever served unprotected) ─────────

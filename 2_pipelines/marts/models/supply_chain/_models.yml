@@ -477,3 +477,30 @@ models:
           - dbt_utils.expression_is_true:
               arguments: { expression: "= 90" }
               config: { where: "kpi_code = 'osa_s8'" }
+
+  - name: mart_pct_facility_geo
+    description: |
+      PCT facility geography: every eLMIS facility located and labelled by how the
+      point was obtained (coord_basis: source / repaired_lat_sign / repaired_lng_sign
+      / district_facility_mean / province_facility_mean / none). region_id = profile
+      region code (same geography filter as mart_pct_kpi). lat/lng are classified
+      restricted / generalize.
+    columns:
+      - name: facility_code
+        tests: [not_null, unique]
+      - name: region_id
+        tests: [not_null]
+      - name: coord_basis
+        tests:
+          - not_null
+          - accepted_values:
+              arguments: { values: ['source', 'repaired_lat_sign', 'repaired_lng_sign',
+                                    'district_facility_mean', 'province_facility_mean', 'none'] }
+      - name: lat
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "BETWEEN -18.1 AND -8.2 OR lat IS NULL" }
+      - name: lng
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments: { expression: "BETWEEN 21.9 AND 33.8 OR lng IS NULL" }
