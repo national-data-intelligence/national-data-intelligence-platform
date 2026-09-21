@@ -9,6 +9,7 @@
  * imported. Real data via useArticles (CMS); reads setPage/setArticle from the host.
  */
 import { type Article } from '../../data/articles';
+import { useProfile } from '../../hooks/useProfile';
 import { useArticles } from '../../hooks/useArticles';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
 
@@ -37,6 +38,8 @@ function catTone(category: string): string {
 }
 
 function Newsroom({ host }: { host: PublicHost }) {
+  const { copy } = useProfile();
+  const t = copy.newsroom ?? { title: "What's happening", sub: '' };
   const { setPage, setArticle } = host;
   const open = (a: Article) => { setArticle(a); setPage('article'); };
   const top3 = useArticles().slice(0, 3);
@@ -46,12 +49,12 @@ function Newsroom({ host }: { host: PublicHost }) {
       <div className="ins-hdr ins-hdr--news">
         <p className="ins-eyebrow"><span className="ins-rule"></span> Latest · news &amp; bulletins</p>
         <div className="ins-titlebar">
-          <h2 className="ins-h2">What's happening</h2>
+          <h2 className="ins-h2">{t.title}</h2>
           <button className="btn-seeall" onClick={() => setPage('articles')}>
             See all articles <svg className="ico ico-sm"><use href="#i-arrow-right" /></svg>
           </button>
         </div>
-        <p className="ins-sub">Weekly bulletins from PHEM, official press releases from FMoH, and public-health advisories, most recent first.</p>
+        <p className="ins-sub">{t.sub}</p>
       </div>
       <div className="nw-grid">
         {top3.map((a) => (

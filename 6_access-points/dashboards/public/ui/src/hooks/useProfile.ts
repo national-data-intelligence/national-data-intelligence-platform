@@ -130,6 +130,16 @@ async function load(): Promise<Loaded> {
   } catch {
     /* keep the bundled pair */
   }
+  // The brand accent is a profile fact, and several things downstream read it
+  // from CSS rather than from props — the hero globe picks up --accent to colour
+  // its particles. Setting the variable here means one value in the profile
+  // drives the whole surface, instead of the globe and the chrome drifting.
+  try {
+    if (profile.brand?.accent) {
+      document.documentElement.style.setProperty('--accent', profile.brand.accent);
+    }
+  } catch { /* non-browser context (tests) */ }
+
   const loaded = { profile, copy };
   cache = loaded;
   waiters.forEach(w => w(loaded));

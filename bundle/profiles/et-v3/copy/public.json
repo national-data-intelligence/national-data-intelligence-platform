@@ -149,5 +149,10 @@
         "target": "HSDIP target 95%"
       }
     ]
+  },
+  "newsroom": {
+    "eyebrow": "Latest · News & bulletins",
+    "title": "What's happening",
+    "sub": "Weekly bulletins from PHEM, official press releases from {ministry.abbr}, and public-health advisories, most recent first."
   }
 }
