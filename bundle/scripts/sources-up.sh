@@ -295,6 +295,17 @@ ACTION="${1:-up}"; ONLY="${2:-}"
 case "$ACTION" in
   up)
     echo "== sources-up: bringing up external source replicas =="
+      # A country switch that leaves the previous country's source CONTAINERS
+      # running seeds nothing: their databases already hold that country's data,
+      # marked healthy, so restore.sh skips and the synthesizers never run â the
+      # warehouse comes up holding the OLD country while every k8s tier was
+      # wiped. The k8s PVC wipe (nhdw_fresh_volumes) does not reach host docker.
+      # So a non-default country with no per-source scope wipes the source
+      # stacks first, so they re-init empty and the stamped synthesizers run.
+      if [ "$COUNTRY_FORCES_SYNTH" = "1" ] && [ -z "$ONLY" ] && [ "${NHDW_KEEP_SOURCES:-0}" != "1" ]; then
+        echo "  â¸ profile ${WANT_PROFILE}: resetting source containers so the new country is synthesized"
+        down_all --wipe
+      fi
     if [ -n "$ONLY" ]; then
       case "$ONLY" in
         llm) up_llm ;; climate) up_climate ;; mfr) up_mfr ;; ethioemr) up_ethioemr ;;

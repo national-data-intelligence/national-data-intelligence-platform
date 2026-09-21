@@ -25,6 +25,14 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NS=nhdw
+
+# A per-run private workdir. This script wrote rendered Job manifests to a FIXED
+# a fixed /tmp path, owned by whoever ran it first — so a second user's
+# run (a different CI actor, tonight) hit 'Permission denied' on a path they did
+# not own and could not remove. mktemp gives each run its own directory; the
+# trap removes it however the script exits.
+JOBTMP="$(mktemp -d "${TMPDIR:-/tmp}/nhdw-seed.XXXXXX")"
+trap 'rm -rf "$JOBTMP"' EXIT
 INGEST=1
 FULL_REFRESH=0
 for a in "$@"; do case "$a" in
@@ -45,7 +53,7 @@ PIPELINE=(ch-raw-views processed-zone dbt-staging bridge-sync dbt-vault dbt-mart
 # Orchestration never rewrites manifests (the old sed pass is retired).
 CORRECTED="$(kustomize build --load-restrictor=LoadRestrictionsNone "$REPO/1_infrastructure/k8s/jobs")"
 
-extract_job() { # job-name → writes /tmp/nhdw-job-<name>.yaml
+extract_job() { # job-name → writes $JOBTMP/job-<name>.yaml
   # Jobs come from the k8s/jobs build (dbt + ingestor Jobs, images remapped). The
   # object-store init Job (seaweedfs-init) lives with its stack in base/seaweedfs.yaml
   # (rendered from the chart) — read it from there so it is never duplicated.
@@ -55,7 +63,7 @@ docs=[d for d in yaml.safe_load_all(sys.stdin) if isinstance(d,dict)]
 j=[d for d in docs if d.get('kind')=='Job' and d['metadata']['name']=='$1']
 if not j: sys.exit('  no Job named $1 in dbt-jobs.yaml/ingestor-jobs.yaml/seaweedfs.yaml')
 print(yaml.safe_dump(j[0]))
-" > /tmp/nhdw-job-$1.yaml
+" > "$JOBTMP/job-$1.yaml"
 }
 
 # Wait for a Job to finish — return 0 on Complete, 1 on Failed-out or timeout.
@@ -81,7 +89,7 @@ run_job() {
   echo "▸ [$job]"
   extract_job "$job" || return 1
   kubectl -n "$NS" delete job "$job" --ignore-not-found --wait=true >/dev/null 2>&1
-  kubectl -n "$NS" apply -f /tmp/nhdw-job-$job.yaml >/dev/null || return 1
+  kubectl -n "$NS" apply -f "$JOBTMP/job-$job.yaml" >/dev/null || return 1
   if wait_job "$job" "$timeout"; then
     echo "  ✓ $job complete"
     return 0
@@ -161,7 +169,7 @@ sys.exit(1 if bad else 0)' 2>/dev/null; then
     for job in "${batch[@]}"; do
       extract_job "$job" || { echo "FAILED extracting $job"; exit 1; }
       kubectl -n "$NS" delete job "$job" --ignore-not-found --wait=true >/dev/null 2>&1
-      kubectl -n "$NS" apply -f /tmp/nhdw-job-$job.yaml >/dev/null || { echo "FAILED applying $job"; exit 1; }
+      kubectl -n "$NS" apply -f "$JOBTMP/job-$job.yaml" >/dev/null || { echo "FAILED applying $job"; exit 1; }
     done
     echo "  ▸ batch launched: ${batch[*]}"
     for job in "${batch[@]}"; do
@@ -184,7 +192,7 @@ sys.exit(1 if bad else 0)' 2>/dev/null; then
     ingest_failed=0
     for job in "${retry[@]}"; do
       kubectl -n "$NS" delete job "$job" --ignore-not-found --wait=true >/dev/null 2>&1
-      kubectl -n "$NS" apply -f /tmp/nhdw-job-$job.yaml >/dev/null || { echo "FAILED re-applying $job"; exit 1; }
+      kubectl -n "$NS" apply -f "$JOBTMP/job-$job.yaml" >/dev/null || { echo "FAILED re-applying $job"; exit 1; }
       if wait_job "$job" "$INGEST_WAIT"; then
         echo "  ✓ $job (solo retry)"
       else
