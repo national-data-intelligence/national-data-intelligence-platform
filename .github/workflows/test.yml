@@ -98,3 +98,9 @@ jobs:
           import glob, yaml
           for f in glob.glob('.github/workflows/*.yml'):
               yaml.safe_load(open(f)); print('ok', f)"
+      # The provisioning playbook is the from-bare path; nothing was checking it,
+      # and it had drifted from clean to four findings before anyone looked.
+      - name: ansible-lint the provisioning playbook
+        run: |
+          pip install --quiet ansible-lint
+          cd 1_infrastructure/ansible && ansible-lint .

@@ -91,11 +91,17 @@
 # from-bare provisioning must be able to run against a machine that is not bare.
 - name: Docker apt repository (single owned entry)
   become: true
+  vars:
+    # an apt source must be ONE line, so the parts come out as variables rather
+    # than wrapping the line itself
+    provision_docker_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+    provision_docker_opts: "arch={{ provision_docker_arch }} signed-by=/etc/apt/keyrings/docker.asc"
+    provision_docker_repo: https://download.docker.com/linux/ubuntu
   ansible.builtin.copy:
     dest: /etc/apt/sources.list.d/docker.list
     mode: "0644"
     content: |
-      deb [arch={{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+      deb [{{ provision_docker_opts }}] {{ provision_docker_repo }} {{ ansible_distribution_release }} stable
 
 - name: Install Docker engine + compose plugin
   become: true
@@ -218,14 +224,18 @@
 - name: Check whether the bundle carries its own helm
   ansible.builtin.stat:
     path: "{{ nhdw_repo_root }}/bundle/bin/helm"
-  register: nhdw_helm_bundled
+  register: provision_helm_bundled
   when: inventory_hostname in groups['control_plane']
 
-- name: Resolve the helm binary (bundled if shipped, else the system install)
+# noqa: var-naming[no-role-prefix]
+# `nhdw_helm` keeps the nhdw_ prefix on purpose: it is declared in group_vars/all
+# and read by the cni and deploy roles too, so a provision_ prefix would rename a
+# cross-role contract to satisfy a rule about role-local variables.
+- name: Resolve the helm binary (bundled if shipped, else the system install)  # noqa: var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     nhdw_helm: >-
       {{ (nhdw_repo_root ~ '/bundle/bin/helm')
-         if (nhdw_helm_bundled.stat.exists | default(false))
+         if (provision_helm_bundled.stat.exists | default(false))
          else '/usr/local/bin/helm' }}
   when: inventory_hostname in groups['control_plane']
 

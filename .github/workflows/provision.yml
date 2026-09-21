@@ -19,6 +19,10 @@ on:
         description: 'Run the full data + app/security seed after deploy'
         type: boolean
         default: true
+      fresh_volumes:
+        description: 'TRUE COLD BOOT — delete the namespace PVCs first, so postgres re-runs its init SQL. DESTROYS ALL DATA. Requires run_seed.'
+        type: boolean
+        default: false
 
 concurrency:
   # ONE group for every workflow that mutates the cluster. Provisioning and a
@@ -68,6 +72,7 @@ jobs:
         env:
           ANSIBLE_HOST_KEY_CHECKING: 'False'
           RUN_SEED: ${{ github.event.inputs.run_seed }}
+          FRESH_VOLUMES: ${{ github.event.inputs.fresh_volumes }}
           INV_CHOICE: ${{ github.event.inputs.inventory }}
         run: |
           # Map the friendly choice to the actual inventory file (dir is inventory/, and the
@@ -80,4 +85,5 @@ jobs:
           ~/.local/bin/ansible-playbook \
             -i "$INV" "${KEY[@]}" \
             --extra-vars "nhdw_run_seed=${RUN_SEED:-true}" \
+            --extra-vars "nhdw_fresh_volumes=${FRESH_VOLUMES:-false}" \
             site.yml

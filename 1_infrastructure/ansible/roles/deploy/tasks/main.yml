@@ -4,6 +4,42 @@
 # ready and run the known cold-boot init reconciles. Mirrors bundle/scripts/bootstrap.sh steps 4-5.
 # Seeding + the pipeline live in the seed role.
 
+# ── TRUE cold boot (opt-in, DESTRUCTIVE) ─────────────────────────────────────
+# Re-provisioning an existing host keeps its PersistentVolumeClaims, so the
+# databases survive and postgres' /docker-entrypoint-initdb.d never runs — init
+# SQL executes on a FRESH volume only. That is a real blind spot: a broken init
+# file can sit unexecuted for weeks while every provision reports green. One
+# did (see the 2026-09-21 entry in docs/k8s-deployment-changelog.md): a
+# truncated statement that would have aborted postgres startup on any fresh
+# volume, invisible to eleven days of deploys. Setting nhdw_fresh_volumes=true
+# removes the namespace's PVCs so the next bring-up initialises from zero and
+# actually exercises that path.
+#
+# This destroys all persisted data, so it is off by default, and it refuses to
+# run without seeding rather than leaving an empty warehouse behind.
+- name: Refuse a fresh-volume boot without seeding (it would leave an empty warehouse)
+  ansible.builtin.fail:
+    msg: >-
+      nhdw_fresh_volumes=true removes every PVC in {{ nhdw_namespace }}, so the
+      run must also seed. Re-run with run_seed=true.
+  when:
+    - nhdw_fresh_volumes | default(false) | bool
+    - not (nhdw_run_seed | default(true) | bool)
+
+- name: Scale stateful workloads to zero before releasing their volumes
+  ansible.builtin.command: >-
+    kubectl -n {{ nhdw_namespace }} scale statefulset,deployment --all --replicas=0
+  when: nhdw_fresh_volumes | default(false) | bool
+  changed_when: true
+  failed_when: false          # a genuinely bare host has nothing deployed yet
+
+- name: Release every PersistentVolumeClaim in the namespace (DESTRUCTIVE — fresh cold boot)
+  ansible.builtin.command: >-
+    kubectl -n {{ nhdw_namespace }} delete pvc --all --wait=true --timeout=180s
+  when: nhdw_fresh_volumes | default(false) | bool
+  changed_when: true
+  failed_when: false
+
 # The namespace is a deploy-role dependency (like the configMaps/secrets), NOT a chart resource —
 # so Helm never contends with `kubectl` over its ownership. Create it before anything lands in it.
 - name: Ensure the target namespace exists
@@ -61,7 +97,9 @@
     # commands ("-n: command not found").
     cmd: |
       set -o pipefail
-      {{ nhdw_helm }} template {{ nhdw_release | default('nhdw') }} {{ nhdw_chart_dir }} -n {{ nhdw_namespace }} -f {{ nhdw_values_file }} --set hostBase={{ nhdw_host_base }} \
+      {{ nhdw_helm }} template {{ nhdw_release | default('nhdw') }} {{ nhdw_chart_dir }} \
+          -n {{ nhdw_namespace }} -f {{ nhdw_values_file }} \
+          --set hostBase={{ nhdw_host_base }} \
         | python3 -c 'import sys,yaml; [print(d["metadata"]["name"]) for d in yaml.safe_load_all(sys.stdin) if d and d.get("kind")=="Job"]' \
         | xargs -r -n1 kubectl -n {{ nhdw_namespace }} delete job --ignore-not-found
     executable: /bin/bash
