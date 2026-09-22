@@ -85,19 +85,28 @@ while true; do
     if [ "$ok" = 1 ]; then
       # the cast in Keycloak follows: same configmap + job re-run the redeploy
       # path uses, with the resolver picking the profile's users file
+      # seed-app-security (above) has just rebuilt the security-seed-files
+      # configmap, which globs every users*.yaml — so the resolved cast file is
+      # already mounted at /seeds/security. Re-run the keycloak-seed job with its
+      # NHDW_USERS_YAML repointed at that file. (A separate keycloak-users-seed
+      # configmap is NOT mounted by the job and was silently ignored — that left
+      # the cast on users.yaml regardless of profile.)
       run_stage "$id" "$profile" "$sf" keycloak-cast \
         bash -c 'USERS_SEED=$(bash bundle/scripts/resolve-users-seed.sh) && \
-          kubectl -n '"$NS"' create configmap keycloak-users-seed \
-            --from-file="users.yaml=bundle/seed-pack/app/security/$USERS_SEED" \
-            --dry-run=client -o yaml | kubectl -n '"$NS"' apply -f - && \
           kubectl -n '"$NS"' get job keycloak-seed -o json > /tmp/kc-live.json && \
           kubectl -n '"$NS"' delete job keycloak-seed --ignore-not-found --wait=true && \
-          python3 - /tmp/kc-live.json <<PYX | kubectl -n '"$NS"' apply -f -
+          python3 - /tmp/kc-live.json "$USERS_SEED" <<PYX | kubectl -n '"$NS"' apply -f -
 import json,sys
-j=json.load(open(sys.argv[1]))
+j=json.load(open(sys.argv[1])); seed=sys.argv[2]
 for k in ("status",): j.pop(k,None)
 m=j["metadata"]; [m.pop(k,None) for k in ("uid","resourceVersion","creationTimestamp","managedFields")]
 j["spec"].pop("selector",None); j["spec"]["template"]["metadata"].pop("labels",None)
+c=j["spec"]["template"]["spec"]["containers"][0]
+env=c.setdefault("env",[])
+for e in env:
+    if e.get("name")=="NHDW_USERS_YAML": e["value"]="/seeds/security/"+seed; e.pop("valueFrom",None); break
+else:
+    env.append({"name":"NHDW_USERS_YAML","value":"/seeds/security/"+seed})
 print(json.dumps(j))
 PYX
           kubectl -n '"$NS"' wait --for=condition=complete job/keycloak-seed --timeout=420s' || ok=0

@@ -41,6 +41,7 @@ has bundle/scripts/sources-up.sh "hcmis/mbrana have no" "Ethiopian-only supply s
 has bundle/scripts/sources-up.sh "synthesizing Zambian supply history" "eLMIS synthesizes when the dump is absent (no lost-artifact hard stop)"
 has bundle/scripts/sources-up.sh "ensure_elmis_reader" "eLMIS reader-provisioning is decoupled from the data restore and run every up"
 has 0_external/sources/OpenLMIS/scripts/synthesize.sh "reference, history, mutation" "eLMIS synthesizer wrapper is committed"
+has bundle/scripts/profile-swap-worker.sh "NHDW_USERS_YAML.*/seeds/security/.*seed" "profile swap repoints the keycloak cast at the resolved users file (no orphaned configmap)"
 
 echo "── dhis.conf ships (was gitignored → docker made a directory)"
 git -C "$R" ls-files --error-unmatch 0_external/sources/DHIS2/config/dhis.conf >/dev/null 2>&1 \
