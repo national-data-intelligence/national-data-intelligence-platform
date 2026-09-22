@@ -13,6 +13,22 @@ disable:
   # rather than inapplicable, and page-tab elision already drops a page with no
   # visible sections.
   page:
+    - id: internal-bi/overview
+      why: >-
+        The Overview is Ethiopia's executive summary — DHIS2/HMIS coverage
+        benchmarks, woreda action-lists, a disease snapshot and source-pulse over
+        the Ethiopian source systems. None has a Zambian counterpart in this
+        deployment. zm-v1 lands on the Control Tower, the eLMIS supply view built
+        on the country's real data.
+    - id: internal-bi/disease
+      why: >-
+        Disease surveillance is DHIS2 / IDSR — Ethiopian notifiable-disease data.
+        The eLMIS archive is a supply archive and carries no disease surveillance,
+        so there is neither the source nor the grain for a Zambian version here.
+    - id: internal-bi/service
+      why: >-
+        Service performance reads EthioEMR (an Ethiopian EMR) clinical encounters.
+        There is no Zambian EMR in this deployment.
     - id: internal-bi/resource
       why: >-
         The Resource page is Ethiopia's EPSS supply chain, and every section of
