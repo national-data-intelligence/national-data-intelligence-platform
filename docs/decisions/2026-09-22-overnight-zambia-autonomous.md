@@ -142,3 +142,59 @@ deleting → recreated it fresh (512Mi RWO local-path). Re-running ONLY the dbt
 stages via --skip-ingest (the lake already holds all four sources — no need to
 re-pull dhis2's 49-min extract). DURABLE follow-up noted: teardown should clear
 PVC finalizers so a redeploy never leaves a Terminating PVC.
+
+### F2 — cast mismatch is NON-breaking (authz resolves by sub, not username)
+After F1 seeded the Zambian ops-DB cast, Keycloak still carried the Ethiopian
+usernames. Investigation: the gateway resolves identity/roles by JWT `sub`
+(auth.py:288/305/372, join `ops_identity."user" u ON u.kc_sub=...`), and the
+`kc_sub` UUIDs are IDENTICAL across users.yaml/users.zm.yaml by design. So each
+Keycloak account already resolves to the correct Zambian roles/scopes; only the
+literal login *username* still reads Ethiopian (solomon.m, abebe.bekele, ...).
+Generic accounts (superadmin, analyst.ana, sci.demo, demo.steward, dec.nat)
+exist in BOTH realms → logins work today. Decision: the fully-correct fix is a
+surgical username rename by user-id (=sub) — no password/client/redirect touch.
+Prepared it (12 renames), but mutating the live demo host is gated behind
+approval this session, so left for an approved step. It is COSMETIC (the app
+already shows Zambian identities from the ops DB); the reproducible path is the
+seed file (users.zm.yaml, already in place for cold-boot).
+
+### F3 — one-click profile switch VERIFIED intact (both directions)
+ACTIVE=zm-v1; /opt/nhdw-profiles/{et-v3,zm-v1,_shared} all present. Deployed
+zm-v1/catalog.yaml matches the repo (disables internal-bi overview/disease/
+service/resource + pub-insights/pub-region/pub-supply, lands on Control Tower);
+et-v3/catalog.yaml disables pub-zm-{supply,kpi,province}. Gateway reads the
+active profile's catalog.yaml live (routes/profile.py::catalog_disabled); public
+dashboard fetches /api/proxy/profile/catalog and PageRenderer filters. Mechanism
+is sound in both directions — the switch will reflect. (Live browser click-through
+not run from this session; verified via config + DB state.)
+
+### F4 — ML + MDM: schema/code INTACT, derived data wiped, reseed needs owner
+The destructive fresh-volume redeploy wiped all derived ML/MDM data; schemas,
+manifests, DAGs, gateway routes and widgets are all intact.
+- ops_ml (nhdw_ops) tables exist but EMPTY: ml_predictions=0, model_performance=0,
+  model_drift=0; MLflow=1 default experiment. mart_pct_forecast/_accuracy=0.
+- Abenezer's elmis_consumption_forecast IS wired: train→ops_ml.ml_predictions→FDW
+  nhdw_vault_ml→dbt vault_ml→mart_pct_forecast → feeds the Supply Control Tower
+  PCT page INDIRECTLY (routes/ct.py forecast snapshot + mart_ct_movements/ct-*);
+  no dedicated forecast widget/fetcher; mart_pct_forecast_accuracy is an orphan.
+- Disease models (ears/outbreak/seasonal/ewars_lite) read ops_ml.ml_predictions
+  DIRECTLY via Trino → dz-kpi-strip/dz-signal-chart/dz-region-map/dz-woreda-table
+  (Ethiopian disease page, hidden for zm). Disease source data IS present
+  (bi_idsr.mart_ml_disease_input=23320, Ethiopian woreda-keyed) → models can train.
+- PCT training input mart_pct_demand_month=6.5M rows (elmis can train);
+  mart_resource_allocation=0 (HCMIS/ET → stockout_forecast trains empty, fine).
+- MDM steward flow fully intact end-to-end (routes/mdm.py queue/decide/decisions/
+  revert/releases; adm-mdm-review widget). Queue EMPTY: mdm-matcher Job completed
+  14h ago in 9s but produced 0 candidates — CORRECT for Zambia (single source =
+  eLMIS → no cross-source same-entity duplicates to reconcile).
+- Reseed blocked by: (a) it runs remote seed Jobs on the live host (seed-ml.sh),
+  gated behind approval this session; (b) palladium2 checkout
+  /home/biniyam/ethio-nhdw-demo is STALE — missing the
+  elmis_consumption_forecast package (has only the 5 disease/supply models), so a
+  reseed from it would omit the PCT forecast; (c) overnight rule = never push, so
+  the CI/CD reseed path is off-limits without owner go-ahead. → surfaced to owner.
+
+### F5 — durable fix: PCT forecast now gets a workshop project (committed)
+seed-model-projects.sh seeded 5 platform models and omitted
+elmis_consumption_forecast (why the PCT model had an MLflow entry but no workshop
+project). Added it (6 models now). Commit b6e7925 on develop (local; not pushed).
