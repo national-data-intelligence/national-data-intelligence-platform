@@ -1,6 +1,20 @@
 {
   "credentials": [
     {
+      "username": "admin",
+      "password": "Admin@2026",
+      "realm": "both",
+      "role_label": "R-SUPER",
+      "full_name": "NHDW Admin",
+      "description": "Simple demo root login. R-SUPER in both realms; wildcard access, everything visible everywhere. Same credentials on every dashboard and stable across a profile switch.",
+      "sign_in_at": [
+        "https://admin.127.0.0.1.nip.io/ (admin)",
+        "https://internal-bi.127.0.0.1.nip.io/ (BI)",
+        "https://workshop.127.0.0.1.nip.io/ (workshop)",
+        "https://public.127.0.0.1.nip.io/ (public)"
+      ]
+    },
+    {
       "username": "root",
       "password": "NhdwDemo2026.OK",
       "realm": "privileged-ops",
