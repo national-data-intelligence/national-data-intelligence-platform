@@ -166,8 +166,8 @@ def main() -> int:
         return _seq["n"]
 
     # ── geographic_level ─────────────────────────────────────────────────
-    LEVELS = [("NATIONAL", "National", 1), ("PROVINCE", "Province", 2),
-              ("DISTRICT", "District", 3), ("FACILITY", "Facility", 4)]
+    LEVELS = [("National", "National", 1), ("Province", "Province", 2),
+              ("District", "District", 3), ("Facility", "Facility", 4)]
     counts["reference.geographic_level"] = em.copy(
         "reference.geographic_level", ["code", "source_id", "name", "level_number"],
         [{"code": c, "source_id": sid(), "name": n, "level_number": lv} for c, n, lv in LEVELS])
@@ -183,14 +183,14 @@ def main() -> int:
     zones = []
     for code, name in sorted(regions.items()):
         zones.append({"code": f"P{code}", "source_id": sid(), "name": name,
-                      "geographic_level_code": "PROVINCE", "parent_zone_code": None,
+                      "geographic_level_code": "Province", "parent_zone_code": None,
                       "catchment_population": None, "latitude": None, "longitude": None})
     districts = {}
     for f in facilities:
         dc = f["district_code"]
         if dc not in districts:
             districts[dc] = {"code": dc, "source_id": sid(), "name": f.get("district_name", dc),
-                             "geographic_level_code": "DISTRICT",
+                             "geographic_level_code": "District",
                              "parent_zone_code": f"P{f['region_id']}",
                              "catchment_population": None,
                              "latitude": round(f["lat"], 6) if f.get("lat") is not None else None,
@@ -203,7 +203,7 @@ def main() -> int:
     # ── facility_type (the distinct registry tiers) ──────────────────────
     tier_codes = sorted({f["facility_type_code"] for f in facilities})
     ftype = [{"code": c, "source_id": sid(), "name": c,
-              "geographic_level_code": "FACILITY",
+              "geographic_level_code": "Facility",
               "nominal_max_months": NOMINAL_MAX_MONTHS, "nominal_eop": NOMINAL_EOP,
               "active": True} for c in tier_codes]
     counts["reference.facility_type"] = em.copy(
