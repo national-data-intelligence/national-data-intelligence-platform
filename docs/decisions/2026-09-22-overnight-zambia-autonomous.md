@@ -119,3 +119,14 @@ coherence polish, not a data-migration blocker. Data verification uses an existi
 user (analyst.ana) so it is not gated on F1.
 Durable manifest fix (fresh-deploy-into-zm seeds zm cast directly) DEFERRED — the
 swap path already provides the zm cast; not worth OIDC-manifest risk tonight.
+
+### C9 — dhis2-dvs needs a bigger ingest budget (701K values @ 240/s ≈ 49 min)
+The DHIS2 source holds 701,338 data values and the ingestor extracts at a steady
+~240/s (API-paced), so a from-scratch pull takes ~49 min — but INGEST_WAIT is 25
+min, so dhis2-dvs times out and the solo-retry restarts from zero → the run
+aborts on dhis2. My earlier --full-refresh forced the full re-extract. Fix:
+relaunch WITHOUT --full-refresh (the lake keeps the complete elmis/ethioemr/mfr
+data; the replace-disposition ingestors overwrite cleanly) and INGEST_WAIT=3600
+so dhis2 fits with margin. eLMIS re-ingests in ~100s, so dhis2 is the only long
+pole. Reason: dhis2 (Ethiopian IDSR) still feeds disease/overview content, so
+completing it is better than skipping; the flagship elmis→PCT data is unaffected.
