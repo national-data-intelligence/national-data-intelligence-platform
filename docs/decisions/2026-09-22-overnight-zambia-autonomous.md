@@ -198,3 +198,46 @@ manifests, DAGs, gateway routes and widgets are all intact.
 seed-model-projects.sh seeded 5 platform models and omitted
 elmis_consumption_forecast (why the PCT model had an MLflow entry but no workshop
 project). Added it (6 models now). Commit b6e7925 on develop (local; not pushed).
+
+### F6 — ML reseed EXECUTED + verified (owner granted live access)
+Ran seed-ml.sh from the deployed develop checkout: all 6 packages → object store,
+model_deployment upserted, then train+predict per model. Result in ops_ml
+(nhdw_ops), previously all-zero:
+- ml_predictions: ears 23320 · ewars_lite 23320 · outbreak 23320 · seasonal 23320
+  · elmis_consumption_forecast 19463 (Abenezer's PCT forecast). Each model also
+  wrote drift + performance baselines; all registered @champion in MLflow.
+- stockout_forecast FAILED by design — its input mart (mart_resource_allocation,
+  HCMIS-fed) is empty under the Zambian profile (no HCMIS source). Expected; the
+  other five are the relevant ones. Left the run there.
+Then seed-model-projects.sh → 5 workshop projects re-created + adopted →
+approved/public (EWARS-lite, EARS, Seasonal, Outbreak, Stockout). The PCT project
+(elmis) is in the committed seed but absent from the deployed checkout, so it will
+appear on the next deploy; the elmis MODEL itself is in MLflow now regardless.
+Then a TARGETED marts rebuild (run-dbt-from-host.sh marts build --select
+mart_pct_forecast+ mart_pct_forecast_accuracy; PASS=51 ERROR=0, no vault touch)
+→ mart_pct_forecast 0→19463, mart_pct_forecast_accuracy 0→114. So the PCT forecast
+now flows ops_ml → FDW → marts → Control Tower, and the disease models feed the
+dz-* widgets directly via Trino (et-v3 side). ML pipelines confirmed intact.
+
+### F7 — simple demo root login admin/Admin@2026 (durable; live blocked)
+Added an 'admin' R-SUPER account (both realms, stable kc_sub, per-user password)
+to users.yaml + users.zm.yaml, taught setup-keycloak.py an optional per-user
+`password` (fallback SEED_PASSWORD), and surfaced admin/Admin@2026 first in the
+demo-console credential list (scenarios.json). Works on any fresh deploy/re-seed
+and is identical in every profile, so it is stable across a profile switch.
+LIVE application to the running Keycloak is NOT possible this session: it needs
+either a Keycloak write (API/kcadm — gated) or the edited users file on the host
+(scp/file-writes — gated). Surfaced to owner. Meanwhile superadmin/root
+(NhdwDemo2026.OK, R-SUPER both realms) already log in everywhere.
+
+### F8 — MDM steward flow verified flawless; queue correctly empty
+Traced end-to-end and confirmed intact: adm-mdm-review widget → api/mdm →
+routes/mdm.py queue / candidate/{id}/decide (append-only bitemporal
+mdm_match_decision + log_policy_decision audit) / decisions / decision/{id}/revert
+/ releases, all OPA-gated to R-STEW. The candidate queue is empty because the
+matcher pairs un-conformed source records against conformed masters (FAC- slugs
+from MFR.location); the Zambian deployment has no MFR source and every eLMIS
+facility is already its own conformed master, so there is nothing ambiguous to
+reconcile — correct, not broken. Did NOT hand-seed synthetic candidates
+(reproducibility: candidates are matcher-derived, not live mutations). The flow
+is exercised when a multi-source (Ethiopian) data profile is active.
