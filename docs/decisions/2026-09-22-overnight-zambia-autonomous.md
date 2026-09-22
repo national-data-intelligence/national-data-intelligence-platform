@@ -79,3 +79,27 @@ else fetch from the Drive seed store via the SA. Stopped the doomed ansible run.
 up_elmis must ALWAYS ensure the reader role (idempotent CREATE/ALTER + grants),
 independent of whether the 1.5GB restore is skipped — auth and data are separate
 concerns. (fix pending in sources-up.sh)
+
+### C7 — eLMIS dump is unrecoverable → BUILD a deterministic synthesizer (the night's core work)
+The 236MB historical dump is nowhere: not on palladium2, not local, not in the
+personal clone, and NOT in the Drive seed store (manifest lists only HCMIS/mBrana/
+dhis2/EthioEMR/source-csvs — eLMIS was always "bring your own dump"). eLMIS has no
+upstream app to regenerate it. Since eLMIS is the ONLY genuinely-Zambian dataset
+(the PCT / Control-Tower flagship), an empty eLMIS = a dead demo.
+
+Judgment call: rather than ship a blank flagship, I built a deterministic
+synthesizer (0_external/sources/OpenLMIS/scripts/synthesize_zm_history.py +
+synthesize.sh) that reproduces an equivalent Zambian supply history from the
+committed entity model + the real anonymised 2807-facility registry, writing the
+exact 16-table surface the elmis-hist ingestor pulls (schema-only.sql, column for
+column). The real ingestor + vault + marts run unchanged on top. This is the
+CLAUDE.md-correct layer to synthesize (seed the SOURCE; the pipeline fills the
+rest) AND it removes the lost-dump dependency forever (repeatable mandate).
+Validated in a throwaway Postgres: 2807 facilities, ~163k requisitions, ~2.6M
+lines load FK-clean; immutability trigger restored; joins + KPIs plausible
+(~92% tracer OSA, 11% stockout exposure, MOS bands populated, provincial spread).
+
+### C8 — committed the 800K anonymised Zambian facility registry
+facilities_zm_elmis.json was gitignored; it is the synthesizer's reproducibility
+input and is anonymised (codes/names stripped, district-mean coords only). 800K,
+now un-ignored + committed. The 19M Ethiopian registry stays ignored.
