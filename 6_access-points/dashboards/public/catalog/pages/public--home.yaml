@@ -26,3 +26,11 @@ widgets:
   col_span: 6
   row_span: 1
   ordering: 4
+- id: pub-zm-kpi
+  col_span: 6
+  row_span: 1
+  ordering: 5
+- id: pub-zm-province
+  col_span: 6
+  row_span: 1
+  ordering: 6
