@@ -14,6 +14,10 @@ widgets:
   col_span: 6
   row_span: 1
   ordering: 2
+- id: pub-zm-supply
+  col_span: 6
+  row_span: 1
+  ordering: 2
 - id: pub-region
   col_span: 6
   row_span: 1

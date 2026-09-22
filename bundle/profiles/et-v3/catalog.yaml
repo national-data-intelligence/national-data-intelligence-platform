@@ -10,6 +10,10 @@
 # learns why a widget is missing instead of assuming it broke.
 disable:
   widget:
+    - id: pub-zm-supply
+      why: >-
+        Zambia eLMIS supply insights. Ethiopia's public supply/coverage story is
+        pub-insights + pub-region on DHIS2; the Zambian sibling stays off here.
     - id: sv-rr-timeliness
       why: >-
         Measured reporting timeliness needs a per-report arrival time at the

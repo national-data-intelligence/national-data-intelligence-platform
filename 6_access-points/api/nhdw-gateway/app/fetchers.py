@@ -873,6 +873,45 @@ FETCHERS: dict[str, Fetcher] = {
     #  retired those fine-grained ids into the single adm-dq organism widget.)
 }
 
+# ── Zambia eLMIS supply — public widgets (pub-zm-supply, zm-v1). NEW ids only:
+#    et-v3 disables these and zm-v1 disables the DHIS2-coverage widgets, so the
+#    country switch is pure catalog config and no existing fetcher is touched.
+#    Same OPA attrs as pub-region so R-PUB-ANON reads them. All from bi_supply
+#    (the real Zambian eLMIS marts), same row shape as pub-insights/pub-region.
+FETCHERS["pub-zm-kpi"] = Fetcher(
+    schema="bi_supply", table="mart_pct_kpi",
+    subject="PRG", data_class="DC.PRF", granularity="aggregate",
+    geo_col="region_id", prog_col="programme_id",
+    sql=lambda t, w: (
+        f"WITH k AS (SELECT kpi_code, kpi_name, month_id, "
+        f"sum(numerator) AS num, sum(denominator) AS den FROM {t}{w} "
+        f"{'AND' if w else 'WHERE'} kpi_code IN "
+        f"('osa_s8','order_fill','stockout_exposure','stockout_days_rate') "
+        f"GROUP BY 1,2,3) "
+        f"SELECT kpi_code AS indicator_id, kpi_name AS kpi_label, "
+        f"CASE kpi_code WHEN 'osa_s8' THEN 1 WHEN 'order_fill' THEN 2 "
+        f"WHEN 'stockout_exposure' THEN 3 ELSE 4 END AS kpi_order, "
+        f"'coverage' AS kpi_kind, month_id, "
+        f"round(100.0*num/NULLIF(den,0),1) AS rate_pct, "
+        f"CASE kpi_code WHEN 'osa_s8' THEN '90' WHEN 'order_fill' THEN '90' "
+        f"ELSE '' END AS hsdip_target, 'platform KPI' AS target_source, "
+        f"CASE WHEN kpi_code LIKE 'stockout%' THEN 'lower_better' "
+        f"ELSE 'higher_better' END AS target_direction "
+        f"FROM k ORDER BY month_id, kpi_order"))
+
+FETCHERS["pub-zm-province"] = Fetcher(
+    schema="bi_supply", table="mart_pct_kpi",
+    subject="PRG", data_class="DC.PRF", granularity="aggregate",
+    geo_col="region_id", prog_col="programme_id",
+    sql=lambda t, w: (
+        f"SELECT region_name, kpi_name AS kpi_label, "
+        f"round(100.0*sum(numerator)/NULLIF(sum(denominator),0),1) AS rate_pct "
+        f"FROM {t}{w} "
+        f"{'AND' if w else 'WHERE'} kpi_code = 'osa_s8' AND region_name IS NOT NULL "
+        f"AND month_id = (SELECT max(month_id) FROM {t}) "
+        f"GROUP BY region_name, kpi_name ORDER BY region_name"))
+
+
 # ── Health workforce (MFR facility staffing → region density) ──────────────
 FETCHERS["rm-workforce"] = Fetcher(
     schema="bi_facility", table="mart_health_workforce",
