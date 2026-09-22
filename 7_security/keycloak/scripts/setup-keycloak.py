@@ -407,7 +407,7 @@ def import_users_for_realm(token: str, realm: str, users: list[dict]) -> None:
         kc_sub, username = u["kc_sub"], u["username"]
         code, payload = api(token, "PUT",
                             f"/realms/{realm}/users/{kc_sub}/reset-password",
-                            {"type": "password", "value": SEED_PASSWORD,
+                            {"type": "password", "value": u.get("password") or SEED_PASSWORD,
                              "temporary": False})
         if code not in (204, 200):
             print(f"      ✗ password {realm}/{username}: {code} {payload}")

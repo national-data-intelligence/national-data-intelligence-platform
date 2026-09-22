@@ -166,6 +166,28 @@
   role_label: R-SUPER
   roles:      [R-SUPER]
 
+# ── Simple demo root login (admin / Admin@2026) ───────────────────────────
+#    R-SUPER in BOTH realms → every access point. Carries its own `password`
+#    (per-user override; other users fall back to SEED_PASSWORD). This same
+#    account (same kc_sub, same password) is defined in EVERY profile's user
+#    file (users.zm.yaml too), so the login is stable across a profile switch.
+- kc_sub:     aaaaaaaa-0000-0000-0000-000000000001
+  username:   admin
+  email:      admin@nhdw.local
+  full_name:  NHDW Admin
+  realm:      moh-staff
+  role_label: R-SUPER
+  roles:      [R-SUPER]
+  password:   Admin@2026
+- kc_sub:     aaaaaaaa-0000-0000-0000-000000000002
+  username:   admin
+  email:      admin@nhdw.local
+  full_name:  NHDW Admin
+  realm:      privileged-ops
+  role_label: R-SUPER
+  roles:      [R-SUPER]
+  password:   Admin@2026
+
 # ── Demo personas referenced by bundle/seeds/demo/scenarios.json.
 # Each persona is a distinct Keycloak user with its own kc_sub.
 - kc_sub:     11111111-aaaa-bbbb-cccc-dddddddddddd
