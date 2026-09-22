@@ -103,3 +103,19 @@ lines load FK-clean; immutability trigger restored; joins + KPIs plausible
 facilities_zm_elmis.json was gitignored; it is the synthesizer's reproducibility
 input and is anonymised (codes/names stripped, district-mean coords only). 800K,
 now un-ignored + committed. The 19M Ethiopian registry stays ignored.
+
+### F1 status — Keycloak cast is still Ethiopian; mechanism works, just not run
+Confirmed the live Keycloak realm carries the ETHIOPIAN cast (abebe.bekele,
+kebede, tigist…), not the Zambian one (chanda.m/mutale.p). Root cause: the
+profile swap that set ACTIVE=zm-v1 applied the presentation layer but the
+keycloak-cast stage never executed for this realm. NOT a resolver bug —
+resolve-users-seed.sh correctly returns users.zm.yaml for zm-v1 (verified), and
+the deployed keycloak-seed job already carries the correct 20.84.70.78 base URLs.
+So re-seeding the zm cast is low-risk (reuses proven base). Plan: after DATA is
+verified, run the keycloak-cast re-seed (seed-app-security zm + keycloak users
+from users.zm.yaml). NOTE: Ethiopian-cast users can already log in and view the
+Zambian DATA (data is profile-driven; the cast is only names/roles) — so this is
+coherence polish, not a data-migration blocker. Data verification uses an existing
+user (analyst.ana) so it is not gated on F1.
+Durable manifest fix (fresh-deploy-into-zm seeds zm cast directly) DEFERRED — the
+swap path already provides the zm cast; not worth OIDC-manifest risk tonight.
