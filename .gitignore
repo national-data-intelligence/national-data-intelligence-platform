@@ -148,7 +148,10 @@ _archive/
 _tools/
 2_pipelines/*/target/
 2_pipelines/*/dbt_packages/
-bundle/seeds/entity-model/sample-data/
+bundle/seeds/entity-model/sample-data/*
+# …but the small (800K) anonymised Zambian facility registry IS committed — it is
+# the eLMIS synthesizer's reproducibility input (0_external/.../scripts/synthesize.sh).
+!bundle/seeds/entity-model/sample-data/facilities_zm_elmis.json
 client_secret_*.json
 
 # Local data landmines / raw import artifacts — never commit
