@@ -30,14 +30,14 @@ country:
   # empty element.
 
 ministry:
-  abbr: MoH
-  name: Ministry of Health
-  # logo omitted → the SPA falls back to the bundled mark. A real deployment
-  # ships the ministry's own file here.
+  abbr: Palladium
+  name: Palladium
+  # logo omitted → the SPA falls back to the bundled Palladium wordmark. A real
+  # deployment ships the owning organisation's own file here.
 
 platform:
-  name: National Health Data Warehouse
-  abbr: NHDW
+  name: Data Intelligence Platform
+  abbr: Palladium
 
 geography:
   # Zambia: Province → District → Facility. One level shallower than Ethiopia's

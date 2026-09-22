@@ -68,7 +68,7 @@ export default function Topbar() {
     <header className="bi-topbar">
       <div className="tb-title">
         <div className="breadcrumb">
-          <span>NHDW</span>
+          <span>Palladium</span>
           <span aria-hidden="true" style={{ opacity: 0.55 }}>›</span>
           <span>{title}</span>
         </div>

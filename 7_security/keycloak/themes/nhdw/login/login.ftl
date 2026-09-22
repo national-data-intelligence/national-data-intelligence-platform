@@ -2,7 +2,7 @@
 <@layout.registrationLayout displayMessage=!messagesPerField.existsError('username','password') displayInfo=false; section>
   <#if section = "header">
     <h1>${msg("loginAccountTitle")}</h1>
-    <p class="lead">Sign in with your Ministry of Health account.</p>
+    <p class="lead">Sign in with your Palladium account.</p>
   <#elseif section = "form">
     <#if realm.password>
       <form id="kc-form-login" action="${url.loginAction}" method="post" onsubmit="login.disabled = true; return true;">
@@ -10,7 +10,7 @@
           <label for="username">${msg("usernameOrEmail")}</label>
           <div class="control">
             <input tabindex="1" id="username" name="username" value="${(login.username!'')}" type="text"
-                   autofocus autocomplete="username" placeholder="you@moh.gov.et"
+                   autofocus autocomplete="username" placeholder="you@palladium.io"
                    aria-invalid="<#if messagesPerField.existsError('username','password')>true</#if>"/>
           </div>
         </div>

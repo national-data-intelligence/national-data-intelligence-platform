@@ -43,13 +43,9 @@ body.nhdw-login {
 
 /* ── Brand block above the card — white emblem on the deep-navy ground ── */
 .brand { text-align:center; display:flex; flex-direction:column; align-items:center; gap:.5rem; }
-.brand-logo {
-  width:74px; height:74px; object-fit:contain;
-  filter:brightness(0) invert(1) drop-shadow(0 4px 18px rgba(0,0,0,.55));
-}
-.brand-name {
-  font-family:var(--serif); font-weight:600; font-size:1.78rem; line-height:1;
-  letter-spacing:.03em; color:#fff; text-shadow:0 1px 20px rgba(0,0,0,.55);
+.brand-wordmark {
+  font-family:var(--serif); font-weight:600; font-size:2.4rem; line-height:1;
+  letter-spacing:.02em; color:#fff; text-shadow:0 1px 20px rgba(0,0,0,.55);
 }
 .brand-sub {
   font-size:.7rem; letter-spacing:.24em; text-transform:uppercase;

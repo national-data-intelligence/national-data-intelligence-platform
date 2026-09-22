@@ -177,7 +177,7 @@ export default function ChatbotPanel() {
               </svg>
             </div>
             <div>
-              <div className="ai-h-title">NHDW Assistant</div>
+              <div className="ai-h-title">Palladium Assistant</div>
               <div className="ai-h-sub">
                 {intro?.model || 'local LLM'} · this dashboard
               </div>

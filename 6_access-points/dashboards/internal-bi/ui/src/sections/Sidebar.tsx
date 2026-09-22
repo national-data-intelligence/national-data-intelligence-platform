@@ -24,7 +24,7 @@ export default function Sidebar() {
   // fetches the profile for its reference tables, so this reads the same
   // endpoint rather than adding a second source for the same answer.
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
-  const [platformAbbr, setPlatformAbbr] = useState('NHDW');
+  const [platformAbbr, setPlatformAbbr] = useState('Palladium');
   useEffect(() => {
     let live = true;
     fetch('/gw/profile').then(r => (r.ok ? r.json() : null)).then(p => {
@@ -76,8 +76,8 @@ export default function Sidebar() {
 
       {/* Static product identity only — no fabricated liveness/build claims. */}
       <div className="bi-sidebar-foot">
-        <strong>NHDW v1.0</strong> · PROD<br />
-        <span>National Health Data Warehouse</span>
+        <strong>Palladium v1.0</strong> · PROD<br />
+        <span>Data Intelligence Platform</span>
       </div>
     </aside>
   );

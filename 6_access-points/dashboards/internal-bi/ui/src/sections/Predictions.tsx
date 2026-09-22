@@ -133,7 +133,7 @@ export default function Predictions() {
   return (
     <section>
       <p className="muted" style={{ margin: '0 0 1.4rem' }}>
-        Live output from NHDW's batch ML models: EARS endemic-channel alarms, Farrington-style outbreak detection, seasonal-profile forecasts, an EWARS-style negative-binomial model with climate drivers, and stockout forecasts. All are runner Jobs scheduled by the weekly Airflow DAG; predictions are persisted under <code>ops_ml.ml_predictions</code> (flat forecast schema) and surfaced here. Refreshes every minute.
+        Live output from Palladium's batch ML models: EARS endemic-channel alarms, Farrington-style outbreak detection, seasonal-profile forecasts, an EWARS-style negative-binomial model with climate drivers, and stockout forecasts. All are runner Jobs scheduled by the weekly Airflow DAG; predictions are persisted under <code>ops_ml.ml_predictions</code> (flat forecast schema) and surfaced here. Refreshes every minute.
       </p>
 
       {err && (

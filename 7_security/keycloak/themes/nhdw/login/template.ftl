@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>${msg("loginTitle",(realm.displayName!'NHDW'))}</title>
+  <title>${msg("loginTitle",(realm.displayName!'Palladium'))}</title>
   <#if properties.styles?has_content>
     <#list properties.styles?split(' ') as style>
       <link href="${url.resourcesPath}/${style}" rel="stylesheet"/>
@@ -15,9 +15,8 @@
 <body class="nhdw-login ${bodyClass}">
   <div class="stage">
     <div class="brand">
-      <img class="brand-logo" src="${url.resourcesPath}/img/logo-fmoh.png" alt="Federal Ministry of Health emblem"/>
-      <div class="brand-name">${(realm.displayName!'Ethiopia NHDW')}</div>
-      <div class="brand-sub">National Health Data Warehouse</div>
+      <div class="brand-wordmark" role="img" aria-label="Palladium">Palladium</div>
+      <div class="brand-sub">Data Intelligence Platform</div>
     </div>
 
     <main class="card" role="main">
@@ -50,7 +49,7 @@
       </#if>
     </main>
 
-    <div class="stage-foot">Federal Ministry of Health · Ethiopia</div>
+    <div class="stage-foot">Palladium</div>
   </div>
 </body>
 </html>

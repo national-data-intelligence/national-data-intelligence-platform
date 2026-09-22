@@ -1,6 +1,6 @@
 {
   "realm": "privileged-ops",
-  "displayName": "NHDW \u2014 Privileged Operations",
+  "displayName": "Palladium",
   "enabled": true,
   "registrationAllowed": false,
   "loginWithEmailAllowed": false,

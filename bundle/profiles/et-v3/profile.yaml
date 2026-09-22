@@ -32,15 +32,13 @@ country:
     country_name: ኢትዮጵያ
 
 ministry:
-  abbr: FMoH
-  name: Federal Ministry of Health
-  native_name: የጤና ሚኒስቴር
-  logo: logo-fmoh.png             # resolved against the profile's assets/
+  abbr: Palladium
+  name: Palladium
+  # logo omitted → the SPA falls back to the bundled Palladium wordmark.
 
 platform:
-  name: National Health Data Warehouse
-  abbr: NHDW
-  native_name: የብሔራዊ የጤና መረጃ ማከማቻ
+  name: Data Intelligence Platform
+  abbr: Palladium
 
 # ── Administrative hierarchy ────────────────────────────────────────────────
 # What each level is CALLED here. Ethiopia: region → zone → woreda → kebele.
