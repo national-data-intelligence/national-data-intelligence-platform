@@ -164,13 +164,18 @@ fi
 # ── 1b. public-dashboard articles CMS (ops_governance.public_article) ─────────
 ART_LOADER="$REPO/7_security/scripts/load_public_articles.py"
 ART_DIR="$REPO/bundle/seed-pack/app/articles"
-echo "▸ [public-articles] load_public_articles.py over bundle/seed-pack/app/articles/"
-if [ ! -f "$ART_LOADER" ] || [ ! -f "$ART_DIR/articles.yaml" ]; then
+# Country-specific newsroom: a profile provides its own articles.<key>.yaml
+# (e.g. articles.zm.yaml for Zambia), else the default articles.yaml. Mounted AS
+# articles.yaml so the loader path is unchanged — same switch as the users cast.
+_ap="${NHDW_PROFILE:-et-v3}"; ART_FILE="$ART_DIR/articles.${_ap%%-*}.yaml"
+[ -f "$ART_FILE" ] || ART_FILE="$ART_DIR/articles.yaml"
+echo "▸ [public-articles] load_public_articles.py over $(basename "$ART_FILE") (profile ${_ap})"
+if [ ! -f "$ART_LOADER" ] || [ ! -f "$ART_FILE" ]; then
   echo "  ! articles loader or seed missing — skipping"
 else
   kubectl -n "$NS" create configmap public-articles-files \
     --from-file="$ART_LOADER" \
-    --from-file="$ART_DIR/articles.yaml" \
+    --from-file="articles.yaml=$ART_FILE" \
     --dry-run=client -o yaml | kubectl -n "$NS" apply -f - >/dev/null
   kubectl -n "$NS" delete job public-articles-seed --ignore-not-found --wait=true >/dev/null 2>&1
   cat <<EOF | kubectl -n "$NS" apply -f - >/dev/null
