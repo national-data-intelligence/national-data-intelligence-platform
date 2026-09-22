@@ -8,9 +8,40 @@
  * registry; an unknown id renders a VISIBLE placeholder (never silently drops a
  * section — a missing renderer must be obvious in the page, not a blank gap).
  */
+import { useEffect, useState } from 'react';
 import type { PublicHost } from './types';
 import { PAGES } from './pages';
 import { getWidget, registeredIds } from './registry';
+
+/**
+ * The public page composition (pages.ts) is static, but WHICH of those widgets a
+ * country shows is the same profile decision internal-bi makes: the active
+ * profile's catalog.yaml `disable:` list, served at /api/proxy/profile/catalog.
+ * Fetch it once (module load) so a country-specific widget (pub-zm-supply on
+ * eLMIS) and the one it replaces (pub-insights on DHIS2) can both live in
+ * pages.ts and the profile picks — no widget-side change.
+ */
+let _disabled: Promise<Set<string>> | null = null;
+function fetchDisabled(): Promise<Set<string>> {
+  if (!_disabled) {
+    _disabled = fetch('/api/proxy/profile/catalog')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => new Set<string>(((d?.disable?.widget ?? []) as { id: string }[]).map((w) => w.id)))
+      .catch(() => new Set<string>());
+  }
+  return _disabled;
+}
+fetchDisabled();  // start the fetch before first render to avoid a wrong-country flash
+
+function useDisabled(): { set: Set<string>; ready: boolean } {
+  const [state, setState] = useState<{ set: Set<string>; ready: boolean }>({ set: new Set(), ready: false });
+  useEffect(() => {
+    let on = true;
+    fetchDisabled().then((s) => { if (on) setState({ set: s, ready: true }); });
+    return () => { on = false; };
+  }, []);
+  return state;
+}
 
 /**
  * Render a single widget by id, or a VISIBLE placeholder if the id isn't in the
@@ -46,8 +77,12 @@ export function WidgetSlot({ id, host }: { id: string; host: PublicHost }) {
 
 export default function PageRenderer({ host }: { host: PublicHost }) {
   const spec = PAGES[host.active];
-  const fullBleed = spec?.fullBleed ?? [];
-  const content = spec?.content ?? [];
+  const { set: disabled, ready } = useDisabled();
+  const keep = (id: string) => !disabled.has(id);
+  const fullBleed = (spec?.fullBleed ?? []).filter(keep);
+  // Hold profile-switchable content until the disable list is known, so a
+  // wrong-country widget never flashes before it is filtered out.
+  const content = ready ? (spec?.content ?? []).filter(keep) : [];
 
   return (
     <>

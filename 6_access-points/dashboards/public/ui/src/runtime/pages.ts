@@ -13,8 +13,12 @@
  */
 import type { Page, Modal } from './types';
 
+// pub-insights (DHIS2 coverage) and pub-zm-supply (eLMIS supply) both sit on the
+// home page; the active profile's catalog.yaml `disable:` list decides which one
+// renders (PageRenderer filters by it) — et-v3 disables pub-zm-supply, zm-v1
+// disables pub-insights. Same country-switch mechanism internal-bi uses.
 export const PAGES: Record<Page, { fullBleed?: string[]; content: string[] }> = {
-  home:     { fullBleed: ['pub-hero'], content: ['pub-newsroom', 'pub-insights'] },
+  home:     { fullBleed: ['pub-hero'], content: ['pub-newsroom', 'pub-insights', 'pub-zm-supply'] },
   data:     { content: ['pub-data-catalogue'] },
   articles: { content: ['pub-articles'] },
   article:  { content: ['pub-article-view'] },
