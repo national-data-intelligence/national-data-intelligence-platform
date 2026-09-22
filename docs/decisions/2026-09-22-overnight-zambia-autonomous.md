@@ -63,3 +63,19 @@ SKIP_SRC for a non-default profile to: climate + hcmis + mbrana. Kept: elmis
 ethioemr (works, 98951 obs), mfr (works). This lets the pipeline complete with
 the sources that have data, and the disabled widgets mean nothing shows empty.
 Reason: honest — a source with no data for this country is skipped, not faked.
+
+### C5 — eLMIS reader role missing + dump absent (root cause of the empty warehouse)
+Diagnosed 00:05. The full pipeline never completed on palladium2 — nhdw_vault
+holds only bi_facility (3 tables). Root cause chain: (1) eLMIS source DB is
+EMPTY (only `public` schema) — its 236MB dump is gitignored/excluded and is not
+on the box, in the personal clone, or local; (2) even the reader role `ingestor`
+was never provisioned (up_elmis skips restore.sh when data "exists", coupling
+reader-provisioning to data-restore — a latent bug). Provisioned the reader by
+hand (C6). Now hunting the dump: first the lake (a prior run ingested eLMIS, so
+raw parquet may survive the source wipe → rebuild vault+marts without the dump),
+else fetch from the Drive seed store via the SA. Stopped the doomed ansible run.
+
+### C6 — durable: decouple eLMIS reader-provisioning from data-restore
+up_elmis must ALWAYS ensure the reader role (idempotent CREATE/ALTER + grants),
+independent of whether the 1.5GB restore is skipped — auth and data are separate
+concerns. (fix pending in sources-up.sh)
