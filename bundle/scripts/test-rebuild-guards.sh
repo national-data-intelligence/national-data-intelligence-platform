@@ -11,6 +11,7 @@ P=0; F=0
 ok(){ P=$((P+1)); echo "  ✓ $1"; }
 no(){ F=$((F+1)); echo "  ✗ $1"; }
 has(){ grep -q "$2" "$R/$1" && ok "$3" || no "$3 — missing in $1"; }
+absent(){ grep -q "$2" "$R/$1" && no "$3 — still present in $1" || ok "$3"; }
 
 echo "── boot integrity"
 has 3_storage/postgres/init/99_init_complete.sql "initdb_sentinel" "initdb sentinel exists (catches half-init)"
@@ -42,6 +43,8 @@ has bundle/scripts/sources-up.sh "synthesizing Zambian supply history" "eLMIS sy
 has bundle/scripts/sources-up.sh "ensure_elmis_reader" "eLMIS reader-provisioning is decoupled from the data restore and run every up"
 has 0_external/sources/OpenLMIS/scripts/synthesize.sh "reference, history, mutation" "eLMIS synthesizer wrapper is committed"
 has bundle/scripts/profile-swap-worker.sh "NHDW_USERS_YAML.*/seeds/security/.*seed" "profile swap repoints the keycloak cast at the resolved users file (no orphaned configmap)"
+has bundle/scripts/seed-realistic.sh "was TTL-collected after finishing" "wait_job does not hang on a TTL-collected phantom job"
+absent 1_infrastructure/k8s/base/ingestor-jobs.yaml "ttlSecondsAfterFinished: 1800" "ingestor jobs are not TTL-collected mid-run (a slow sibling can take ~49min)"
 
 echo "── dhis.conf ships (was gitignored → docker made a directory)"
 git -C "$R" ls-files --error-unmatch 0_external/sources/DHIS2/config/dhis.conf >/dev/null 2>&1 \

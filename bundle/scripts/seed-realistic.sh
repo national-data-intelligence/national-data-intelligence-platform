@@ -93,6 +93,11 @@ wait_job() { # job-name timeout-seconds
       *Complete=True*) return 0 ;;
       *Failed=True*)   return 1 ;;
     esac
+    # A just-launched job that is now ABSENT was TTL-collected after finishing while
+    # we waited on a slower sibling (ttlSecondsAfterFinished). Do not poll a phantom
+    # for the whole budget — return non-zero so the solo-retry re-applies it and
+    # confirms it in seconds. (With the 24h ingestor TTL this should never fire.)
+    if ! kubectl -n "$NS" get job "$job" >/dev/null 2>&1; then return 1; fi
     sleep 5; waited=$((waited+5))
   done
   return 1

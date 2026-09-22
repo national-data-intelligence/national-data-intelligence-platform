@@ -16,7 +16,7 @@ kind: Job
 metadata: { name: dhis2-ingest-metadata, namespace: nhdw, labels: { app: dhis2-ingestor, tier: pipeline } }
 spec:
   backoffLimit: 1
-  ttlSecondsAfterFinished: 1800
+  ttlSecondsAfterFinished: 86400
   template:
     metadata: { labels: { app: dhis2-ingestor, tier: pipeline } }
     spec:
@@ -47,7 +47,7 @@ kind: Job
 metadata: { name: dhis2-ingest-dvs, namespace: nhdw, labels: { app: dhis2-ingestor, tier: pipeline } }
 spec:
   backoffLimit: 1
-  ttlSecondsAfterFinished: 1800
+  ttlSecondsAfterFinished: 86400
   template:
     metadata: { labels: { app: dhis2-ingestor, tier: pipeline } }
     spec:
@@ -82,7 +82,7 @@ kind: Job
 metadata: { name: climate-ingest, namespace: nhdw, labels: { app: climate-ingestor, tier: pipeline } }
 spec:
   backoffLimit: 1
-  ttlSecondsAfterFinished: 1800
+  ttlSecondsAfterFinished: 86400
   template:
     metadata: { labels: { app: climate-ingestor, tier: pipeline } }
     spec:
@@ -110,7 +110,7 @@ kind: Job
 metadata: { name: ethioemr-ingest, namespace: nhdw, labels: { app: ethioemr-ingestor, tier: pipeline } }
 spec:
   backoffLimit: 1
-  ttlSecondsAfterFinished: 1800
+  ttlSecondsAfterFinished: 86400
   template:
     metadata: { labels: { app: ethioemr-ingestor, tier: pipeline } }
     spec:
@@ -142,7 +142,7 @@ kind: Job
 metadata: { name: hcmiswdm-ingest, namespace: nhdw, labels: { app: hcmiswdm-ingestor, tier: pipeline } }
 spec:
   backoffLimit: 1
-  ttlSecondsAfterFinished: 1800
+  ttlSecondsAfterFinished: 86400
   template:
     metadata: { labels: { app: hcmiswdm-ingestor, tier: pipeline } }
     spec:
@@ -175,7 +175,7 @@ kind: Job
 metadata: { name: mbrana-ingest, namespace: nhdw, labels: { app: mbrana-ingestor, tier: pipeline } }
 spec:
   backoffLimit: 1
-  ttlSecondsAfterFinished: 1800
+  ttlSecondsAfterFinished: 86400
   template:
     metadata: { labels: { app: mbrana-ingestor, tier: pipeline } }
     spec:
@@ -209,7 +209,7 @@ kind: Job
 metadata: { name: mfr-ingest, namespace: nhdw, labels: { app: mfr-ingestor, tier: pipeline } }
 spec:
   backoffLimit: 1
-  ttlSecondsAfterFinished: 1800
+  ttlSecondsAfterFinished: 86400
   template:
     metadata: { labels: { app: mfr-ingestor, tier: pipeline } }
     spec:
