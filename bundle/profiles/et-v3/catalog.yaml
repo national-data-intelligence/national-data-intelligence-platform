@@ -9,6 +9,16 @@
 # `why` is rendered nowhere. It exists so the next person reading this file
 # learns why a widget is missing instead of assuming it broke.
 disable:
+  # ── PAGES ────────────────────────────────────────────────────────────────
+  page:
+    - id: internal-bi/control-tower
+      why: >-
+        The Control Tower / PCT page reads the Zambian eLMIS supply marts
+        (mart_pct_demand_month -> mart_pct_forecast, incl. the elmis
+        consumption forecast). eLMIS is Zambia's supply system; Ethiopia's
+        supply story is the Resource page on HCMIS. Under et-v3 this page would
+        render Zambian supply data, so it is off here -- symmetric to zm-v1
+        disabling the Ethiopian-only pages (overview/disease/service/resource).
   widget:
     - id: pub-zm-kpi
       why: Zambia eLMIS supply KPI fetcher; Ethiopia's public story is DHIS2 coverage.
