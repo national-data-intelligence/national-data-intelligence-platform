@@ -130,3 +130,15 @@ data; the replace-disposition ingestors overwrite cleanly) and INGEST_WAIT=3600
 so dhis2 fits with margin. eLMIS re-ingests in ~100s, so dhis2 is the only long
 pole. Reason: dhis2 (Ethiopian IDSR) still feeds disease/overview content, so
 completing it is better than skipping; the flagship elmis→PCT data is unaffected.
+
+### C10 — stuck dbt-docs-content PVC (teardown left it Terminating) blocked all dbt jobs
+The 2026-09-21 21:28 destructive redeploy deleted the dbt-docs-content PVC but it
+stuck in Terminating (deletionTimestamp set, pvc-protection finalizer held by
+Pending dbt-docs + old Succeeded dbt-vault pods) — a deadlock. dbt-staging then
+could not schedule ("PVC being deleted, not found"), timed out, and aborted the
+pipeline (PIPE_DONE_1) AFTER ingest was already done. Fix: scale dbt-docs to 0,
+delete the dbt-staging/dbt-vault jobs holding the finalizer → the PVC finished
+deleting → recreated it fresh (512Mi RWO local-path). Re-running ONLY the dbt
+stages via --skip-ingest (the lake already holds all four sources — no need to
+re-pull dhis2's 49-min extract). DURABLE follow-up noted: teardown should clear
+PVC finalizers so a redeploy never leaves a Terminating PVC.
