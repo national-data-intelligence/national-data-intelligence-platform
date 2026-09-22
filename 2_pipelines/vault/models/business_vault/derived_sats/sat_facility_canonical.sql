@@ -85,8 +85,16 @@ mbrana_attrs AS (
     -- carries something a human can read.
     SELECT DISTINCT ON (m.hk_facility_conformed)
            m.hk_facility_conformed,
-           s.operational_status, s.phone,
-           s.latitude, s.longitude,
+           -- Cast the type-sensitive columns to their canonical types. dlt
+           -- preserves the source types when mBrana is ingested, but if the
+           -- source is skipped (a non-default profile has no mBrana data) the
+           -- resilient empty raw view types every column Nullable(String) — and
+           -- the golden-record build below uses these as boolean / numeric. The
+           -- cast is an identity when the real types are present and yields
+           -- correctly-typed NULLs when the source is empty.
+           s.operational_status::boolean AS operational_status, s.phone,
+           s.latitude::numeric  AS latitude,
+           s.longitude::numeric AS longitude,
            w.woreda_name, z.zone_name
     FROM members m
     JOIN {{ ref('v_sat_mbrana_facility_current') }} s
