@@ -132,7 +132,7 @@ upload_files_from() { # <src_dir> <project_id> <sub> <role>
   ok "uploaded model files → projects/$pid/files/model/"
 }
 
-# ── the 5 platform models: model_key (folder under bundle/seed-pack/app/ml) | project
+# ── the 6 platform models: model_key (folder under bundle/seed-pack/app/ml) | project
 #    name | one-line description ────────────────────────────────────────────
 MODELS=$(cat <<'EOF'
 ewars_lite|EWARS-lite Malaria Early-Warning|Climate-driven early-warning for malaria over the weekly IDSR mart.
@@ -140,6 +140,7 @@ ears|EARS Aberration Detector|CDC EARS C1/C2/C3 aberration detection over weekly
 seasonal|Seasonal Disease Forecaster|Seasonal-baseline forecaster for notifiable diseases.
 outbreak|Outbreak Risk Detector|Farrington outbreak-risk detector over weekly cases + climate.
 stockout_forecast|Commodity Stockout Forecast|Days-to-stockout forecaster over the monthly supply mart.
+elmis_consumption_forecast|PCT Consumption Forecast|One-month-ahead demand forecast per facility and tracer product over the eLMIS supply mart (P10/P50/P90).
 EOF
 )
 
@@ -173,4 +174,4 @@ while IFS='|' read -r key name desc; do
 done <<< "$MODELS"
 
 if [ "$FAILED" -ne 0 ]; then echo; echo "== model-projects seed FAILED (see ! above) =="; exit 1; fi
-echo; echo "== model-projects seed complete (5 platform models → approved public projects) =="
+echo; echo "== model-projects seed complete (6 platform models → approved public projects) =="
