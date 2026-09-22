@@ -250,24 +250,51 @@ up_elmis() {
   compose "$SRC/OpenLMIS" up -d >/dev/null 2>&1 || { warn "elmis compose up failed"; return 1; }
   wait_healthy elmis-postgres 240 || { warn "elmis-postgres not healthy"; return 1; }
   log "elmis-postgres healthy"
-  # SEED-ONLY-IF-EMPTY. eLMIS has NO synthesizer (unlike EthioEMR/HCMISWDM/mBrana):
-  # the dump is a historical extract with no source app that could regenerate it,
-  # so there is no synth-version contract to drift against — a populated DB is
-  # always trusted, and a missing dump is a hard stop rather than a fallback.
+  # SEED-ONLY-IF-EMPTY, dump-first with a SYNTHESIS fallback. The 236 MB historical
+  # dump is not redistributable and eLMIS has no upstream app to regenerate it — so
+  # when the dump is absent (a fresh public checkout, any non-owner host) we do NOT
+  # leave the source empty (that blanks the whole supply / PCT story). Instead we
+  # synthesize an equivalent Zambian supply history from the committed entity model
+  # + facility registry, deterministically (scripts/synthesize.sh). If the real dump
+  # is present it still wins. A populated DB is always trusted.
   local dump="$SRC/OpenLMIS/sample-data/elmis_historical_data_simulated.sql.gz"
-  if [ ! -f "$dump" ]; then
-    warn "eLMIS dump absent ($dump) — source stays EMPTY (see sample-data/SEED-DATA-NOTICE.md)"
-    return 1
-  fi
   PGQ() { docker exec elmis-postgres psql -U "${ELMIS_DB_USER:-elmis}" -d "${ELMIS_DB_NAME:-elmis}" -At -c "$1" 2>/dev/null | tr -dc 0-9; }
   local lines; lines=$(PGQ "SELECT count(*) FROM history.requisition_line;")
   if [ "${lines:-0}" -gt 0 ]; then
     log "eLMIS already carries history (requisition_line=${lines}) — skipping restore"
-  else
+  elif [ -f "$dump" ]; then
     log "restoring eLMIS extract ($(du -h "$dump" | cut -f1) gz / ~1.5 GB — 5-15 min)"
     ( cd "$SRC/OpenLMIS" && bash scripts/restore.sh ) >/dev/null 2>&1 \
       && log "eLMIS restored" || warn "eLMIS restore.sh failed"
+  else
+    log "eLMIS dump absent — synthesizing Zambian supply history (deterministic, ~2 min)"
+    ( cd "$SRC/OpenLMIS" && bash scripts/synthesize.sh ) \
+      && log "eLMIS synthesized" || { warn "eLMIS synthesize failed"; return 1; }
   fi
+  # C6: reader-provisioning is a SEPARATE concern from the data restore — a persisted
+  # volume can carry data yet never have got the reader (the old code coupled the two,
+  # so the skip-restore path left the ingestor unable to log in). Ensure it every run.
+  ensure_elmis_reader
+}
+
+# Idempotent: create/repair the read-only `ingestor` login the pipeline connects
+# as, and (re)grant it read on the historical star. Safe to call whenever
+# elmis-postgres is up and carries the schema.
+ensure_elmis_reader() {
+  local envf="$SRC/OpenLMIS/.env"
+  [ -f "$envf" ] && { set -a; . "$envf"; set +a; }
+  local U="${ELMIS_READER_USER:-ingestor}" PW="${ELMIS_READER_PASSWORD:-changeme-elmis-reader}"
+  local DB="${ELMIS_DB_NAME:-elmis}" DBU="${ELMIS_DB_USER:-elmis}"
+  docker exec -i elmis-postgres psql -v ON_ERROR_STOP=1 -U "$DBU" -d "$DB" >/dev/null 2>&1 <<SQL && log "eLMIS reader '$U' ensured" || warn "eLMIS reader provisioning skipped (schema not ready?)"
+DO \$do\$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='$U') THEN CREATE ROLE "$U" LOGIN PASSWORD '$PW';
+  ELSE ALTER ROLE "$U" LOGIN PASSWORD '$PW'; END IF;
+END \$do\$;
+GRANT CONNECT ON DATABASE $DB TO "$U";
+GRANT USAGE ON SCHEMA reference, history, mutation TO "$U";
+GRANT SELECT ON ALL TABLES IN SCHEMA reference, history, mutation TO "$U";
+ALTER DEFAULT PRIVILEGES IN SCHEMA reference, history, mutation GRANT SELECT ON TABLES TO "$U";
+SQL
 }
 
 up_dhis2() {
