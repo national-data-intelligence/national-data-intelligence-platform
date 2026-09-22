@@ -88,6 +88,15 @@ case "${1:-}" in
       # the manifest stream and survive the delete above — including, once, a
       # half-initialized postgres volume that would have poisoned the next boot.
       kubectl -n "$NS" delete pvc --all --ignore-not-found --timeout=120s 2>&1 | tail -3
+      # A PVC whose finalizer is held by a lingering pod stays Terminating after
+      # the timed delete above, and then the NEXT deploy's pods cannot schedule
+      # ("persistentvolumeclaim is being deleted") — a dbt-docs-content PVC stuck
+      # this way once blocked the whole dbt stage. Force-clear finalizers on any
+      # PVC still present so nothing is left half-deleted.
+      for _pvc in $(kubectl -n "$NS" get pvc -o name 2>/dev/null); do
+        kubectl -n "$NS" patch "$_pvc" --type=merge \
+          -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
+      done
     else
       echo "▸ deleting k3d cluster ${CLUSTER} (all state)"
       k3d cluster delete "$CLUSTER"

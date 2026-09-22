@@ -44,6 +44,7 @@ has bundle/scripts/sources-up.sh "ensure_elmis_reader" "eLMIS reader-provisionin
 has 0_external/sources/OpenLMIS/scripts/synthesize.sh "reference, history, mutation" "eLMIS synthesizer wrapper is committed"
 has bundle/scripts/profile-swap-worker.sh "NHDW_USERS_YAML.*/seeds/security/.*seed" "profile swap repoints the keycloak cast at the resolved users file (no orphaned configmap)"
 has bundle/scripts/seed-realistic.sh "was TTL-collected after finishing" "wait_job does not hang on a TTL-collected phantom job"
+has bundle/scripts/bootstrap.sh "Force-clear finalizers on any" "teardown force-clears PVC finalizers so a redeploy is not blocked by a Terminating PVC"
 absent 1_infrastructure/k8s/base/ingestor-jobs.yaml "ttlSecondsAfterFinished: 1800" "ingestor jobs are not TTL-collected mid-run (a slow sibling can take ~49min)"
 
 echo "── dhis.conf ships (was gitignored → docker made a directory)"
