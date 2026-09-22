@@ -10,6 +10,10 @@
 # learns why a widget is missing instead of assuming it broke.
 disable:
   widget:
+    - id: pub-zm-kpi
+      why: Zambia eLMIS supply KPI fetcher; Ethiopia's public story is DHIS2 coverage.
+    - id: pub-zm-province
+      why: Zambia eLMIS availability-by-province fetcher; off for Ethiopia.
     - id: pub-zm-supply
       why: >-
         Zambia eLMIS supply insights. Ethiopia's public supply/coverage story is

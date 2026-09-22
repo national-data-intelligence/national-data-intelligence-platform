@@ -11,6 +11,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     internal-bi:
     - bi-assistant
@@ -90,6 +92,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     internal-bi:
     - bi-assistant
@@ -151,6 +155,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     internal-bi:
     - bi-assistant
@@ -207,6 +213,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     internal-bi:
     - bi-assistant
@@ -249,6 +257,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     internal-bi:
     - bi-assistant
@@ -346,6 +356,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     workshop:
     - ws-running-labs
@@ -378,6 +390,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     workshop:
     - ws-running-labs
@@ -410,6 +424,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     internal-bi:
     - dz-kpi-strip
@@ -443,6 +459,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     # Steward = data-plane-empty by DESIGN (separation of duties, r-stew.yaml
     # 2026-07-03): OPA denies every mart read for R-STEW, so ANY mart-bound
@@ -479,6 +497,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     admin:
     - adm-alerts-routing
@@ -501,6 +521,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     admin:
     - adm-alerts-routing
@@ -556,6 +578,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
     admin:
     # Infrastructure group — the security officer monitors live system posture.
@@ -593,6 +617,8 @@
     - pub-zm-supply
     - pub-newsroom
     - pub-region
+    - pub-zm-kpi
+    - pub-zm-province
     - pub-supply
 - role: R-SUPER
   dashboards: '*'

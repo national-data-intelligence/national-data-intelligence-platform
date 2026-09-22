@@ -427,6 +427,19 @@ async def proxy_profile() -> JSONResponse:
         return JSONResponse({"_unavailable": str(e)}, status_code=200)
 
 
+@app.get("/api/proxy/profile/catalog")
+async def proxy_profile_catalog() -> JSONResponse:
+    """The active profile's catalog disable list, so the page renderer can drop
+    widgets the country turns off (same mechanism internal-bi uses). Read-only."""
+    from app import marts as _m
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as c:
+            r = await c.get(f"{_m.GATEWAY_URL}/api/profile/catalog")
+        return JSONResponse(r.json(), status_code=r.status_code)
+    except Exception as e:                                       # noqa: BLE001
+        return JSONResponse({"_unavailable": str(e)}, status_code=200)
+
+
 @app.get("/api/proxy/profile/copy/{surface}")
 async def proxy_profile_copy(surface: str) -> JSONResponse:
     from app import marts as _m

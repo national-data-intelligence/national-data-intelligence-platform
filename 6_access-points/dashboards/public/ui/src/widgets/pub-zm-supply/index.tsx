@@ -187,7 +187,7 @@ function ZmSupplyInsights() {
             <h4>On-shelf availability by province, latest period</h4>
             <span className="meta">{regionLive ? `${regionLive.x.length} provinces · tracer products` : 'tracer products · all provinces'}</span>
           </div>
-          <div id="region-chart" ref={regionRef} className="ch-lg"></div>
+          <div id="zm-region-chart" ref={regionRef} className="ch-lg"></div>
         </div>
         <div className="card card-elev">
           <div className="card-hdr">
@@ -196,7 +196,7 @@ function ZmSupplyInsights() {
               {trendLive ? `Monthly · ${trendLive.series.length} indicators` : 'Monthly · 4 indicators'}
             </span>
           </div>
-          <div id="trend-chart" ref={trendRef} className="ch-lg"></div>
+          <div id="zm-trend-chart" ref={trendRef} className="ch-lg"></div>
         </div>
       </div>
     </section>
