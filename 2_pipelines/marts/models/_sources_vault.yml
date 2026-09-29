@@ -45,8 +45,6 @@ sources:
       - name: hub_elmis_hist_requisition  # BK holder (source requisition id)
       - name: hub_elmis_hist_zone         # BK holder (geographic zone code)
       - name: hub_elmis_hist_facility_type  # BK holder (facility type code) — PCT stock policy
-      - name: lnk_elmis_hist_requisition  # requisition × facility × programme × period edge
-      - name: lnk_elmis_hist_requisition_line  # requisition × product R&R line edge (7.5M)
 
   - name: nhdw_vault_business
     description: "Business Data Vault — the mart-facing surface: spine + dims, resolution views, current-record views."
@@ -103,6 +101,10 @@ sources:
       - name: v_sat_elmis_hist_requisition_current      # historical workflow status
       - name: v_sat_elmis_hist_requisition_line_current # historical R&R measures (7.5M)
       - name: v_sat_elmis_hist_facility_type_current  # stock policy: nominal_max_months, nominal_eop (PCT)
+      # eLMIS fact edges: read ONLY through the driving-key current views — the raw links keep
+      # every source re-statement, so reading them multiplies measures (2026-09-22 incident).
+      - name: v_lnk_elmis_hist_requisition_current       # requisition × facility × programme × period, one per requisition
+      - name: v_lnk_elmis_hist_requisition_line_current  # requisition × product R&R line, one per source line
 
   # ── nhdw_vault_governance — the DQ governance record (read-only seam) ────
   # postgres_fdw foreign tables over nhdw_ops ops_governance (DDL:

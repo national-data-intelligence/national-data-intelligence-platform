@@ -20,7 +20,7 @@ WITH ctx AS (
            to_char(per.period_start::date, 'YYYY-MM') AS month_id,
            per.period_start::date AS period_start,
            prog.name AS programme_name
-    FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition') }} lnk
+    FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_current') }} lnk
     JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_period_current') }} per
         USING (hk_elmis_hist_period)
     JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_programme_current') }} prog
@@ -36,7 +36,7 @@ banded AS (
             WHEN ls.stock_in_hand::numeric <= ls.max_stock_quantity::numeric THEN 'according'
             ELSE 'overstocked'
         END AS band
-    FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition_line') }} l
+    FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_line_current') }} l
     JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_requisition_line_current') }} ls
         USING (hk_elmis_hist_requisition_line)
     JOIN ctx USING (hk_elmis_hist_requisition)

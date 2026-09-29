@@ -29,7 +29,7 @@ ctx AS (
     SELECT lnk.hk_elmis_hist_requisition,
            to_char(per.period_start::date, 'YYYY-MM') AS month_id,
            per.period_start::date AS period_start
-    FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition') }} lnk
+    FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_current') }} lnk
     JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_period_current') }} per
         USING (hk_elmis_hist_period)
 )
@@ -45,7 +45,7 @@ SELECT
     round(100.0 * count(*) FILTER (WHERE ls.stock_in_hand::numeric > 0
                        AND coalesce(ls.stockout_days::numeric, 0) = 0)
           / NULLIF(count(*), 0), 1)          AS availability_pct
-FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition_line') }} l
+FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_line_current') }} l
 JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_requisition_line_current') }} ls
     USING (hk_elmis_hist_requisition_line)
 JOIN product_sets ps USING (hk_elmis_hist_product)

@@ -16,7 +16,7 @@ WITH ctx AS (
         lnk.hk_elmis_hist_requisition,
         to_char(per.period_start::date, 'YYYY-MM') AS month_id,
         per.period_start::date                     AS period_start
-    FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition') }} lnk
+    FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_current') }} lnk
     JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_period_current') }} per
         USING (hk_elmis_hist_period)
 ),
@@ -37,7 +37,7 @@ SELECT
     sum(ls.stockout_days::numeric)                       AS stockout_days,
     sum(ls.quantity_dispensed::numeric)                  AS dispensed,
     sum(ls.amc::numeric)                                 AS amc
-FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition_line') }} l
+FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_line_current') }} l
 JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_requisition_line_current') }} ls
     USING (hk_elmis_hist_requisition_line)
 JOIN tracer USING (hk_elmis_hist_product)

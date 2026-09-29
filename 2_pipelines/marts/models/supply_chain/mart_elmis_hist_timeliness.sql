@@ -31,7 +31,7 @@ SELECT
         EXTRACT(EPOCH FROM rs.requisition_created_at::timestamp
                          - per.period_end::timestamp) / 86400.0)::numeric, 1)
                                                     AS median_lag_days
-FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition') }} lnk
+FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_current') }} lnk
 JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_requisition_current') }} rs
     USING (hk_elmis_hist_requisition)
 JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_programme_current') }} prog

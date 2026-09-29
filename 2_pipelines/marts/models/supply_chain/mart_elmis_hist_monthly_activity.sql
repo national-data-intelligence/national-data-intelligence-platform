@@ -18,7 +18,7 @@ WITH req AS (
         per.period_start::date                 AS period_start,
         rs.status,
         rs.emergency::boolean                  AS emergency
-    FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition') }} lnk
+    FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_current') }} lnk
     JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_requisition_current') }} rs
         USING (hk_elmis_hist_requisition)
     JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_programme_current') }} prog
@@ -36,7 +36,7 @@ line_rollup AS (
         sum(ls.quantity_requested::numeric)             AS requested,
         sum(ls.quantity_approved::numeric)              AS approved,
         sum(ls.stockout_days::numeric)                  AS stockout_days
-    FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition_line') }} l
+    FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_line_current') }} l
     JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_requisition_line_current') }} ls
         USING (hk_elmis_hist_requisition_line)
     GROUP BY 1

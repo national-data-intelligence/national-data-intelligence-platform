@@ -28,7 +28,7 @@ req AS (
     SELECT lnk.hk_elmis_hist_requisition, lnk.hk_elmis_hist_facility, lnk.hk_elmis_hist_programme,
            per.period_start::date AS period_start, per.processing_schedule_code,
            to_char(per.period_start::date, 'YYYY-MM') AS month_id
-    FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition') }} lnk
+    FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_current') }} lnk
     JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_period_current') }} per USING (hk_elmis_hist_period)
 )
 SELECT
@@ -55,7 +55,7 @@ SELECT
     sum(ls.quantity_approved::numeric)               AS quantity_approved,
     sum(ls.stockout_days::numeric)                   AS stockout_days,
     max(ls.reporting_days::numeric)                  AS reporting_days
-FROM {{ source('nhdw_vault_raw', 'lnk_elmis_hist_requisition_line') }} l
+FROM {{ source('nhdw_vault_business', 'v_lnk_elmis_hist_requisition_line_current') }} l
 JOIN {{ source('nhdw_vault_business', 'v_sat_elmis_hist_requisition_line_current') }} ls USING (hk_elmis_hist_requisition_line)
 JOIN req  USING (hk_elmis_hist_requisition)
 JOIN fac  USING (hk_elmis_hist_facility)

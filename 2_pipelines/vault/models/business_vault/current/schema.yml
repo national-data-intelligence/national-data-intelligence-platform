@@ -204,3 +204,20 @@ models:
         tests:
           - not_null
           - unique
+  # Link current-record views (driving-key rule): one row per source key, latest load.
+  - name: v_lnk_elmis_hist_requisition_current
+    description: 'Current context of each eLMIS requisition — latest lnk_elmis_hist_requisition row per hk_elmis_hist_requisition (driving key).'
+    columns:
+      - name: hk_elmis_hist_requisition
+        description: 'Driving key — exactly one row each.'
+        tests:
+          - not_null
+          - unique
+  - name: v_lnk_elmis_hist_requisition_line_current
+    description: 'Current edge of each eLMIS R&R line — latest lnk_elmis_hist_requisition_line row per source_line_item_id (driving key).'
+    columns:
+      - name: source_line_item_id
+        description: 'Driving key (source line id) — exactly one row each.'
+        tests:
+          - not_null
+          - unique
