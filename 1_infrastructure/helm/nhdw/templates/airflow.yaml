@@ -118,6 +118,7 @@ spec:
             - { name: INGESTOR_HCMISWDM_IMAGE, value: {{ include "nhdw.image" (dict "name" "hcmiswdm-ingestor" "ctx" .) | quote }} }
             - { name: INGESTOR_MBRANA_IMAGE,   value: {{ include "nhdw.image" (dict "name" "mbrana-ingestor" "ctx" .) | quote }} }
             - { name: INGESTOR_MFR_IMAGE,      value: {{ include "nhdw.image" (dict "name" "mfr-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_OPENLMIS_IMAGE, value: {{ include "nhdw.image" (dict "name" "openlmis-ingestor" "ctx" .) | quote }} }
             - { name: STAGING_DBT_IMAGE,       value: {{ include "nhdw.image" (dict "name" "staging-dbt" "ctx" .) | quote }} }
             - { name: VAULT_BRIDGE_IMAGE,      value: {{ include "nhdw.image" (dict "name" "vault-bridge" "ctx" .) | quote }} }
             - { name: VAULT_DBT_IMAGE,         value: {{ include "nhdw.image" (dict "name" "vault-dbt" "ctx" .) | quote }} }
@@ -179,6 +180,7 @@ spec:
             - { name: INGESTOR_HCMISWDM_IMAGE, value: {{ include "nhdw.image" (dict "name" "hcmiswdm-ingestor" "ctx" .) | quote }} }
             - { name: INGESTOR_MBRANA_IMAGE,   value: {{ include "nhdw.image" (dict "name" "mbrana-ingestor" "ctx" .) | quote }} }
             - { name: INGESTOR_MFR_IMAGE,      value: {{ include "nhdw.image" (dict "name" "mfr-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_OPENLMIS_IMAGE, value: {{ include "nhdw.image" (dict "name" "openlmis-ingestor" "ctx" .) | quote }} }
             - { name: STAGING_DBT_IMAGE,       value: {{ include "nhdw.image" (dict "name" "staging-dbt" "ctx" .) | quote }} }
             - { name: VAULT_BRIDGE_IMAGE,      value: {{ include "nhdw.image" (dict "name" "vault-bridge" "ctx" .) | quote }} }
             - { name: VAULT_DBT_IMAGE,         value: {{ include "nhdw.image" (dict "name" "vault-dbt" "ctx" .) | quote }} }

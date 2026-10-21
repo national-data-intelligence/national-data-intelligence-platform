@@ -74,6 +74,7 @@ patches:
                   - { name: INGESTOR_HCMISWDM_IMAGE, value: "nhdw/hcmiswdm-ingestor:1.0.0" }
                   - { name: INGESTOR_MBRANA_IMAGE, value: "nhdw/mbrana-ingestor:1.0.0" }
                   - { name: INGESTOR_MFR_IMAGE, value: "nhdw/mfr-ingestor:1.0.0" }
+                  - { name: INGESTOR_OPENLMIS_IMAGE, value: "nhdw/openlmis-ingestor:1.0.0" }
                   - { name: STAGING_DBT_IMAGE, value: "nhdw/staging-dbt:1.0.0" }
                   - { name: VAULT_BRIDGE_IMAGE, value: "nhdw/vault-bridge:1.0.0" }
                   - { name: VAULT_DBT_IMAGE, value: "nhdw/vault-dbt:1.0.0" }
@@ -90,6 +91,7 @@ patches:
                   - { name: INGESTOR_HCMISWDM_IMAGE, value: "nhdw/hcmiswdm-ingestor:1.0.0" }
                   - { name: INGESTOR_MBRANA_IMAGE, value: "nhdw/mbrana-ingestor:1.0.0" }
                   - { name: INGESTOR_MFR_IMAGE, value: "nhdw/mfr-ingestor:1.0.0" }
+                  - { name: INGESTOR_OPENLMIS_IMAGE, value: "nhdw/openlmis-ingestor:1.0.0" }
                   - { name: STAGING_DBT_IMAGE, value: "nhdw/staging-dbt:1.0.0" }
                   - { name: VAULT_BRIDGE_IMAGE, value: "nhdw/vault-bridge:1.0.0" }
                   - { name: VAULT_DBT_IMAGE, value: "nhdw/vault-dbt:1.0.0" }

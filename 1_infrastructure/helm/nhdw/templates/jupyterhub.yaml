@@ -71,6 +71,10 @@ spec:
             # this value like ML_RUNNER_IMAGE; the strategic merge hoists it to the
             # front of the env list).
             - { name: SINGLEUSER_IMAGE, value: {{ include "nhdw.image" (dict "name" "jupyterlab" "ctx" .) | quote }} }
+            # SeaweedFS S3 allows a zero-byte final part on multipart PUTs; without
+            # this the boto client in spawned labs 400s on empty uploads (the phase-6
+            # reconcile set it live; carry it in the chart so a fresh install keeps it).
+            - { name: BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE, value: "true" }
             - name: POD_NAMESPACE
               valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
             # Hub POD IP — the connect address for the in-pod proxy + singleuser
