@@ -1,0 +1,180 @@
+# EMR re-home courier — routes emr-* hosts through the shared k3s traefik 443 door
+# to the EMR MLOps Caddy on the host (172.16.0.4:9443, TLS-internal, routes by Host header).
+# Mirrors the palladium-console courier (ing-palladium-console / palladium-console-ext),
+# but with an HTTPS backend because the EMR Caddy speaks TLS-internal on 9443.
+# ADDITIVE ONLY: creates new objects in ns nhdw; touches no existing NHDW ingress/service.
+# Applied live 2026-10-16. See 2026-10-16-shared-llm-and-emr-rehome.md.
+---
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: emr-caddy
+  namespace: nhdw
+spec:
+  # EMR Caddy presents a self-signed (tls internal) cert; skip verification.
+  insecureSkipVerify: true
+  # Always send this SNI so Caddy serves a known cert; Caddy then routes by the
+  # HTTP Host header, so one SNI serves all five emr-* sites.
+  serverName: emr-mlflow.20.84.70.78.nip.io
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emr-caddy-ext
+  namespace: nhdw
+  labels:
+    app: emr-caddy
+    external: "true"
+  annotations:
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    traefik.ingress.kubernetes.io/service.serverstransport: nhdw-emr-caddy@kubernetescrd
+spec:
+  type: ClusterIP
+  ports:
+  - name: https
+    port: 9443
+    protocol: TCP
+    targetPort: 9443
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: emr-caddy-ext
+  namespace: nhdw
+  labels:
+    kubernetes.io/service-name: emr-caddy-ext
+addressType: IPv4
+ports:
+- name: https
+  port: 9443
+  protocol: TCP
+endpoints:
+- addresses:
+  - 172.16.0.4
+  conditions:
+    ready: true
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-emr-mlflow
+  namespace: nhdw
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: emr-mlflow.20.84.70.78.nip.io
+    http:
+      paths:
+      - backend:
+          service:
+            name: emr-caddy-ext
+            port:
+              number: 9443
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - emr-mlflow.20.84.70.78.nip.io
+    secretName: nhdw-wildcard-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-emr-s3
+  namespace: nhdw
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: emr-s3.20.84.70.78.nip.io
+    http:
+      paths:
+      - backend:
+          service:
+            name: emr-caddy-ext
+            port:
+              number: 9443
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - emr-s3.20.84.70.78.nip.io
+    secretName: nhdw-wildcard-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-emr-files
+  namespace: nhdw
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: emr-files.20.84.70.78.nip.io
+    http:
+      paths:
+      - backend:
+          service:
+            name: emr-caddy-ext
+            port:
+              number: 9443
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - emr-files.20.84.70.78.nip.io
+    secretName: nhdw-wildcard-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-emr-label
+  namespace: nhdw
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: emr-label.20.84.70.78.nip.io
+    http:
+      paths:
+      - backend:
+          service:
+            name: emr-caddy-ext
+            port:
+              number: 9443
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - emr-label.20.84.70.78.nip.io
+    secretName: nhdw-wildcard-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-emr-ai
+  namespace: nhdw
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: emr-ai.20.84.70.78.nip.io
+    http:
+      paths:
+      - backend:
+          service:
+            name: emr-caddy-ext
+            port:
+              number: 9443
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - emr-ai.20.84.70.78.nip.io
+    secretName: nhdw-wildcard-tls

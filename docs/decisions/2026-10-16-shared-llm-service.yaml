@@ -1,0 +1,57 @@
+# Shared LLM — a clean, project-agnostic cluster-internal endpoint for the ONE LLM
+# engine on palladium2: the host ollama container (nhdw-ollama, GPU, qwen2.5:14b)
+# bound on 172.16.0.4:11434. Any in-cluster project can target:
+#     http://ollama.shared-llm.svc.cluster.local:11434     (native /api/*)
+#     http://ollama.shared-llm.svc.cluster.local:11434/v1  (OpenAI-compatible)
+# Selector-less Service + EndpointSlice to the host port (same courier pattern as
+# palladium-console-ext). Applied live 2026-10-16.
+#
+# NOTE: intentionally NOT exposed publicly (no Ingress). Ollama has no auth, and
+# the NSG opens 443 to the whole internet, so a public llm.* ingress would be an
+# open GPU-LLM abuse vector. The two current consumers reach ollama over the host
+# (NHDW gateway: host.k3d.internal:11434; EMR ai-service: 172.16.0.4:11434), so
+# public exposure is unnecessary. If ever wanted, add an Ingress + a Traefik
+# basic-auth middleware — do not expose unauthenticated.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shared-llm
+  labels:
+    purpose: shared-llm
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: shared-llm
+  labels:
+    app: shared-llm
+    external: "true"
+  annotations:
+    nhdw/description: "Shared LLM engine (ollama, GPU, qwen2.5:14b) on host 172.16.0.4:11434"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 11434
+    protocol: TCP
+    targetPort: 11434
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: ollama
+  namespace: shared-llm
+  labels:
+    kubernetes.io/service-name: ollama
+addressType: IPv4
+ports:
+- name: http
+  port: 11434
+  protocol: TCP
+endpoints:
+- addresses:
+  - 172.16.0.4
+  conditions:
+    ready: true
