@@ -872,8 +872,8 @@ def prune_unexpected_brokers(token: str, realm: str) -> None:
 # injects). Only the two staff realms exist; Fayda is a verification-only
 # integration on the public access-request form, NOT a login realm.
 REALM_DISPLAY = {
-    "moh-staff":      "Ethiopia NHDW",
-    "privileged-ops": "NHDW Operations",
+    "moh-staff":      "Palladium",
+    "privileged-ops": "Palladium",
 }
 
 

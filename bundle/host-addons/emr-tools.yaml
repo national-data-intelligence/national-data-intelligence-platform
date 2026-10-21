@@ -1,0 +1,104 @@
+# EMR AI-assistant + MLOps tools — host add-on routing (palladium2 only).
+# A separate, re-homed system running as docker-compose (ethioemr-ai-* /
+# ethioemr-mlops-*), fronted on the host by a Caddy on :9443 (TLS, self-signed).
+# Five hostnames all land on that one Caddy, which routes by host internally. NOT
+# part of NHDW, NOT rendered by Helm/overlay, NOT managed by ci-redeploy — see
+# ./README.md and docs/decisions/2026-10-16-shared-llm-and-emr-rehome.md.
+---
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata: { name: emr-caddy, namespace: nhdw }
+spec:
+  insecureSkipVerify: true                       # the Caddy backend cert is self-signed
+  serverName: emr-mlflow.20.84.70.78.nip.io
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emr-caddy-ext
+  namespace: nhdw
+  labels: { app: emr-caddy, external: "true" }
+  annotations:
+    # reach the backend over https, trusting it via the ServersTransport above
+    # (ref form is <namespace>-<name>@kubernetescrd).
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    traefik.ingress.kubernetes.io/service.serverstransport: nhdw-emr-caddy@kubernetescrd
+spec:
+  type: ClusterIP            # selector-less — endpoints set manually below
+  ports:
+    - { name: https, port: 9443, targetPort: 9443, protocol: TCP }
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: emr-caddy-ext        # same name as the Service → bound to it
+  namespace: nhdw
+  labels: { app: emr-caddy, external: "true" }
+subsets:
+  - addresses: [ { ip: 172.16.0.4 } ]        # host node IP (nhdw_node_ip)
+    ports: [ { name: https, port: 9443, protocol: TCP } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-emr-ai
+  namespace: nhdw
+  annotations: { traefik.ingress.kubernetes.io/router.entrypoints: websecure }
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: emr-ai.20.84.70.78.nip.io
+      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: emr-caddy-ext, port: { number: 9443 } } } } ] }
+  tls: [ { hosts: [ emr-ai.20.84.70.78.nip.io ], secretName: nhdw-wildcard-tls } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-emr-files
+  namespace: nhdw
+  annotations: { traefik.ingress.kubernetes.io/router.entrypoints: websecure }
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: emr-files.20.84.70.78.nip.io
+      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: emr-caddy-ext, port: { number: 9443 } } } } ] }
+  tls: [ { hosts: [ emr-files.20.84.70.78.nip.io ], secretName: nhdw-wildcard-tls } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-emr-label
+  namespace: nhdw
+  annotations: { traefik.ingress.kubernetes.io/router.entrypoints: websecure }
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: emr-label.20.84.70.78.nip.io
+      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: emr-caddy-ext, port: { number: 9443 } } } } ] }
+  tls: [ { hosts: [ emr-label.20.84.70.78.nip.io ], secretName: nhdw-wildcard-tls } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-emr-mlflow
+  namespace: nhdw
+  annotations: { traefik.ingress.kubernetes.io/router.entrypoints: websecure }
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: emr-mlflow.20.84.70.78.nip.io
+      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: emr-caddy-ext, port: { number: 9443 } } } } ] }
+  tls: [ { hosts: [ emr-mlflow.20.84.70.78.nip.io ], secretName: nhdw-wildcard-tls } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-emr-s3
+  namespace: nhdw
+  annotations: { traefik.ingress.kubernetes.io/router.entrypoints: websecure }
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: emr-s3.20.84.70.78.nip.io
+      http: { paths: [ { path: /, pathType: Prefix, backend: { service: { name: emr-caddy-ext, port: { number: 9443 } } } } ] }
+  tls: [ { hosts: [ emr-s3.20.84.70.78.nip.io ], secretName: nhdw-wildcard-tls } ]

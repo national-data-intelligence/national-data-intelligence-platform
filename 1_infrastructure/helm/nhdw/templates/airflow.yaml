@@ -106,6 +106,22 @@ spec:
             # overlay patches THIS env var to nhdw/ml-runner:1.0.0 (the strategic
             # merge hoists the patched var to the front of the env list).
             - { name: ML_RUNNER_IMAGE, value: {{ include "nhdw.image" (dict "name" "ml-runner" "ctx" .) | quote }} }
+            # Ingestor + dbt images the weekly DAG's KubernetesPodOperator tasks
+            # spawn — same reason as ML_RUNNER_IMAGE above (an image remap can't
+            # reach the DAG's python), so the chart must carry them or a `helm
+            # upgrade` strips what the dev overlay used to patch in and the
+            # ingest/transform pods come up with no image ref. Keep in sync with
+            # overlays/dev (the kustomize image-env patch) and the two blocks identical.
+            - { name: INGESTOR_DHIS2_IMAGE,    value: {{ include "nhdw.image" (dict "name" "dhis2-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_CLIMATE_IMAGE,  value: {{ include "nhdw.image" (dict "name" "climate-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_ETHIOEMR_IMAGE, value: {{ include "nhdw.image" (dict "name" "ethioemr-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_HCMISWDM_IMAGE, value: {{ include "nhdw.image" (dict "name" "hcmiswdm-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_MBRANA_IMAGE,   value: {{ include "nhdw.image" (dict "name" "mbrana-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_MFR_IMAGE,      value: {{ include "nhdw.image" (dict "name" "mfr-ingestor" "ctx" .) | quote }} }
+            - { name: STAGING_DBT_IMAGE,       value: {{ include "nhdw.image" (dict "name" "staging-dbt" "ctx" .) | quote }} }
+            - { name: VAULT_BRIDGE_IMAGE,      value: {{ include "nhdw.image" (dict "name" "vault-bridge" "ctx" .) | quote }} }
+            - { name: VAULT_DBT_IMAGE,         value: {{ include "nhdw.image" (dict "name" "vault-dbt" "ctx" .) | quote }} }
+            - { name: MARTS_DBT_IMAGE,         value: {{ include "nhdw.image" (dict "name" "marts-dbt" "ctx" .) | quote }} }
             # parity with base/airflow.yaml: the ingestor/dbt/runner pods this
             # scheduler spawns read NHDW_S3_ENDPOINT to reach the lake. Absent,
             # a Helm-provisioned Airflow spawns pods with no object store.
@@ -151,6 +167,22 @@ spec:
             # overlay patches THIS env var to nhdw/ml-runner:1.0.0 (the strategic
             # merge hoists the patched var to the front of the env list).
             - { name: ML_RUNNER_IMAGE, value: {{ include "nhdw.image" (dict "name" "ml-runner" "ctx" .) | quote }} }
+            # Ingestor + dbt images the weekly DAG's KubernetesPodOperator tasks
+            # spawn — same reason as ML_RUNNER_IMAGE above (an image remap can't
+            # reach the DAG's python), so the chart must carry them or a `helm
+            # upgrade` strips what the dev overlay used to patch in and the
+            # ingest/transform pods come up with no image ref. Keep in sync with
+            # overlays/dev (the kustomize image-env patch) and the two blocks identical.
+            - { name: INGESTOR_DHIS2_IMAGE,    value: {{ include "nhdw.image" (dict "name" "dhis2-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_CLIMATE_IMAGE,  value: {{ include "nhdw.image" (dict "name" "climate-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_ETHIOEMR_IMAGE, value: {{ include "nhdw.image" (dict "name" "ethioemr-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_HCMISWDM_IMAGE, value: {{ include "nhdw.image" (dict "name" "hcmiswdm-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_MBRANA_IMAGE,   value: {{ include "nhdw.image" (dict "name" "mbrana-ingestor" "ctx" .) | quote }} }
+            - { name: INGESTOR_MFR_IMAGE,      value: {{ include "nhdw.image" (dict "name" "mfr-ingestor" "ctx" .) | quote }} }
+            - { name: STAGING_DBT_IMAGE,       value: {{ include "nhdw.image" (dict "name" "staging-dbt" "ctx" .) | quote }} }
+            - { name: VAULT_BRIDGE_IMAGE,      value: {{ include "nhdw.image" (dict "name" "vault-bridge" "ctx" .) | quote }} }
+            - { name: VAULT_DBT_IMAGE,         value: {{ include "nhdw.image" (dict "name" "vault-dbt" "ctx" .) | quote }} }
+            - { name: MARTS_DBT_IMAGE,         value: {{ include "nhdw.image" (dict "name" "marts-dbt" "ctx" .) | quote }} }
             # parity with base/airflow.yaml: the ingestor/dbt/runner pods this
             # scheduler spawns read NHDW_S3_ENDPOINT to reach the lake. Absent,
             # a Helm-provisioned Airflow spawns pods with no object store.

@@ -1,0 +1,45 @@
+# Palladium Projects Console — host add-on routing (palladium2 only).
+# Console = a separate product (own repo) running as docker-compose on this host
+# (palladium-console-app-1, published on the node at :8099). NOT part of NHDW, NOT
+# rendered by Helm/overlay, NOT managed by ci-redeploy — see ./README.md.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: palladium-console-ext
+  namespace: nhdw
+  labels: { app: palladium-console, external: "true" }
+spec:
+  type: ClusterIP            # selector-less — endpoints set manually below
+  ports:
+    - { name: http, port: 8099, targetPort: 8099, protocol: TCP }
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: palladium-console-ext   # same name as the Service → bound to it
+  namespace: nhdw
+  labels: { app: palladium-console, external: "true" }
+subsets:
+  - addresses: [ { ip: 172.16.0.4 } ]        # host node IP (nhdw_node_ip)
+    ports: [ { name: http, port: 8099, protocol: TCP } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ing-palladium-console
+  namespace: nhdw
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: console.20.84.70.78.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: palladium-console-ext, port: { number: 8099 } } }
+  tls:
+    - hosts: [ console.20.84.70.78.nip.io ]
+      secretName: nhdw-wildcard-tls
