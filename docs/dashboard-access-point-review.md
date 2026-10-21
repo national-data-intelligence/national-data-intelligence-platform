@@ -31,8 +31,48 @@ This review extends the [release-readiness assessment](release-readiness/README.
 | **[code]** | Read from source or configuration only |
 | **[fixture]** | Reproduced in the browser with a clearly labelled test response (used only where the live data is empty) |
 
-The raw evidence (commands, outputs, 192 screenshots) is held outside the repository and is available from the review
-owner.
+**Evidence in the repository.** [`dashboard-review-evidence/`](dashboard-review-evidence/README.md) holds, for every
+runtime finding:
+- the screenshots, named by finding ID, with how each was produced;
+- the measurements, with the read-only commands to re-run them;
+- the complete [legacy-identity inventory](dashboard-review-evidence/legacy-identity-inventory.md);
+- the [first-frame identity test](dashboard-review-evidence/identity-flash/README.md): a harness, a baseline and frames.
+
+Full raw logs (192 screenshots, 111 videos, 2,531 frames) are retained by the review owner.
+
+---
+
+## 0. Scope and priorities
+
+**The priority is consistent, functioning access points and completion of the product owner's listed feedback.** Every
+finding below is tagged:
+
+| Tag | Meaning |
+|---|---|
+| **[Core]** | Required: it is in the feedback, or it is a confirmed defect that stops an access point from working correctly or consistently. |
+| **[Separate]** | Additional architectural, editorial or hardening work. It is listed so it is not lost, but it is **not** part of the feedback delivery and is scheduled only on request (§8.2). |
+
+**Ground rules for the Core work, from the product owner:**
+
+1. **No legacy identity anywhere.** All legacy product identity ("NHDW", "National Health Data Warehouse", the ministry
+   as brand, the ministry emblem as product icon) is removed from every access point, in every state, on every country
+   profile. The states include:
+   - static HTML titles and favicons;
+   - loading and sign-in splashes;
+   - fallback profile values;
+   - login, logout and error pages;
+   - session-expiry states;
+   - e-mails and API titles.
+
+   See DAP-B10.
+2. **No old identity in any rendered frame.** It must not appear before the profile loads, while it loads slowly, or
+   after it fails. This is checked from the first rendered frame across cold load, refresh, hard refresh, direct links,
+   navigation, slow and failed profile requests, and cached-client updates. See DAP-B11.
+3. **"Source not connected" is an honest state, not a delivered feature.** §5 states, widget by widget:
+   - which metrics will actually work after the Core fixes;
+   - which cannot work until someone decides the scope or supplies data.
+4. **Acceptance checks test correct behaviour.** They are not arbitrary percentages or row counts. Model checks test
+   what each method is defined to compute. Filter checks test equality with the data actually available to the user.
 
 ---
 
@@ -79,15 +119,22 @@ The demo surface fails customer trust in five ways. Each was reproduced live.
    - The staff apps say "NHDW v1.0 · PROD · National Health Data Warehouse", backed by no version data.
    - The Keycloak login shows Palladium, National Health Data Warehouse and Federal Ministry of Health · Ethiopia on
      one page.
+   - **A first-frame test of 116 scenarios found the legacy identity on every first-party access point, from the first
+     painted frame (about 20–190 ms).**
+     - BI, admin and workshop never show anything else.
+     - The public site paints the old identity first, switches only when the profile arrives, and keeps the old
+       identity if the profile request fails.
+     - "Data Intelligence Platform" is never visible on any first screen.
+     - The inventory lists 99 legacy occurrences across 9 access-point groups and 14 UI states (DAP-B10, DAP-B11).
 
 **Demo readiness.** Not ready. The fastest credible path:
-- Fix the plumbing and fail-closed scoping first (DAP-WP0, DAP-WP1).
-- Then remove every fabricated or zero-for-missing value and make failure states honest (DAP-WP2).
-- Then apply the copy and branding changes (DAP-WP3).
+- First, preserve the live-only changes in git and rebuild from one tagged commit (§8.0).
+- Then fix the plumbing and fail-closed scoping (C1, C2).
+- Then one identity from the first frame, the requested copy removals, and honest states (C3, C4, C5).
 
-Data and model fixes (DAP-WP4, DAP-WP5) decide whether Service and Disease can be shown at all. Until they land, those
-pages need explicit "not available" states or must be dropped from the script.
-
+Data and model fixes (C6, C7) decide which Service and Disease metrics can be shown. §5 lists exactly which metrics will
+work and which wait on a scope decision. Resource Management cannot be delivered as a working dashboard without the
+supply source.
 ---
 
 ## 2. Feedback traceability
@@ -117,21 +164,21 @@ Every product-owner comment, mapped to its findings. "Status" uses one of:
 
 | # | Comment | Status | Findings | Proposed resolution |
 |---|---|---|---|---|
-| S1 | Replace visible "NHDW" / "National Health Data Warehouse" | Reproduced | DAP-B03, DAP-B05 | Profile-driven wordmark; replace about 20 hard-coded strings (list in §6.3) |
+| S1 | Replace visible "NHDW" / "National Health Data Warehouse" | Reproduced | DAP-B03, DAP-B05 | Profile-driven wordmark; replace about 20 hard-coded strings (list in §7.3) |
 | S2 | Sidebar footer "NHDW v1.0 · PROD" | Reproduced; **no deployment metadata exists to back it** (mutable `1.0.0` tags, no labels, no version endpoint) | DAP-B04 | Remove it. Show a version only after a build-SHA endpoint exists (RR-004) |
 | S3 | Reuse the public page's product icon in the upper-left | Reproduced, **with a caveat**: the public "product icon" is the Ethiopian Ministry of Health emblem (`logo-fmoh.png`, whitened by CSS). No Palladium or product logo exists anywhere in the apps | DAP-B06, DAP-Q04 | Decision needed on the mark; then one asset in every identity block and favicon |
-| S4 | Naming, icon, spacing and attribution consistency across access points | Reproduced: inconsistent on all 9 surfaces checked | DAP-B03, DAP-B05, DAP-E08 | One identity block and one title pattern (§6.2) |
-| S5 | Do not rename technical identifiers | Request | §6.4 don't-touch list | — |
+| S4 | Naming, icon, spacing and attribution consistency across access points | Reproduced: inconsistent on all 9 surfaces checked | DAP-B03, DAP-B05, DAP-E08 | One identity block and one title pattern (§7.2) |
+| S5 | Do not rename technical identifiers | Request | §7.4 don't-touch list | — |
 
 ### 2.3 Disease Surveillance
 
 | # | Comment | Status | Findings | Proposed resolution |
 |---|---|---|---|---|
 | DS1 | Remove "NHDW › Disease Surveillance" breadcrumb | Reproduced; it is the shared top bar, on **every** BI page | DAP-E01 | Delete it once in `Topbar.tsx` |
-| DS2 | Icons for the Signal Header cards | Reproduced: **no icon renders**, because the widget never reads the field; 3 of the gateway's icon names do not exist in the sprite | DAP-E03 | One existing sprite icon per card (§6.1) |
+| DS2 | Icons for the Signal Header cards | Reproduced: **no icon renders**, because the widget never reads the field; 3 of the gateway's icon names do not exist in the sprite | DAP-E03 | One existing sprite icon per card (§7.1) |
 | DS3 | Remove the "EWARS, notifiable diseases" intro | Reproduced | DAP-E02 | Clear the section eyebrow (catalogue seed + reseed) |
 | DS4 | Remove the secondary card strings (completeness %, expected woreda-weeks, death reporting completeness, woreda reliability, received/expected, model ids) | Reproduced: 10 strings. Two are labels with **no value behind them**; one count appears twice | DAP-E03 | Card face = label, value, at most one delta |
-| DS5 | Which of those stay available in a methodology view | — | DAP-E03, DAP-E07 | Method & coverage popover (§6.1) |
+| DS5 | Which of those stay available in a methodology view | — | DAP-E03, DAP-E07 | Method & coverage popover (§7.1) |
 | DS6 | Investigate every empty value in Geographic Risk | Reproduced: the whole widget is blank because one missing data-quality table fails its query (`502` shown as "no data"). Once fixed, readiness stays empty (no supply feed), reliability stays empty (woreda ids do not match across sources), and the map would mis-colour missing data as zero | DAP-D01, DAP-D05, DAP-D06, DAP-F04, DAP-F14 | Build the mart; make reliability optional; show "no data" distinctly |
 | DS7 | Remove "Explore health burden and system readiness across Ethiopia's regions." | Reproduced (it also hard-codes "Ethiopia") | DAP-E02 | Delete it |
 | DS8 | Test every Detection Model option; only EARS C1 appeared to work | **Partly.** All four return data and render. **None is correct.** EARS only looks right | DAP-D02, DAP-F06 | Fix the season-count bug; withhold failing models with a reason |
@@ -143,10 +190,10 @@ Every product-owner comment, mapped to its findings. "Status" uses one of:
 
 | # | Comment | Status | Findings | Proposed resolution |
 |---|---|---|---|---|
-| RM1 | Audit every empty KPI and chart | Reproduced: 9 of 11 widgets empty or zero; the supply feed (HCMIS) never landed | DAP-D04, DAP-F02, §5 | "Source not connected" states, never zeros |
+| RM1 | Audit every empty KPI and chart | Reproduced: 9 of 11 widgets empty or zero; the supply feed (HCMIS) never landed | DAP-D04, DAP-F02, §6 | "Source not connected" states, never zeros |
 | RM2 | Remove "Where supply pressure concentrates…" | Reproduced (catalogue section text) | DAP-E04 | Delete it; weighting note to the tooltip |
 | RM3 | Remove "Act this week, outbreaks vs response stock." | Reproduced; the phrase appears **three times** (eyebrow, section title, card title) | DAP-E04 | Card title = section title; eyebrow removed |
-| RM4 | Remove "Regions shaded by composite supply stress…" | Reproduced | DAP-E04 | Delete it. Note: the "composite" is really drug stress only (§6.1) |
+| RM4 | Remove "Regions shaded by composite supply stress…" | Reproduced | DAP-E04 | Delete it. Note: the "composite" is really drug stress only (§7.1) |
 | RM5 | Do map clicks filter or drill down? | Reproduced *[fixture]*: **neither**. A click updates only the card's own info strip; no request fires and no other widget changes | DAP-F10, DAP-Q02 | Decision: make a click set the page region, or change the copy |
 | RM6 | Geography selector and its effect on every widget | Reproduced: picking a region hides 5 of 11 Resource cards; picking a period hides 8 of 11; the map only zooms | DAP-F01, DAP-F09 | Keep cards visible with a "latest month only" note |
 
@@ -155,9 +202,9 @@ Every product-owner comment, mapped to its findings. "Status" uses one of:
 | # | Comment | Status | Findings | Proposed resolution |
 |---|---|---|---|---|
 | SV1 | Audit every empty KPI and chart | Reproduced: four cascades empty; programme filter turns every card to 0; several values mislabelled | DAP-D03, DAP-D07, DAP-F03 | Fix the pipeline; empty states |
-| SV2–SV6 | Remove five explanatory strings | All reproduced | DAP-E05 | Delete; keep the scope chip and move the method to a tooltip (§6.1) |
+| SV2–SV6 | Remove five explanatory strings | All reproduced | DAP-E05 | Delete; keep the scope chip and move the method to a tooltip (§7.1) |
 | SV7 | Preserve scope and estimation assumptions in a secondary location | — | DAP-E05, DAP-E07 | "EMR-active" scope chip **only where true**; "3.2% crude birth rate" estimate in the tooltip |
-| SV8 | Geography filtering, denominator consistency, cross-source agreement, cascade calculations | Reproduced. Geography narrows correctly. Denominators disagree across the platform (ANC4 55.6% / 83.1% / 57.6%). The EMR side of "agreement" is a seeded demo table, not the EMR pipeline. The cascade maths divides every step by HIV tests and multiplies across programmes | DAP-D03, DAP-D07, DAP-D08 | §5.3 |
+| SV8 | Geography filtering, denominator consistency, cross-source agreement, cascade calculations | Reproduced. Geography narrows correctly. Denominators disagree across the platform (ANC4 55.6% / 83.1% / 57.6%). The EMR side of "agreement" is a seeded demo table, not the EMR pipeline. The cascade maths divides every step by HIV tests and multiplies across programmes | DAP-D03, DAP-D07, DAP-D08 | §6.3 |
 
 ### 2.6 Admin
 
@@ -168,16 +215,27 @@ Every product-owner comment, mapped to its findings. "Status" uses one of:
 | AD3 | Do not remove the check or grant broad permissions | Respected | DAP-A01 | — |
 | AD4 | Distinguish loading / denied / failure / loaded-empty | Reproduced: **"nothing classified" shows while loading, on 403, on 500 and on network failure** | DAP-F05 | Four explicit states |
 | AD5 | Unauthorised users get an appropriate interface; stewards can complete the workflow | Partly. Stewards and ops admins see everything and have the controls (not saved). Super-admin sees a page it cannot use. The security officer can call the API but cannot see the page | DAP-A01, DAP-Q05 | One gate for navigation and API |
-| AD6 | Audit suspected dummy data throughout Admin | Reproduced (§5.4): sample alert recipients that nothing reads; placeholder identity providers marked "active"; a hard-coded `127.0.0.1` base domain; "0/0 · 0.0s" build health from a missing artefact | DAP-B09, DAP-F12, DAP-F15 | §5.4 |
+| AD6 | Audit suspected dummy data throughout Admin | Reproduced (§7.2): sample alert recipients that nothing reads; placeholder identity providers marked "active"; a hard-coded `127.0.0.1` base domain; "0/0 · 0.0s" build health from a missing artefact | DAP-B09, DAP-F12, DAP-F15 | §6.4 |
 
 ### 2.7 Cross-cutting patterns (section 4 of the brief)
 
 | # | Pattern | Result | Findings |
-|---|---|---|---|
-| X1 | Empty metrics: trace source → render | Done for every mounted widget on Overview, Disease, Resource, Service and the public portal (§5) | DAP-D01…D08, DAP-F02 |
-| X2 | Filters: option source, scope, request effect, global/local, combinations, races, null-vs-zero maps | Done (§4.3) | DAP-F01, F07–F11, A02 |
-| X3 | Static and fallback data classification | Done (§5) | DAP-F03, DAP-F12, DAP-D07 |
-| X4 | Copy, branding, interaction | Done (§6) | DAP-B*, DAP-E*, DAP-F16 |
+|### 2.8 Revision requirements (second round of product-owner feedback)
+
+| # | Requirement | Where addressed |
+|---|---|---|
+| V1 | Priority is consistent, functioning access points and the listed feedback; keep other work separate unless needed to fix a confirmed defect | §0, [Core]/[Separate] tag on every finding, §8.1 vs §8.2 |
+| V2 | Remove all legacy product wording and branding across every access point, state and profile | DAP-B10; [inventory](dashboard-review-evidence/legacy-identity-inventory.md) (99 rows) |
+| V3 | No old identity may flash before the profile loads; verify from the first rendered frame across all load paths | DAP-B11; [harness, baseline and frames](dashboard-review-evidence/identity-flash/README.md) |
+| V4 | "Source not connected" is not completion; say which metrics will work and which need a scope decision | §5 |
+| V5 | Replace arbitrary model and filter thresholds with checks of correct behaviour | DAP-D01, D02, D03, D05, F06, F07, F08, F13, F14; §9 |
+| V6 | Accessible evidence paths for the runtime findings | `Evidence:` line on each runtime finding → [`dashboard-review-evidence/`](dashboard-review-evidence/README.md) |
+
+---|---|---|---|
+| X1 | Empty metrics: trace source → render | Done for every mounted widget on Overview, Disease, Resource, Service and the public portal (§6) | DAP-D01…D08, DAP-F02 |
+| X2 | Filters: option source, scope, request effect, global/local, combinations, races, null-vs-zero maps | Done (§4.2) | DAP-F01, F07–F11, A02 |
+| X3 | Static and fallback data classification | Done (§6) | DAP-F03, DAP-F12, DAP-D07 |
+| X4 | Copy, branding, interaction | Done (§7) | DAP-B*, DAP-E*, DAP-F16 |
 
 ---
 
@@ -308,6 +366,21 @@ Every product-owner comment, mapped to its findings. "Status" uses one of:
 | Undeployed hosts (grafana, cloudbeaver, minio, label-studio) | Not linked from any UI | — |
 | Palladium console | Outside the repository; own login | RR-212 |
 
+### 3.9 Identity in every rendered frame (first-frame test, 116 scenarios)
+
+| Access point | Scenarios run | Result today | Evidence |
+|---|---|---|---|
+| Public | 12 | LEGACY in 11 (switches to "Palladium" only when the profile loads; stays legacy on slow or failed profile); 404 CLEAN | [frames](dashboard-review-evidence/identity-flash/frames/public-cold-first-frames-bundled-legacy.jpg) |
+| Internal BI | 16 | LEGACY in 15; target never shown; 404 CLEAN | [frame](dashboard-review-evidence/identity-flash/frames/internal-bi-cold-final-shell.jpg) |
+| Admin | 16 | LEGACY in 15; 404 CLEAN | [frame](dashboard-review-evidence/identity-flash/frames/admin-cold-final-shell.jpg) |
+| Workshop | 16 | LEGACY in 15; 404 CLEAN | [frame](dashboard-review-evidence/identity-flash/frames/workshop-cold-final-shell.jpg) |
+| Keycloak (2 realms) | 10 | LEGACY in 8; 404 CLEAN in 2 | [frame](dashboard-review-evidence/identity-flash/frames/keycloak-moh-staff-login.jpg) |
+| dbt-docs | 7 | LEGACY in 6; 1 BLOCKED | [frame](dashboard-review-evidence/identity-flash/frames/dbt-docs-cold.jpg) |
+| Tool gates (5) | 39 | FLASH 9 (the Keycloak page during sign-in); CLEAN 30 (stock tool UI, 404s) | [baseline](dashboard-review-evidence/identity-flash/README.md) |
+
+Total: 116 scenarios (70 LEGACY, 9 FLASH, 36 CLEAN, 1 BLOCKED). The 404s are CLEAN only because they show no identity at all
+(raw JSON or a stock page).
+
 ---
 
 ## 4. Findings register
@@ -343,7 +416,8 @@ Each finding gives:
 
 ### 4.1 Authorisation and governance (A)
 
-**DAP-A01 · S2 · Column Governance: super-admin denied; read gated on write.**
+**DAP-A01 · S2 · [Core] · Column Governance: super-admin denied; read gated on write.**
+- **Evidence:** [`DAP-A01-column-governance-superadmin-403.jpg`](dashboard-review-evidence/screens/DAP-A01-column-governance-superadmin-403.jpg), [`DAP-A01-column-governance-ops-admin-ok.jpg`](dashboard-review-evidence/screens/DAP-A01-column-governance-ops-admin-ok.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [PO][repro]:** super-admin and root see the navigation item. Every classification call returns
   `403 missing capability: manage_classification`.
 - **Two permission planes disagree:**
@@ -375,7 +449,8 @@ Each finding gives:
   - A role without either capability has no navigation item and gets `403` on GET.
   - A seeded mismatch fails the loader test.
 
-**DAP-A02 · S1 · A scoped user's scope is dropped when the data has no matching column (fails open).**
+**DAP-A02 · S1 · [Core] · A scoped user's scope is dropped when the data has no matching column (fails open).**
+- **Evidence:** [`DAP-A02-hiv-director-disease-national-rows.jpg`](dashboard-review-evidence/screens/DAP-A02-hiv-director-disease-national-rows.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - The HIV-locked programme director receives the outbreak register with 95 rows and the signal chart with 530 rows,
     identical to national, while the gateway echoes an applied filter of `programme: [HIV]`.
@@ -399,7 +474,8 @@ Each finding gives:
   - The Oromia user never sees an aggregate computed over other regions.
   - A gateway unit test covers every fetcher × scoped dimension combination.
 
-**DAP-A03 · S2 · SQL tool and listings lack capability checks.**
+**DAP-A03 · S2 · [Core] · SQL tool and listings lack capability checks.**
+- **Evidence:** measurements table (DAP-A03) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro][code]:**
   - The external researcher (no internal-BI access) gets `200` on `/gw/marts` (51 marts) and `/gw/reports/templates`.
   - `/api/sql/execute` has no capability gate.
@@ -418,7 +494,8 @@ Each finding gives:
   - `EXPLAIN ANALYZE` returns `400`.
   - An analyst's CTE query works.
 
-**DAP-A04 · S2 · Tool tiles and tool gates disagree.**
+**DAP-A04 · S2 · [Core] · Tool tiles and tool gates disagree.**
+- **Evidence:** [`DAP-A04-researcher-mlflow.jpg`](dashboard-review-evidence/screens/DAP-A04-researcher-mlflow.jpg), [`DAP-A04-researcher-superset.jpg`](dashboard-review-evidence/screens/DAP-A04-researcher-superset.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - The external researcher gets silent SSO into full MLflow (delete and rename on 12 experiments) and into Superset
     SQL Lab (RR-214).
@@ -432,11 +509,13 @@ Each finding gives:
   - Map Superset roles from Keycloak.
 - **Acceptance:** every visible tile opens without `403` for that role, and the researcher gets `403` at MLflow.
 
-**DAP-A05 · S2 · Audit log readable by every role (and anonymously).**
+**DAP-A05 · S2 · [Core] · Audit log readable by every role (and anonymously).**
+- **Evidence:** release-readiness RR-001 · [index](dashboard-review-evidence/README.md)
 - Re-confirmed: steward.ops gets `200` on `/gw/audit/events`.
 - Tracked as **RR-001**; fix there.
 
-**DAP-A06 · S3 · Minor governance gaps.**
+**DAP-A06 · S3 · [Separate] · Minor governance gaps.**
+- **Evidence:** code and screenshots in the evidence index · [index](dashboard-review-evidence/README.md)
 - Topology and observability authorise on JWT realm roles, not the permission store. `POST /topology/scale` takes the
   namespace from the request body and allows the "read-only" security role (`topology.py:106-111,1105-1130`) [code].
 - Non-human roles (`R-PUB-ANON`, `R-SERVICE`) are assignable to people in Users & Access [repro].
@@ -450,7 +529,8 @@ Each finding gives:
 
 ### 4.2 Functional defects (F)
 
-**DAP-F01 · S2 · Staff apps load profile, reference and map data without the user's token (one root cause, many symptoms).**
+**DAP-F01 · S2 · [Core] · Staff apps load profile, reference and map data without the user's token (one root cause, many symptoms).**
+- **Evidence:** [`DAP-F01-bi-region-selector-all-areas.jpg`](dashboard-review-evidence/screens/DAP-F01-bi-region-selector-all-areas.jpg), [`DAP-F01-bi-disease-as-deployed.jpg`](dashboard-review-evidence/screens/DAP-F01-bi-disease-as-deployed.jpg), [`DAP-F01-bi-disease-with-token-simulated.jpg`](dashboard-review-evidence/screens/DAP-F01-bi-disease-with-token-simulated.jpg), [`DAP-F01-bi-locked-chip-raw-code-OR.jpg`](dashboard-review-evidence/screens/DAP-F01-bi-locked-chip-raw-code-OR.jpg), [`DAP-F01-map-geometry-401-fixture.jpg`](dashboard-review-evidence/screens/DAP-F01-map-geometry-401-fixture.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [PO][repro]**, on every load of internal BI, admin and workshop: 2–4 calls to `/gw/profile`,
   `/gw/profile/reference` and `/gw/profile/copy/common` return `401`. The resulting symptoms:
   - The Region selector offers only "All areas" on all four BI pages for every national role.
@@ -482,7 +562,8 @@ Each finding gives:
   - Both maps draw 14 regions when rows exist.
   - The admin picker lists the regions.
 
-**DAP-F02 · S1 · Missing data rendered as zero or as good news.**
+**DAP-F02 · S1 · [Core] · Missing data rendered as zero or as good news.**
+- **Evidence:** [`DAP-F02-resource-zeros.jpg`](dashboard-review-evidence/screens/DAP-F02-resource-zeros.jpg), [`DAP-F02-service-programme-MNCH-zeros.jpg`](dashboard-review-evidence/screens/DAP-F02-service-programme-MNCH-zeros.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - Resource: "0 commodities at risk of 0 pairs", "0 already in stockout", "Stock availability 0%", "Avg months of
     stock 0 mo", "Stocked out 0", "Wastage 0", "Services exposed 0", "Est. disruption 0".
@@ -507,7 +588,8 @@ Each finding gives:
   - With programme = MNCH, no Service card shows 0 derived from NULL.
   - A widget mapper unit test with NULL fixtures shows "—", never 0, "Steady" or "watch".
 
-**DAP-F03 · S1 · Fabricated fallback content on failure.**
+**DAP-F03 · S1 · [Core] · Fabricated fallback content on failure.**
+- **Evidence:** measurements table (DAP-F03) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro][code]:**
   - Public KPI tiles fall back to profile `fallback_kpis` / `KPIS_FALLBACK` (e.g. Penta3 40%, against a live 96.9%).
   - Region bars fall back to a hard-coded 14-region set.
@@ -530,7 +612,8 @@ Each finding gives:
   - A CI grep over source **and built bundles** finds no `Math.random`, `FALLBACK`, numeric `DEFAULTS`, `EPSS` or
     `Ayder`.
 
-**DAP-F04 · S2 · Errors shown as "no data" and cached for the session.**
+**DAP-F04 · S2 · [Core] · Errors shown as "no data" and cached for the session.**
+- **Evidence:** [`DAP-F04-D01-geographic-risk-502-as-no-data.jpg`](dashboard-review-evidence/screens/DAP-F04-D01-geographic-risk-502-as-no-data.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - A `502` (missing table) renders "No geographic surveillance data for the selected filters" or "No source-quality
     rows".
@@ -553,7 +636,8 @@ Each finding gives:
   - A retry recovers without a reload.
   - No response body contains SQL or Trino text.
 
-**DAP-F05 · S2 · Column Governance shows "nothing classified" when it does not know.**
+**DAP-F05 · S2 · [Core] · Column Governance shows "nothing classified" when it does not know.**
+- **Evidence:** [`DAP-F05-classified-loading-simulated.jpg`](dashboard-review-evidence/screens/DAP-F05-classified-loading-simulated.jpg), [`DAP-F05-classified-403-simulated.jpg`](dashboard-review-evidence/screens/DAP-F05-classified-403-simulated.jpg), [`DAP-F05-classified-500-simulated.jpg`](dashboard-review-evidence/screens/DAP-F05-classified-500-simulated.jpg), [`DAP-F05-classified-abort-simulated.jpg`](dashboard-review-evidence/screens/DAP-F05-classified-abort-simulated.jpg), [`DAP-F05-classified-empty200-simulated.jpg`](dashboard-review-evidence/screens/DAP-F05-classified-empty200-simulated.jpg), [`DAP-F05-review-500-simulated.jpg`](dashboard-review-evidence/screens/DAP-F05-review-500-simulated.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:** using request interception as hana.d, the header reads "nothing classified" while loading, on
   `403`, on `500` and on network abort. The Review tab stays on "scanning…" after an error, and access denial shows as
   a raw JSON string.
@@ -565,26 +649,30 @@ Each finding gives:
 - **Acceptance:** for held, `403`, `500` and abort, the page never contains "nothing classified" and never shows
   "scanning…" after a response arrives. Only an empty `200` shows the empty message.
 
-**DAP-F06 · S2 · Detection-model selector offers models that are broken, and the rest of the page ignores the choice.**
+**DAP-F06 · S2 · [Core] · Detection-model selector offers models that are broken, and the rest of the page ignores the choice.**
+- **Evidence:** [`DAP-D02-signal-ears.jpg`](dashboard-review-evidence/screens/DAP-D02-signal-ears.jpg), [`DAP-D02-signal-ewars-csd.jpg`](dashboard-review-evidence/screens/DAP-D02-signal-ewars-csd.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [PO][repro]:**
   - All four options are selectable and all three model defects in DAP-D02 render as if valid.
   - The KPI strip, map and woreda table never send a model and always show EARS ("Model ears").
   - The selection resets on redraw.
   - The chart caption does not name the model.
 - **Resolution:**
-  - Serve the list of selectable models from the gateway, filtered by an acceptance check on the latest run:
-    - predicted ≠ observed;
-    - history ≥ 104 weeks for same-week models;
-    - climate inputs non-null for EWARS-CSD.
-  - Disabled options carry a reason, e.g. "Withheld: needs two full seasons of history".
+  - Serve the list of selectable models from the gateway. A model is offered only when its latest run passed that
+    method's own behaviour checks (DAP-D02), and its inputs exist:
+    - same-week-of-previous-years methods need the same week in earlier years;
+    - EWARS-CSD needs climate inputs.
+  - Otherwise the option is disabled, with the method's own reason, e.g. "Withheld: no earlier years of this week to
+    compare against" or "Withheld: no climate data".
   - Either share the choice across the page, or label the other widgets with the fixed model.
   - Put the model name and run date in the caption.
 - **Acceptance:**
-  - Every enabled option produces a chart whose expected line differs from observed in at least 90% of weeks.
-  - Every disabled option shows its reason.
+  - Every enabled option's latest run passed the DAP-D02 behaviour checks, and the gateway refuses to offer one that
+    did not.
+  - Every disabled option shows its method-specific reason.
   - The KPI strip names the same model as the chart.
 
-**DAP-F07 · S3 · Model select can display a stale chart.**
+**DAP-F07 · S3 · [Core] · Model select can display a stale chart.**
+- **Evidence:** [`DAP-F07-model-select-stale-chart-simulated-delay.jpg`](dashboard-review-evidence/screens/DAP-F07-model-select-stale-chart-simulated-delay.jpg), [`DAP-F07-farrington-baseline.jpg`](dashboard-review-evidence/screens/DAP-F07-farrington-baseline.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:** with Farrington delayed, picking Seasonal-naive leaves the select on "Seasonal-naive" over the
   Farrington series. The assistant's copy of widget data can also keep stale rows.
 - **Cause:** `dz-signal-chart/widget.ts:63-87` has no request guard. `PageRenderer.ts:136` records without a
@@ -593,7 +681,8 @@ Each finding gives:
 - **Acceptance:** a delayed earlier response never replaces the newer selection on screen or in the assistant registry.
 - Note: global filter changes are already safe on screen; this was tested.
 
-**DAP-F08 · S2 · Filter option values do not match the data keys.**
+**DAP-F08 · S2 · [Core] · Filter option values do not match the data keys.**
+- **Evidence:** measurements table (DAP-F08) · [index](dashboard-review-evidence/README.md)
 - **Programme [repro]:** the "Programme" list merges programme codes with disease keys (28–29 options, "Malaria"
   twice).
   - On Disease only 3 options can return rows (`cholera` returns 0), and two real programmes (VBD, WASH) cannot be
@@ -610,11 +699,14 @@ Each finding gives:
   - Separate disease from programme.
   - Pick one commodity key and assert it in a contract test.
 - **Acceptance:**
-  - Every offered option returns at least one row, or is not offered.
-  - No duplicate labels.
-  - Option values equal `SELECT DISTINCT` of the mart key.
+  - For each filter on each page, the offered option values are **exactly** the distinct key values present in that
+    page's data within the user's permitted scope. This is a set-equality test against `SELECT DISTINCT` under the
+    same scope.
+  - Each label appears once.
+  - Selecting any option sends that key unchanged.
 
-**DAP-F09 · S2 · Filters hide the widgets the user asked about.**
+**DAP-F09 · S2 · [Core] · Filters hide the widgets the user asked about.**
+- **Evidence:** [`DAP-F09-service-MNCH-cascades-hidden.jpg`](dashboard-review-evidence/screens/DAP-F09-service-MNCH-cascades-hidden.jpg), [`DAP-F09-resource-period-hides-8.jpg`](dashboard-review-evidence/screens/DAP-F09-resource-period-hides-8.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - Service + MNCH hides **all four** cascades, including MNCH's own, plus agreement and data-trust.
   - Resource + any period hides 8 of 11 cards.
@@ -629,7 +721,8 @@ Each finding gives:
   - Service + MNCH shows the MNCH cascade.
   - Resource + Last 12 weeks keeps every card with time-insensitive data visible, with a note.
 
-**DAP-F10 · S3 · Map clicks neither filter nor drill down.**
+**DAP-F10 · S3 · [Core] · Map clicks neither filter nor drill down.**
+- **Evidence:** [`DAP-F10-F11-resource-map-click-fixture.jpg`](dashboard-review-evidence/screens/DAP-F10-F11-resource-map-click-fixture.jpg), [`DAP-F10-disease-map-click-fixture.jpg`](dashboard-review-evidence/screens/DAP-F10-disease-map-click-fixture.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [PO][fixture]:**
   - Resource map: a click updates only the card's own info strip. No request; chips unchanged.
   - Disease map: a click loads only a sparkline, although the section copy promises "worst-affected woredas".
@@ -640,7 +733,8 @@ Each finding gives:
 - **Acceptance:** the behaviour matches the copy. If filtering, clicking Amhara sets the chip and the woreda table
   refetches with `geography=AM`.
 
-**DAP-F11 · S3 · Maps draw missing data as zero.**
+**DAP-F11 · S3 · [Core] · Maps draw missing data as zero.**
+- **Evidence:** [`DAP-F10-F11-resource-map-click-fixture.jpg`](dashboard-review-evidence/screens/DAP-F10-F11-resource-map-click-fixture.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [fixture]:** a region with no data, a NULL region and a genuine zero share the lightest colour. The NULL
   region reads "Composite 0.0", "Low burden", "P(alarm) 0%".
 - **Cause:** `_shared/charts.ts` `valFor` defaults to 0; `?? 0` in `rm-map` and `dz-region-map`.
@@ -649,7 +743,8 @@ Each finding gives:
 - **Acceptance:** in the fixture, null and absent regions render grey with "No data", and a zero renders the zero colour
   with "0".
 
-**DAP-F12 · S1 · Public open-data catalogue is invented, and its previews show the wrong files.**
+**DAP-F12 · S1 · [Core] · Public open-data catalogue is invented, and its previews show the wrong files.**
+- **Evidence:** [`DAP-F12-public-open-data.jpg`](dashboard-review-evidence/screens/DAP-F12-public-open-data.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - `/api/proxy/catalogue` returns `404`, so 12 fallback datasets display, with fake DOIs, download counts and "all
     1,148 woredas".
@@ -669,7 +764,8 @@ Each finding gives:
   - Every download returns a non-empty file whose row count equals the listed count.
   - A missing manifest shows no dataset rows.
 
-**DAP-F13 · S3 · Health & topology: error states and two weak signals.**
+**DAP-F13 · S3 · [Core] · Health & topology: error states and two weak signals.**
+- **Evidence:** [`DAP-E09-health-topology.jpg`](dashboard-review-evidence/screens/DAP-E09-health-topology.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed:**
   - [code] A failed `/infra` or `/cluster` request leaves the cards on "loading…" forever, or keeps old data labelled
     "live". A traffic failure reads as "no traffic".
@@ -680,16 +776,21 @@ Each finding gives:
   - Count error-level lines only, excluding Loki query logs.
 - **Acceptance:**
   - A simulated `500` on `/cluster` shows an error badge within one poll.
-  - The Loki error count stays flat across 10 polls.
+  - The error count for a node equals an independent count of error-level log lines for that workload over the same
+    window, excluding the log store's own query logs.
 
-**DAP-F14 · S2 · Probability shown as "1%" instead of 100%.**
+**DAP-F14 · S2 · [Core] · Probability shown as "1%" instead of 100%.**
+- **Evidence:** [`DAP-F14-woreda-table-palarm-1pct.jpg`](dashboard-review-evidence/screens/DAP-F14-woreda-table-palarm-1pct.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:** the woreda table and the Overview act-first table print P(alarm) 1.000 as "1%" and 0.707 as
   "0.707%". The ≥60 alert colour can never fire.
 - **Cause:** `_shared/charts.ts:242` appends "%" without scaling.
-- **Resolution:** scale ×100, or format as a probability band (also see DAP-E10).
-- **Acceptance:** the top row reads "100%" (or "≥95%" under the banding rule) and is coloured as an alert.
+- **Resolution:** display probability × 100 as a percentage.
+- **Acceptance:**
+  - A unit test over 0, 0.5 and 1.0 renders "0%", "50%" and "100%".
+  - The alert colour applies to the same values the action-priority rule treats as an alarm.
 
-**DAP-F15 · S2 · Admin operational pages present placeholders or stale state as working.**
+**DAP-F15 · S2 · [Core] · Admin operational pages present placeholders or stale state as working.**
+- **Evidence:** [`DAP-F15-alert-routing.jpg`](dashboard-review-evidence/screens/DAP-F15-alert-routing.jpg), [`DAP-F15-quality-lineage.jpg`](dashboard-review-evidence/screens/DAP-F15-quality-lineage.jpg), [`DAP-F15-models-datasets.jpg`](dashboard-review-evidence/screens/DAP-F15-models-datasets.jpg) · [index](dashboard-review-evidence/README.md)
 - **Alert routing [code][repro]:** 7 routing rules (PagerDuty, Slack, `@moh.gov.et` addresses) are displayed and
   editable, but nothing consumes them. Edits need only the read capability.
 - **False alerts [repro]:** 3 `TargetDown` alerts have fired since 2026-09-26 for services that are up (scrape
@@ -709,7 +810,8 @@ Each finding gives:
   - No false `TargetDown`.
   - With no artefact the DQ card is amber and names the cause.
 
-**DAP-F16 · S3 · Labels, counts and links that contradict the data.**
+**DAP-F16 · S3 · [Core] · Labels, counts and links that contradict the data.**
+- **Evidence:** [`DAP-F16-kpi-strip-clipped.jpg`](dashboard-review-evidence/screens/DAP-F16-kpi-strip-clipped.jpg), [`DAP-F16-workshop-public-site-link.jpg`](dashboard-review-evidence/screens/DAP-F16-workshop-public-site-link.jpg) · [index](dashboard-review-evidence/README.md)
 - **Disease outbreaks table [repro]:** "95 active outbreaks" when 7 are active.
 - **Disease KPI strip [repro]:**
   - "Case fatality · 30D" is computed over 28 days.
@@ -727,7 +829,8 @@ Each finding gives:
   - No `href="#"`.
   - Every admin heading equals its navigation label.
 
-**DAP-F17 · S2 (at deploy time) · Control Tower repository UI and live gateway are incompatible.**
+**DAP-F17 · S2 (at deploy time) · [Core] · Control Tower repository UI and live gateway are incompatible.**
+- **Evidence:** code only · [index](dashboard-review-evidence/README.md)
 - **Observed [code]:** the repository `KpiCards.tsx` needs `kpis[].month`, which the live `ct.py` omits. Shipping the
   UI before the gateway turns all four stock-health cards to "no data".
 - **Resolution:** deploy the gateway first, or both together (RR-004).
@@ -735,7 +838,8 @@ Each finding gives:
 
 ### 4.3 Data availability and correctness (D)
 
-**DAP-D01 · S1 · Data-quality mart never built: Geographic Risk and Source Pulse blank.**
+**DAP-D01 · S1 · [Core] · Data-quality mart never built: Geographic Risk and Source Pulse blank.**
+- **Evidence:** [`DAP-F04-D01-geographic-risk-502-as-no-data.jpg`](dashboard-review-evidence/screens/DAP-F04-D01-geographic-risk-502-as-no-data.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:** `bi_quality.mart_data_quality` does not exist. Every query that references it fails:
   - the Disease map's main query (a reliability join), which blanks the whole widget;
   - `ov-source-pulse`;
@@ -748,10 +852,16 @@ Each finding gives:
 - **Resolution:**
   - Build it, tolerating empty upstream sources.
   - Make the reliability join optional, so one missing input cannot blank the widget.
-- **Acceptance:** `dz-region-map` returns `200` with ≥ 13 rows; the map shades; the side card shows numeric P(alarm),
-  cases and CFR; source pulse renders.
+- **Acceptance:**
+  - `dz-region-map` returns `200` with exactly one row for every region that has surveillance data in the window
+    (equal to `count(DISTINCT region_id)` in the surveillance mart for the same filters).
+  - Regions without data are drawn as "No data".
+  - The side card shows numeric P(alarm), cases and CFR.
+  - Source pulse renders a row for every source the data-quality mart tracks.
+  - With the reliability input missing, the map still renders and reliability reads "not available".
 
-**DAP-D02 · S1 · Disease detection models produce degenerate output.**
+**DAP-D02 · S1 · [Core] · Disease detection models produce degenerate output.**
+- **Evidence:** [`DAP-D02-signal-ears.jpg`](dashboard-review-evidence/screens/DAP-D02-signal-ears.jpg), [`DAP-D02-signal-farrington.jpg`](dashboard-review-evidence/screens/DAP-D02-signal-farrington.jpg), [`DAP-D02-signal-seasonal.jpg`](dashboard-review-evidence/screens/DAP-D02-signal-seasonal.jpg), [`DAP-D02-signal-ewars-csd.jpg`](dashboard-review-evidence/screens/DAP-D02-signal-ewars-csd.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
 
   | Model | Defect |
@@ -770,17 +880,29 @@ Each finding gives:
   - Separately, the chart's national alarm is `max(alarm_flag)` over 44 woredas against a *summed* threshold
     (`fetchers.py:366-372`).
 - **Resolution:**
-  - Count seasons (≥ 104 weeks), or use the rolling-window branch.
+  - Base each method on what it is defined to use:
+    - same-week methods use only the same ISO week in **earlier** years, and report "insufficient history" when none
+      exists;
+    - the rolling method uses only the weeks **before** the target week.
   - Compute the national alarm on the aggregated series, or plot "woredas in alarm" separately.
-  - Add a runner check that refuses to publish degenerate output (share of |predicted − observed| < 1 above 10%).
+  - Add behaviour tests to the model packages, and have the runner refuse to publish a run that fails them (below).
   - Retrain.
   - Until then, the models are withheld per DAP-F06.
-- **Acceptance:**
-  - For the latest run, fewer than 10% of rows have predicted = observed.
-  - No step change at the year boundary for seasonal.
-  - No flagged week where observed ≤ the plotted threshold.
+- **Acceptance (behaviour, not thresholds):**
+  - **No look-ahead.** Changing the observed count of week *t* leaves the expected value for week *t* (and earlier)
+    unchanged, for every method. This is a unit test on a fixture series.
+  - **Known answers:**
+    - on a constant series, the expected value equals the constant and nothing is flagged;
+    - on a series with one injected spike, the spike week is flagged and the baseline weeks are not;
+    - for seasonal, a series with a repeating yearly pattern is reproduced, with no step at the year boundary.
+  - **Missing history is a state, not a value.** A week whose method has no qualifying history returns "insufficient
+    history", and the chart shows a gap with that reason.
+  - **Alarm consistency.** The national alarm flag for a week is true exactly when the aggregated observed count
+    exceeds the aggregated threshold plotted for that week (unit test on the fetcher).
+  - **Runner gate.** A run that fails any of these tests is not published.
 
-**DAP-D03 · S1 · Reference vocabulary never loaded: every service metric is programme `OTHER`, and the cascades are arithmetically corrupt.**
+**DAP-D03 · S1 · [Core] · Reference vocabulary never loaded: every service metric is programme `OTHER`, and the cascades are arithmetically corrupt.**
+- **Evidence:** [`DAP-D03-D07-service-page.jpg`](dashboard-review-evidence/screens/DAP-D03-D07-service-page.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - `nhdw_ref.source_to_concept_map` and `nhdw_ref.concept` hold 0 rows.
   - All 547,965 HMIS rows and all 828 cascade rows carry programme `OTHER`.
@@ -805,12 +927,17 @@ Each finding gives:
   - Stop silently dropping zero steps (`_shared/cascade.ts:20`).
   - One programme resolution for every mart.
 - **Acceptance:**
-  - ≥ 4 distinct programmes in the cascade mart.
-  - Each cascade widget renders 3–4 non-increasing steps.
-  - The HIV director sees HIV data.
-  - The brief names a real programme.
+  - Every DHIS2 element's `programme_id` equals the programme the reference vocabulary assigns to it (a join test
+    over all elements, no exceptions).
+  - Each cascade step is computed within its own programme.
+  - A step defined as a subset of its predecessor never exceeds it.
+  - Retention divides by the same programme's entry step. This is a fixture test with hand-computed answers, e.g.
+    ANC4/ANC1 = 103,053 / 178,938 = 57.6% for OR 2025.
+  - The HIV director sees HIV rows.
+  - The brief names the programme it actually computed.
 
-**DAP-D04 · S2 · Supply (HCMIS), mBrana and climate sources never landed.**
+**DAP-D04 · S2 · [Core] · Supply (HCMIS), mBrana and climate sources never landed.**
+- **Evidence:** [`DAP-D04-disease-full-climate.jpg`](dashboard-review-evidence/screens/DAP-D04-disease-full-climate.jpg), [`DAP-F02-resource-zeros.jpg`](dashboard-review-evidence/screens/DAP-F02-resource-zeros.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:** 0 rows from source to marts. This affects:
   - 9 of 11 Resource widgets;
   - readiness on the Disease map, the woreda table and the Overview reliability table;
@@ -824,18 +951,24 @@ Each finding gives:
 - **Acceptance:** each affected widget shows either real values or "Source not connected"; never zeros, empty legends
   or "healthy" copy.
 
-**DAP-D05 · S2 · Woreda identifiers do not match across sources.**
+**DAP-D05 · S2 · [Core] · Woreda identifiers do not match across sources.**
+- **Evidence:** measurements table · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:** surveillance woredas use synthetic ids (`WOR-AA-…`), the HMIS data uses DHIS2 ids. They share
   0 of 44 ids while all 44 names match, so woreda reliability is NULL everywhere.
 - **Resolution:** join through a governed master-data woreda crosswalk.
-- **Acceptance:** ≥ 40 of 44 woredas show reliability.
+- **Acceptance:**
+  - Every surveillance woreda with a crosswalk entry shows reliability.
+  - Every woreda without an entry is listed with its reason and shows "not available".
+  - The number of woredas with reliability equals the number of crosswalk matches.
 
-**DAP-D06 · S3 · Plausibility check needed on woreda incidence.**
+**DAP-D06 · S3 · [Separate] · Plausibility check needed on woreda incidence.**
+- **Evidence:** Trino replay · [index](dashboard-review-evidence/README.md)
 - Up to 5,229.9 per 100,000 over 12 weeks (Nedjo Rural), against a regional maximum of 69.6.
 - `[hyp]` The woreda population denominators do not fit the demo case volumes.
 - **Acceptance:** documented denominators and a plausibility range before any figure is cited.
 
-**DAP-D07 · S1 · Metric semantics: labels do not describe the numbers.**
+**DAP-D07 · S1 · [Core] · Metric semantics: labels do not describe the numbers.**
+- **Evidence:** [`DAP-D03-D07-service-page.jpg`](dashboard-review-evidence/screens/DAP-D03-D07-service-page.jpg), [`DAP-D07-overview.jpg`](dashboard-review-evidence/screens/DAP-D07-overview.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - **Service "coverage" is a reporting rate** (`mart_hmis_indicator_coverage.sql:156-158`). MMR, stunting and
     malaria incidence show "98.7% on_track".
@@ -861,7 +994,8 @@ Each finding gives:
   - Same label → same value for the same scope.
   - Each label's thresholds and period equal the SQL (unit test).
 
-**DAP-D08 · S2 · Values that bypass the pipeline are labelled as observed.**
+**DAP-D08 · S2 · [Core] · Values that bypass the pipeline are labelled as observed.**
+- **Evidence:** code and SQL (see index) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - MNCH continuity and drop-off read a seeded table through a hand-written view with `period_month = '2026-Q1'` fixed
     (`3_storage/postgres/init/03_program_demo.sql`, `bi_programme.mnch_coverage_v`). They are labelled
@@ -879,7 +1013,8 @@ Each finding gives:
 
 ### 4.4 Configuration and branding (B)
 
-**DAP-B01 · S2 · Raw template tokens on the public page.**
+**DAP-B01 · S2 · [Core] · Raw template tokens on the public page.**
+- **Evidence:** [`DAP-B01-B02-public-home.jpg`](dashboard-review-evidence/screens/DAP-B01-B02-public-home.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [PO][repro]:** the copy API returns `hero.strip_owner = "Palladium · {ministry.native_name}"` and
   `hero.headline_native = "{platform.native_name}"`.
 - **Cause:**
@@ -902,7 +1037,8 @@ Each finding gives:
   - `curl …/api/proxy/profile/copy/public | grep -c '{'` = 0 for every installed profile.
   - The resolver check reports 0 unresolved and 0 dangling separators.
 
-**DAP-B02 · S2 · Public branding hierarchy.**
+**DAP-B02 · S2 · [Core] · Public branding hierarchy.**
+- **Evidence:** [`DAP-B01-B02-public-home.jpg`](dashboard-review-evidence/screens/DAP-B01-B02-public-home.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [PO][repro]:** "Palladium" appears 6 times: header wordmark, header tag, strip, footer brand, footer owner,
   and "official press releases from Palladium". That last one is a false attribution; the Zambian profile would say
   "from the Palladium".
@@ -911,13 +1047,14 @@ Each finding gives:
 - **Resolution:**
   - A separate `brand` block in the profile (product, attribution, logo).
   - `ministry` stays the data owner.
-  - Apply the hierarchy in §6.2.
+  - Apply the hierarchy in §7.2.
 - **Acceptance:**
   - A text scan of the public home finds "Palladium" exactly once, inside "Powered by Palladium", directly beneath
     "Data Intelligence Platform" in the header.
   - The newsroom names the ministry.
 
-**DAP-B03 · S2 · Staff apps and backends show "NHDW", "National Health Data Warehouse", "FMoH Ethiopia".**
+**DAP-B03 · S2 · [Core] · Staff apps and backends show "NHDW", "National Health Data Warehouse", "FMoH Ethiopia".**
+- **Evidence:** [`internal-bi-cold-final-shell.jpg`](dashboard-review-evidence/identity-flash/frames/internal-bi-cold-final-shell.jpg), [`admin-cold-final-shell.jpg`](dashboard-review-evidence/identity-flash/frames/admin-cold-final-shell.jpg), [`workshop-cold-final-shell.jpg`](dashboard-review-evidence/identity-flash/frames/workshop-cold-final-shell.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - Sidebar wordmark "NHDW".
   - Page titles "NHDW Internal BI · Federal Ministry of Health · Ethiopia" and "NHDW Workshop · … · FMoH Ethiopia".
@@ -927,20 +1064,22 @@ Each finding gives:
   - FastAPI titles "NHDW …" on public `/docs`.
   - Hard-coded "Ethiopia's regions" and "Of 14 regions".
 - **Cause:** static `index.html` titles and literals. The profile could not reach the staff apps anyway (DAP-F01).
-- **Resolution:** after DAP-F01, read every title and brand string from the profile, with the title pattern in §6.2.
+- **Resolution:** after DAP-F01, read every title and brand string from the profile, with the title pattern in §7.2.
 - **Acceptance:**
   - No "NHDW", "National Health Data Warehouse", "Federal Ministry" or "FMoH" in any user-facing text or `<title>` on
     the audited hosts.
   - With `zm-v1` active, no "Ethiopia", "14 regions" or "woreda" on BI pages.
 
-**DAP-B04 · S3 · Sidebar footer "NHDW v1.0 · PROD" has no backing.**
+**DAP-B04 · S3 · [Core] · Sidebar footer "NHDW v1.0 · PROD" has no backing.**
+- **Evidence:** [`internal-bi-cold-final-shell.jpg`](dashboard-review-evidence/identity-flash/frames/internal-bi-cold-final-shell.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [PO][repro]:** hard-coded at `internal-bi/ui/src/sections/Sidebar.tsx:77-81`. Nothing backs it: every
   image is the mutable `1.0.0`, there are no image labels, no version or environment variable, and `/health` has no
   version field.
 - **Resolution:** remove it. Reintroduce it only from a build-SHA / environment endpoint (RR-004).
 - **Acceptance:** the sidebar contains no version, environment or "NHDW" text.
 
-**DAP-B05 · S3 · Keycloak login shows three identities.**
+**DAP-B05 · S3 · [Core] · Keycloak login shows three identities.**
+- **Evidence:** [`DAP-B05-keycloak-login.jpg`](dashboard-review-evidence/screens/DAP-B05-keycloak-login.jpg), [`keycloak-moh-staff-login.jpg`](dashboard-review-evidence/identity-flash/frames/keycloak-moh-staff-login.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:** "Sign in to Palladium" (realm display name set by hand on the live system; the seed still says
   "Ethiopia NHDW") + "National Health Data Warehouse" + "Federal Ministry of Health · Ethiopia" + the ministry emblem
   + "you@moh.gov.et".
@@ -950,7 +1089,8 @@ Each finding gives:
 - **Acceptance:** the login page shows "Data Intelligence Platform" and "Powered by Palladium", with no "National Health
   Data Warehouse" and no "Federal Ministry". A reseed does not change it.
 
-**DAP-B06 · S2 · The "product icon" is the Ethiopian Ministry of Health emblem.**
+**DAP-B06 · S2 · [Core] · The "product icon" is the Ethiopian Ministry of Health emblem.**
+- **Evidence:** [`public-cold-first-frames-bundled-legacy.jpg`](dashboard-review-evidence/identity-flash/frames/public-cold-first-frames-bundled-legacy.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - The public header and footer, the favicons of all four apps and the Keycloak logo are all `logo-fmoh.png`
     (identical file), whitened by CSS in the public header.
@@ -964,7 +1104,8 @@ Each finding gives:
 - **Acceptance:** public, BI, admin and workshop headers and favicons all show the agreed asset, and no non-Ethiopian
   profile requests `logo-fmoh.png`.
 
-**DAP-B07 · S2 · Brand and profile source of truth live outside git; two "active profile" pointers disagree.**
+**DAP-B07 · S2 · [Core] · Brand and profile source of truth live outside git; two "active profile" pointers disagree.**
+- **Evidence:** code and host-file diff · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - `/opt/nhdw-state/ACTIVE` = `et-v3` and wins; `/opt/nhdw-profiles/ACTIVE` = `zm-v1`. Deleting the first flips the
     deployment to Zambia.
@@ -972,13 +1113,15 @@ Each finding gives:
 - **Resolution:** commit the profile; keep one pointer (RR-011).
 - **Acceptance:** `diff -r bundle/profiles /opt/nhdw-profiles` is empty, and exactly one ACTIVE file exists.
 
-**DAP-B08 · S3 · Title clean-up deletes scope and period.**
+**DAP-B08 · S3 · [Core] · Title clean-up deletes scope and period.**
+- **Evidence:** code only · [index](dashboard-review-evidence/README.md)
 - **Observed [code]:** `PageRenderer.ts:305-311` strips trailing parentheses. "Maternal & Newborn Continuity of Care
   **(EMR-active)**" loses its scope; "Disease Snapshot **(This Week)**" loses its period.
 - **Resolution:** explicit `scope` / `period` catalogue fields, rendered as chips.
 - **Acceptance:** both chips are visible on their cards.
 
-**DAP-B09 · S2 · Admin shows placeholder configuration as real.**
+**DAP-B09 · S2 · [Core] · Admin shows placeholder configuration as real.**
+- **Evidence:** [`DAP-B09-sso-identity-placeholders.jpg`](dashboard-review-evidence/screens/DAP-B09-sso-identity-placeholders.jpg), [`DAP-B09-documentation-base-domain.jpg`](dashboard-review-evidence/screens/DAP-B09-documentation-base-domain.jpg), [`DAP-B09-mdm-mixed-profiles.jpg`](dashboard-review-evidence/screens/DAP-B09-mdm-mixed-profiles.jpg) · [index](dashboard-review-evidence/README.md)
 - **Observed [repro]:**
   - **SSO & identity:** Google "active" with `TODO_GOOGLE_CLIENT_ID`; Fayda "active" with issuer
     `http://localhost:8096`; "EHIA SAML Federation (mock)" active. The real login pages offer only "Continue with EHIA".
@@ -995,20 +1138,127 @@ Each finding gives:
 - **Acceptance:** a text scan of admin finds no `TODO`, `localhost`, `127.0.0.1` or "mock". Every "active" provider
   appears on the realm login page.
 
+**DAP-B10 · S1 · [Core] · Legacy product identity appears on every access point, in every state, on every profile.**
+- **Evidence:** [legacy-identity inventory](dashboard-review-evidence/legacy-identity-inventory.md) (99 rows, LB-001…LB-152) · [first-frame frames](dashboard-review-evidence/identity-flash/README.md)
+- **Observed [repro]:** the legacy identity ("NHDW", "National Health Data Warehouse", "Federal Ministry of Health" /
+  "FMoH" as brand, the `logo-fmoh.png` emblem as product icon) appears in each of these states:
+
+  | State | What is shown |
+  |---|---|
+  | Static HTML | `<title>` and favicon of public, internal BI, admin, workshop and dbt-docs. No code ever sets `document.title` |
+  | Loading / sign-in splash | "NHDW / Signing you in…" (BI, admin, workshop), on every load and every token renewal |
+  | Bundled fallback profile | Public: "NHDW", "Federal Ministry of Health · Ethiopia", Amharic lines, emblem. Staff apps: "NHDW" / "National Health Data Warehouse". Gateway fallback manifest: "NHDW" |
+  | Authenticated shell | Sidebar "NHDW", "NHDW v1.0 · PROD / National Health Data Warehouse", "NHDW ›", "NHDW Assistant", workshop footer "… · NHDW / Ministry of Health" |
+  | Login, logout, expired, error (Keycloak) | Emblem + "National Health Data Warehouse" + "Federal Ministry of Health · Ethiopia" on login, auth error, logout confirm, "Page has expired", "Cookie not found", reset and OTP pages, both realms |
+  | Sign-in failure | `<title>` "Sign-in didn't complete: NHDW" (three apps) |
+  | Session expiry | Splash "NHDW", then the Keycloak page above (there is no app-specific expiry screen) |
+  | Public modals | "Request NHDW access", "FMoH staff", "FMoH data use agreement", "FMoH IT team", `@moh.gov.et` placeholder |
+  | E-mails | "Your NHDW access is ready", "access to the Ethiopia National Health Data Warehouse", "[NHDW alert]", admin previews with `nhdw.local`, Keycloak sender "Ethiopia NHDW" |
+  | API docs | "NHDW Gateway", "NHDW — Public Dashboard", "NHDW Internal BI / Admin / Workshop", "NHDW tool-gate · …" (publicly reachable) |
+  | Export / report files | Citation line "NHDW · {mart} · exported by …" |
+  | dbt-docs | Title and top bar "NHDW · Data lineage" |
+  | Profiles in git | Repository profiles still say NHDW / (Federal) Ministry of Health, so a deploy from git restores them |
+
+- **Every profile is affected.** All of the above is hard-coded or bundled, so the Zambia profile shows the same legacy
+  identity. 20 further items hard-code Ethiopian context and would show on Zambia, including:
+  - the public `<title>`;
+  - the emblem, through the bundled merge;
+  - the Articles intro;
+  - the Fayda access form;
+  - "All Ethiopia (national)";
+  - the Keycloak footer;
+  - the onboarding e-mail;
+  - newsroom articles not filtered by profile.
+
+  See the inventory, §5 of that file.
+- **Cause [code]:** identity is written in five places that never consult the profile:
+  - static `index.html`;
+  - splash components;
+  - bundled defaults;
+  - Keycloak theme literals;
+  - e-mail and API strings.
+
+  In addition, the staff apps cannot read the profile at all (DAP-F01).
+- **Resolution (Core):**
+  1. **The bundled identity in every app is the target identity:** "Data Intelligence Platform", "Powered by Palladium",
+     the new mark. It is country-neutral and used in `index.html`, the splash, the auth-error title, the shell
+     fallback and the public `BUNDLED`.
+  2. The profile adds only deployment context (country), never product identity.
+  3. Keycloak theme and seed strings, realm display names and client names use the target identity.
+  4. E-mail templates and API titles likewise.
+  5. Ship the new mark under a **new file name** (browsers cache favicons).
+  6. Commit the agreed profiles.
+  7. Scope newsroom articles by profile.
+  8. Technical identifiers stay (§7.4).
+- **Acceptance (observable, every profile):**
+  - The first-frame harness (DAP-B11) exits 0 for every host and scenario, run once with `et-v3` and once with `zm-v1`
+    active (in a non-shared environment, or a maintenance window).
+  - A text scan of every built bundle, `index.html`, Keycloak theme, e-mail template and API title finds no legacy
+    pattern outside the don't-rename identifiers.
+  - Each rendered e-mail template (approval, alert, Keycloak execute-actions) shows the target identity.
+  - Export files cite "Data Intelligence Platform".
+
+**DAP-B11 · S1 · [Core] · The old identity is visible from the first rendered frame.**
+- **Evidence:** [first-frame baseline and harness](dashboard-review-evidence/identity-flash/README.md) · frames: [`public-cold-first-frames-bundled-legacy.jpg`](dashboard-review-evidence/identity-flash/frames/public-cold-first-frames-bundled-legacy.jpg), [`public-profile-500-legacy-stays.jpg`](dashboard-review-evidence/identity-flash/frames/public-profile-500-legacy-stays.jpg), [`internal-bi-cold-final-shell.jpg`](dashboard-review-evidence/identity-flash/frames/internal-bi-cold-final-shell.jpg), [`internal-bi-expired-session.jpg`](dashboard-review-evidence/identity-flash/frames/internal-bi-expired-session.jpg)
+- **Observed [repro]:** 116 scenarios were sampled on every animation frame (title, favicon, visible text, images),
+  with a screencast and video. The scenarios were: cold, SSO, reload, hard reload, deep link, in-app navigation, slow
+  profile (5 s), aborted and 500 profile, warm cache, new-asset deploy, failed bundle, expired session, sign-in error,
+  forbidden, Keycloak error, 404.
+
+  | Status | Count | Where |
+  |---|---|---|
+  | LEGACY | 70 | public, internal BI, admin, workshop, both Keycloak realms, dbt-docs (every applicable scenario except 404s) |
+  | FLASH | 9 | tool gates (Keycloak page, then the stock tool) |
+  | CLEAN | 36 | gated tools after sign-in (30), raw 404s (6) |
+  | BLOCKED | 1 | dbt-docs 404 hang (DAP-F19) |
+
+  Counts are taken from the harness's own summary files.
+
+  - The first legacy frame appears at about 20–190 ms.
+  - **Public** paints the bundled legacy masthead and switches when the profile arrives (about 250 ms; 5.2 s under a
+    slow profile). It **keeps the legacy identity permanently** if the profile request fails.
+  - **BI, admin and workshop** never show the target identity.
+  - **"Data Intelligence Platform" is not visible on the first screen of any access point.**
+- **Cause:** the five sources in DAP-B10, plus the staff apps' unauthenticated profile fetch (DAP-F01).
+- **Resolution:** DAP-B10 step 1 is what makes the first frame correct by construction: the static and bundled identity
+  *is* the target, so a slow or failed profile can only delay the country context, never show an old identity. Fix
+  the cache headers (DAP-F18) so returning clients get the new shell.
+- **Acceptance:** `docs/dashboard-review-evidence/identity-flash/harness/run.sh --host all --scenario all` exits **0**
+  (every scenario CLEAN). In addition, for public, BI, admin, workshop and Keycloak, the final identity contains
+  "Data Intelligence Platform" and "Powered by Palladium". Run per profile, as DAP-B10.
+
+**DAP-F18 · S2 · [Core] · Workshop and dbt-docs pages can be served stale after a deploy.**
+- **Evidence:** response headers recorded in the identity-flash timelines · [index](dashboard-review-evidence/README.md)
+- **Observed [repro]:**
+  - workshop `/` and dbt-docs `/` send no `Cache-Control` (only ETag/Last-Modified), so browsers may reuse the old
+    shell (old title, old bundle names that 404 on a new image) for hours to days.
+  - `logo-fmoh.png` has no `Cache-Control`.
+  - public, BI and admin already send `no-store`.
+- **Files:** `6_access-points/dashboards/workshop/app/main.py:203-204`, `dbt-docs/app/main.py:283`.
+- **Resolution:** the same `no-cache, no-store, must-revalidate` as the other apps; new mark under a new file name.
+- **Acceptance:** both index responses carry `no-store`, and the harness `newasset` and `warm` scenarios are CLEAN.
+
+**DAP-F19 · S3 · [Core] · dbt-docs hangs on an unknown path when signed in.**
+- **Evidence:** identity-flash run, dbt-docs `e404` BLOCKED, 3 of 3 runs · [index](dashboard-review-evidence/README.md)
+- **Observed [repro]:** an unknown path with a session never finishes loading (> 60 s); without a session it redirects
+  to login.
+- **Resolution:** return a 404 page.
+- **Acceptance:** an unknown path returns a 404 within normal response time.
+
 ### 4.5 Requested visual and editorial changes (E)
 
-| ID | Sev | Change | Where | Acceptance |
+| ID | Sev | Scope / change | Where | Acceptance |
 |---|---|---|---|---|
-| DAP-E01 | S3 | Remove the "NHDW › {page}" breadcrumb (all BI pages) | `internal-bi/ui/src/sections/Topbar.tsx:70-74` | No breadcrumb on any BI page; heading unchanged |
-| DAP-E02 | S3 | Disease: remove the "EWARS, notifiable diseases" eyebrow, the "Explore health burden…" line and the duplicate Geographic Risk section description (which also promises an unimplemented woreda drill) | `catalog/sections/internal-bi--disease--signal-header.yaml:4`, `…--geographic-risk.yaml:4`, `widgets/dz-region-map/widget.ts:184` | Strings absent from the live page and from `ops_perm.section` |
-| DAP-E03 | S3 | Signal Header: remove the 10 secondary strings from card faces; add icons; add a Method & coverage view | `nhdw-gateway/app/fetchers.py:320-347`, `widgets/dz-kpi-strip/widget.ts:25-38` | Card face = label + value + ≤ 1 delta; one icon per card; the popover lists unit, period, denominator, coverage, data-through date, model status |
-| DAP-E04 | S3 | Resource: remove the three requested strings; collapse "Act this week" repetition | `…--resource--supply-stress-geography.yaml:4`, `widgets/rm-act-week/widget.yaml:2`, `…--resource--act-this-week.yaml:3-4`, `widgets/rm-map/widget.ts:43` | Strings absent; each phrase appears once |
-| DAP-E05 | S3 | Service: remove the five requested strings; keep scope and estimation basis in chips or tooltips | `sv-data-trust-table/widget.ts:52`, `sv-agreement-donut/widget.ts:29`, `sv-zero-dose/widget.ts:33`, `sv-risk-woredas/widget.ts:49`, `sv-dropoff-region/widget.ts:20` | Strings absent; tooltips carry the method (§6.1) |
-| DAP-E06 | S4 | Recommended extension: remove page subtitles that restate the navigation, layout jargon ("Signal Header", "Headline") and narrating leads | `Topbar.tsx:23-27`; catalogue sections; leads listed in §6.1 | Each removed string listed in the PR |
-| DAP-E07 | S3 | One shared ⓘ / methodology affordance per widget, fed from the catalogue (the `ops_perm.widget.description` column exists and is unused) | `runtime/PageRenderer.ts:317-323` | Every composite or estimated widget has an ⓘ whose text contains its formula or estimation basis |
-| DAP-E08 | S4 | Icons: fix wrong-meaning navigation icons (warning triangle as the permanent Disease icon; upload arrow for Export; the same icon for two admin pages); add the missing `i-code` | sprite `static/assets/icons.html`; Sidebars | No blank icons; one meaning per icon |
-| DAP-E09 | S3 | Health & topology presentation: one CPU and one memory figure per node; consistent GiB; real hostname; "avg req/s (5 min, logged routes)"; explain the 116 failed pods (leftover ML jobs) or filter them; remove the stale "#81" note | `routes/topology.py:590-622`, `TopoSummary.tsx:262-392` | One labelled figure per metric; hostname = node name |
-| DAP-E10 | S3 | Model outputs: show probability bands (cap at "≥95%"), model name and run date; suppress "Immediate" for unvalidated models (RR-021) | `dz-*`, `ov-act-first-woredas` | No "100%" probability displayed |
+| DAP-E01 | S3 | [Core]  Remove the "NHDW › {page}" breadcrumb (all BI pages) | `internal-bi/ui/src/sections/Topbar.tsx:70-74` | No breadcrumb on any BI page; heading unchanged |
+| DAP-E02 | S3 | [Core]  Disease: remove the "EWARS, notifiable diseases" eyebrow, the "Explore health burden…" line and the duplicate Geographic Risk section description (which also promises an unimplemented woreda drill) | `catalog/sections/internal-bi--disease--signal-header.yaml:4`, `…--geographic-risk.yaml:4`, `widgets/dz-region-map/widget.ts:184` | Strings absent from the live page and from `ops_perm.section` |
+| DAP-E03 | S3 | [Core]  Signal Header: remove the 10 secondary strings from card faces; add icons; add a Method & coverage view | `nhdw-gateway/app/fetchers.py:320-347`, `widgets/dz-kpi-strip/widget.ts:25-38` | Card face = label + value + ≤ 1 delta; one icon per card; the popover lists unit, period, denominator, coverage, data-through date, model status |
+| DAP-E04 | S3 | [Core]  Resource: remove the three requested strings; collapse "Act this week" repetition | `…--resource--supply-stress-geography.yaml:4`, `widgets/rm-act-week/widget.yaml:2`, `…--resource--act-this-week.yaml:3-4`, `widgets/rm-map/widget.ts:43` | Strings absent; each phrase appears once |
+| DAP-E05 | S3 | [Core]  Service: remove the five requested strings; keep scope and estimation basis in chips or tooltips | `sv-data-trust-table/widget.ts:52`, `sv-agreement-donut/widget.ts:29`, `sv-zero-dose/widget.ts:33`, `sv-risk-woredas/widget.ts:49`, `sv-dropoff-region/widget.ts:20` | Strings absent; tooltips carry the method (§7.1) |
+| DAP-E06 | S4 | [Separate]  Recommended extension: remove page subtitles that restate the navigation, layout jargon ("Signal Header", "Headline") and narrating leads | `Topbar.tsx:23-27`; catalogue sections; leads listed in §7.1 | Each removed string listed in the PR |
+| DAP-E07 | S3 | [Core (minimal: static tooltip text for the requested removals); a catalogue-fed system is Separate]  One shared ⓘ / methodology affordance per widget, fed from the catalogue (the `ops_perm.widget.description` column exists and is unused) | `runtime/PageRenderer.ts:317-323` | Every composite or estimated widget has an ⓘ whose text contains its formula or estimation basis |
+| DAP-E08 | S4 | [Separate]  Icons: fix wrong-meaning navigation icons (warning triangle as the permanent Disease icon; upload arrow for Export; the same icon for two admin pages); add the missing `i-code` | sprite `static/assets/icons.html`; Sidebars | No blank icons; one meaning per icon |
+| DAP-E09 | S3 | [Separate (no defect named)]  Health & topology presentation: one CPU and one memory figure per node; consistent GiB; real hostname; "avg req/s (5 min, logged routes)"; explain the 116 failed pods (leftover ML jobs) or filter them; remove the stale "#81" note | `routes/topology.py:590-622`, `TopoSummary.tsx:262-392` | One labelled figure per metric; hostname = node name |
+| DAP-E10 | S3 | [Separate]  Model outputs: show model name and run date beside each probability; suppress "Immediate" for models that have not passed DAP-D02 (RR-021) | `dz-*`, `ov-act-first-woredas` | Every displayed probability names its model and run; no "Immediate" from a withheld model |
 
 ### 4.6 Needs clarification or reproduction (Q)
 
@@ -1025,9 +1275,111 @@ Each finding gives:
 
 ---
 
-## 5. Data provenance and fallback audit
+## 5. What will actually work
 
-### 5.1 Origin classes
+"Source not connected" is an honest state. It is **not** delivery of the feature: a widget that shows it is not working,
+and the product owner should see that plainly.
+
+This section classifies every metric by what it will show once the Core packages (§8.1) are done:
+
+| Class | Meaning |
+|---|---|
+| **Works** | Shows correct real values after the Core fixes. The data exists and no decision is needed |
+| **Scope decision** | The source it needs has never been ingested (supply HCMIS, mBrana, climate, MFR facilities). Until someone decides to bring that source in (DAP-Q03) and it is ingested, it can only show "Source not connected" |
+| **Data-owner input** | Computable, but a number on it (denominator, target, threshold) must come from the data owner before it can be shown as authoritative |
+| **Cannot work with current data** | The method itself needs history that does not exist. It is withheld with its reason (DAP-F06) |
+
+### 5.1 Public portal
+
+| Element | Class | Note |
+|---|---|---|
+| KPI tiles (Penta3, ANC4, SBA, mCPR, TB success, ART VL) | Works | With region count, facility count and data month shown (DAP-D07/D08) |
+| U5 stunting tile | Data-owner input | A survey outcome shown monthly; the source and period must be confirmed |
+| Coverage by region, 24-month trend | Works | Fallback datasets removed |
+| Readiness strip | Scope decision | Needs the supply source |
+| Open-data catalogue | Works | Once the manifest is published with real titles (C6) |
+| Newsroom | Data-owner input | Seeded mock bulletins must be replaced with approved content (RR-008) |
+
+### 5.2 Internal BI: Overview
+
+| Widget / field | Class | Note |
+|---|---|---|
+| Brief: outbreaks, reporting, cascade lines | Works | After the vocabulary load (DAP-D03) |
+| Brief: supply line | Scope decision | Supply source |
+| Benchmarks | Works | — |
+| Reliability: reporting columns | Works | Relabelled (DAP-D07) |
+| Reliability: commodity readiness | Scope decision | Supply source |
+| Source pulse | Works | After the data-quality mart is built (DAP-D01) |
+| Act-first woredas: P(alarm) | Works | Only from a model that passes DAP-D02; otherwise withheld |
+| Act-first woredas: readiness | Scope decision | Supply source |
+| Act-first woredas: reporting | Works | After the woreda crosswalk (DAP-D05) |
+| Trust tiles (completeness, mapping, silent) | Works | Definitions corrected (DAP-D07) |
+| Disease snapshot | Works | Label or computation matches "this week" |
+
+### 5.3 Internal BI: Disease Surveillance
+
+| Widget / field | Class | Note |
+|---|---|---|
+| Signal Header cards | Works | Copy and icon changes (DAP-E03) |
+| Geographic Risk: burden, P(alarm), cases, CFR, data date | Works | After DAP-D01 |
+| Geographic Risk: readiness | Scope decision | Supply source |
+| Geographic Risk: reliability | Works | After the woreda crosswalk (DAP-D05) |
+| Anomaly & Trend: EARS (rolling-baseline method) | Works | Uses the preceding weeks, which exist |
+| Anomaly & Trend: Farrington and Seasonal-naive | **Cannot work with current data** | Both compare a week with the same week in earlier years. The surveillance data covers 53 weeks (2025-W27 to 2026-W27), so no earlier-year baseline exists. Withheld with that reason until longer history is loaded |
+| Anomaly & Trend: EWARS-CSD | Scope decision | Needs the climate source |
+| Woreda table: P(alarm), cases, incidence | Works | Incidence denominators need data-owner confirmation (DAP-D06) |
+| Woreda table: readiness | Scope decision | Supply source |
+| Outbreak register | Works | Columns that are always empty (woreda, response team, readiness) are removed or marked not collected |
+| Climate drivers and correlation | Scope decision | Climate source |
+
+### 5.4 Internal BI: Resource Management
+
+| Widget / field | Class | Note |
+|---|---|---|
+| Hero, statboard, forecast, wastage, map, hotspots, stock heatmap, events, stockout impact | **Scope decision** | All read the supply (HCMIS) source, which never landed. **Nine of eleven widgets can only show "Source not connected" until that source is in scope and ingested** |
+| Act this week: outbreaks and case trend | Works | — |
+| Act this week: stock columns | Scope decision | Supply source |
+| Cold chain: excursions, AEFI | Works | Relabelled to the actual month, and "reported" rather than "linked" |
+| Cold chain: affected batches, recipients | Scope decision | No source exists; tiles hidden until one does |
+
+### 5.5 Internal BI: Service Performance
+
+| Widget / field | Class | Note |
+|---|---|---|
+| Topline, flagship table | Works | Values computed from indicator data (DAP-D07) |
+| Flagship targets | Data-owner input | Target values (e.g. HSTP-II) must be supplied |
+| Flagship timeliness | Data-owner input | No timeliness source is defined for these indicators; confirm one, or remove the column |
+| Agreement donut, data-trust table | Works | Once the EMR side reads the EMR pipeline (DAP-D08); until then, labelled demonstration data |
+| Cascades (HIV, TB, MNCH, NCD) | Works | After the vocabulary load and cascade maths fix (DAP-D03) |
+| MNCH continuity, drop-off by region | Works | Rebuilt from the HMIS data instead of the seed table (DAP-D08) |
+| Risk woredas | Works | Reporting component, redefined so the score is not one metric counted twice |
+| Risk woredas: stockout days | Scope decision | Supply source |
+| Zero-dose: reach | Data-owner input | The population year and birth-rate assumption must be confirmed |
+| Zero-dose: hotspot status | Scope decision | mBrana source |
+
+### 5.6 Control Tower and Admin
+
+| Element | Class | Note |
+|---|---|---|
+| Control Tower page | Data-owner input | Visible only if the demo profile decision allows it (RR-005); numbers correct only after the eLMIS fix (RR-002, RR-003) |
+| Admin: Column Governance, Health & topology, MDM, Roles, Users | Works | After C8 |
+| Admin: Alert routing | Scope decision | Either wire the rules to the alerting system, or label the page "not connected" |
+| Admin: Quality & lineage | Works | After the dbt artefacts and DQ mart are built |
+| Admin: SSO & identity | Works | Statuses truthful; real providers need configuring before they show "active" |
+| Admin: Documentation | Works | After the docs store is seeded (RR-024) |
+| Admin: Backups & DR | Scope decision | No backup job exists to report (DAP-Q06, RR-102) |
+
+**What this means for the feedback.** With the Core packages done:
+- **Overview, Service and Disease** work, except the readiness, stock and climate elements and the two
+  same-week-history models.
+- **Resource Management cannot be delivered as a working dashboard** without the supply source. That is a scope decision
+  for the product owner (DAP-Q03), not something the Core fixes can complete.
+
+---
+
+## 6. Data provenance and fallback audit
+
+### 6.1 Origin classes
 
 | Class | Meaning | Legitimate for a demo? |
 |---|---|---|
@@ -1040,7 +1392,7 @@ Each finding gives:
 | Sample data | Seeded straight into a reporting table, bypassing the pipeline | Only if labelled |
 | Fallback output | Values the UI or API invents when its data call fails | **No** |
 
-### 5.2 Flagged values
+### 6.2 Flagged values
 
 | Value (page) | What it actually comes from | When the dependency fails | Disclosed? |
 |---|---|---|---|
@@ -1066,7 +1418,7 @@ Each finding gives:
 | Admin DQ build health | Missing artefact → neutral zeros | — | No |
 | Admin documentation "This deployment" | **Static editorial** with a wrong base domain | "No documents published" (also on read error) | No |
 
-### 5.3 What happens when each dependency fails
+### 6.3 What happens when each dependency fails
 
 | Dependency fails | Public | Internal BI | Admin |
 |---|---|---|---|
@@ -1078,9 +1430,9 @@ Each finding gives:
 
 ---
 
-## 6. Presentation recommendations
+## 7. Presentation recommendations
 
-### 6.1 Exact copy removals and where the methodology goes
+### 7.1 Exact copy removals and where the methodology goes
 
 **Treatment key**
 
@@ -1126,7 +1478,7 @@ Each finding gives:
 - "this week" period labels;
 - the "unfiltered" badge.
 
-### 6.2 Branding hierarchy (all surfaces)
+### 7.2 Branding hierarchy (all surfaces)
 
 | Level | Text | Placement |
 |---|---|---|
@@ -1142,7 +1494,7 @@ Each finding gives:
 **Profile change:** add `brand: {product, attribution, logo}`, and keep `ministry` as the data owner. Overloading
 `ministry` with the company name is what produced "press releases from Palladium".
 
-### 6.3 Strings to replace (user-facing only)
+### 7.3 Strings to replace (user-facing only)
 
 **Shells**
 - BI sidebar "NHDW" / "Internal BI"
@@ -1173,7 +1525,7 @@ Each finding gives:
 - "HSTP-II"
 - `moh.gov.et` placeholders
 
-### 6.4 Do not rename (technical identifiers)
+### 7.4 Do not rename (technical identifiers)
 
 | Area | Identifiers |
 |---|---|
@@ -1193,7 +1545,7 @@ User-facing strings that *display* an identifier should stop displaying it, whil
 - "Bearer · privileged-ops";
 - "Scanning nhdw-raw manifests…".
 
-### 6.5 Icons (existing in-house sprite only)
+### 7.5 Icons (existing in-house sprite only)
 
 **Signal Header**
 
@@ -1218,39 +1570,63 @@ Avoid icons on composite or estimated metrics that imply precision or certainty.
 
 ---
 
-## 7. Implementation plan
+## 8. Implementation plan
 
-Bounded packages, ordered by dependency and impact. Each one is a single reviewable change set. Packages map onto the
-release-readiness plan's WP-0/WP-2/WP-8 and refine them; they do not replace them.
+### 8.0 Precondition: one source of truth
 
-| Package | Content | Findings | Prerequisites | Effort | Done when |
+The live site was built from a CI-runner working copy, not from git (RR-004, RR-206). Before any Core package ships:
+1. The live-only changes are preserved in git. They are captured on the local branch `chore/abeni-preserve-live-only`
+   and need owner review.
+2. They are merged.
+3. Every image is rebuilt from one tagged commit.
+
+Each Core package then ships through that path, and is verified on the live site with §9 before it is reported as done.
+Until then, a package's state is reported as "in code only".
+
+### 8.1 Core packages (feedback delivery and access-point defects)
+
+Ordered by dependency and impact. Each one is a single reviewable change set.
+
+| Package | Content | Findings | Prerequisites | Effort | Done when (on the live site) |
 |---|---|---|---|---|---|
-| **DAP-WP0 · Fail-closed scope** (gateway; pair with release-readiness WP-0 / RR-001) | `widget_data` refuses (or returns a scope stub) when a row-filter dimension cannot be applied; the UI treats locked values as active for hiding; unit test over every fetcher × scoped dimension | DAP-A02, DAP-A05 | None | 0.5–1 d | DAP-A02 acceptance; the anonymous and any-role audit read is closed |
-| **DAP-WP1 · Authenticated profile and reference loading + option contracts** | `authFetch` (or a public proxy pass-through) for `/gw/profile*` in all three staff apps, the geometry loader and ReviewModal; filter options from `/api/permissions/filter/{id}/values`; programme separated from disease; one commodity key with a contract test; Period "All" de-duplicated | DAP-F01, DAP-F08, DAP-F16 (period) | None | 1–2 d | 0 × `401` on load; selector, maps, locked labels and admin picker per acceptance; every option returns rows |
-| **DAP-WP2 · Honest states, no invented values** | Typed data-hook states; no failure caching; `401` → refresh/sign-in; sanitised `5xx`; remove every fallback dataset and `/api/series`; NULL → "—" with reasons; tri-state statuses; reassuring empty copy removed; Column Governance four states; map no-data style; P(alarm) scaling; model-select guard | DAP-F02, F03, F04, F05, F07, F11, F14 | DAP-WP1 (states are tested with real regions) | 3–5 d | Fault-injection suite: `403` / `502` / empty / expired / NULL each produce their own state; CI grep over bundles clean |
-| **DAP-WP3 · Copy, branding and methodology** | §6.1 removals; ⓘ methodology component fed from the catalogue; `brand` profile block; identity block + title pattern on every surface; Keycloak theme keys; remove footer badge and breadcrumb; scope/period chips instead of title stripping; icons; profile committed to git; resolver CI check | DAP-E01–E10, DAP-B01–B08 | DAP-WP1 (staff apps must load the profile); decision DAP-Q04 for the mark | 3–5 d | Text scans per DAP-B02/B03/B05; resolver check green; every requested string absent |
-| **DAP-WP4 · Data pipeline fixes** | Build `mart_data_quality` (optional joins); load the reference vocabulary; fix cascade partitioning and ratios; woreda crosswalk; relabel then recompute coverage; metric dictionary; MNCH through dbt or labelled; agreement re-pointed or disclosed; publish the open-data manifest with real titles | DAP-D01, D03, D05, D07, D08, DAP-F12 | Release-readiness WP-1 (marts rebuild window); decision DAP-Q03 | 5–8 d | Each D-finding acceptance; Trino replays per widget equal the dictionary definition |
-| **DAP-WP5 · Disease model integrity** | Season-count fix; national alarm on the aggregate; degenerate-output guard in the runner; retrain; gateway-served list of selectable models with reasons; shared model context; caption with model and run | DAP-D02, DAP-F06, DAP-E10 | DAP-WP4 (climate decision) | 2–4 d | DAP-D02 / F06 acceptance |
-| **DAP-WP6 · Governance and admin truthfulness** | Classification view/manage split and grants; navigation/API single gate + loader check; capability catalogue served; SQL tool and listing gates; tool registry for gates and tiles; topology authorisation; alert routing wired or labelled; DQ missing-artefact state; identity-provider and documentation placeholders; topology presentation and error states | DAP-A01, A03, A04, A06, DAP-F13, F15, DAP-B09, DAP-E09 | Decisions DAP-Q05, DAP-Q06 | 4–6 d | Each acceptance; persona matrix §8 passes |
-| **DAP-WP7 · Filter behaviour** | Pinned-programme visibility; "latest month only" notes instead of hiding; map click behaviour per decision; debounce and abort; assistant registry generation guard | DAP-F09, DAP-F10, DAP-F07 | DAP-WP1; decision DAP-Q02 | 1–2 d | §8 filter combinations pass |
+| **C1 · Fail-closed scope** | `widget_data` refuses, or returns a scope notice, when a row-filter dimension cannot be applied; the UI treats locked values as active; the audit route is closed | DAP-A02, DAP-A05 | 8.0 | 0.5–1 d | DAP-A02 acceptance; anonymous and any-role audit reads refused |
+| **C2 · Profile, reference and map loading + option contracts** | Authenticated (or anonymous pass-through) `/gw/profile*` in all three staff apps, the map geometry loader and the admin picker; options from the scoped filter-values API; programme separated from disease; one commodity key; one "All periods" | DAP-F01, DAP-F08, DAP-F16 (period) | 8.0 | 1–2 d | DAP-F01 and DAP-F08 acceptance |
+| **C3 · One identity everywhere, from the first frame** | Target identity as the static and bundled identity in every app (titles, favicon under a new file name, splash, auth-error title, shell, public `BUNDLED`); profile supplies country only; breadcrumb and version footer removed; Keycloak theme, seed display names, client names and sender; e-mail templates; API titles; export citation; profiles committed; newsroom scoped by profile; `no-store` on workshop and dbt-docs | DAP-B01–B07, B10, B11, DAP-F18, DAP-E01 | C2; decision DAP-Q04 (the mark) | 3–4 d | Harness exits 0 on every host and scenario, for each profile; text scans clean (DAP-B10) |
+| **C4 · Requested copy removals with method preserved** | The 18 removals in §7.1; scope and period chips instead of title stripping; a short static tooltip per affected widget carrying the method it loses | DAP-E02–E05, DAP-E07 (minimal), DAP-B08 | none | 1–2 d | Each string absent from the live page and catalogue; each affected widget's tooltip states its method |
+| **C5 · Honest states, no invented values** | Typed data states; no failure caching; expired session → renewal or sign-in prompt; sanitised errors; every fallback dataset and `/api/series` removed; NULL → "—" with reason; tri-state statuses; no reassuring copy over missing data; Column Governance states; map no-data style; probability scaling | DAP-F02–F05, F11, F14, DAP-F12 (fallback part) | C2 | 3–4 d | §9.3 failure scenarios pass; a scan of built bundles finds no fallback datasets |
+| **C6 · Data correctness on the listed pages** | Data-quality mart (optional joins); reference vocabulary loaded; cascade maths; woreda crosswalk; coverage relabelled then computed from indicator values; seeded MNCH and EMR inputs rebuilt or disclosed; open-data manifest with real titles | DAP-D01, D03, D05, D07, D08, DAP-F12 | 8.0 + a marts rebuild window (release-readiness WP-1) | 4–6 d | Each finding's behaviour acceptance; §5 "Works after Core fixes" rows render real values |
+| **C7 · Disease model integrity** | Methods use only their defined history; "insufficient history" as a state; national alarm on the aggregate; runner refuses runs that fail the behaviour tests; gateway serves the selectable-model list with reasons; model named with run on every model-fed widget; stale-response guard on the select | DAP-D02, DAP-F06, DAP-F07 | C6 (for the climate decision) | 2–3 d | DAP-D02 / F06 / F07 acceptance |
+| **C8 · Admin access points truthful and usable** | Classification view/manage split and grants; one gate for navigation and API; enforced capabilities listed in the picker; alert routing wired or labelled "not connected"; DQ missing-artefact state; identity-provider and documentation placeholders; topology error and stale states; SQL tool and listing gates; MLflow gate role check | DAP-A01, A03, A04 (gate fix only), DAP-F13, F15, DAP-B09 | Decisions DAP-Q05, DAP-Q06 | 3–5 d | Each acceptance; the §9.1 personas pass |
+| **C9 · Filter behaviour on the listed pages** | Pinned programme visibility; "latest month only" notes instead of hiding; map click per decision; superseded requests aborted | DAP-F09, DAP-F10 | C2; decision DAP-Q02 | 1–2 d | §9.2 passes |
+| **C10 · Remaining access-point defects** | Labels and counts that contradict the data; workshop links; export-trail copy; dbt-docs 404; Control Tower deploy order | DAP-F16, DAP-F17, DAP-F19 | 8.0 | 1 d | Each acceptance |
 
-**Order and parallelism.**
-- DAP-WP0 and DAP-WP1 run first and in parallel. They touch different code: the gateway versus the three UIs.
-- DAP-WP2 follows DAP-WP1.
-- DAP-WP3 can start its copy removals immediately; its brand work waits for DAP-WP1 and the logo decision.
-- DAP-WP4 and DAP-WP5 are the long data track and depend on the release-readiness rebuild window.
-- DAP-WP6 and DAP-WP7 are independent of the data track.
+**Order.**
+- C1 and C2 run first and in parallel; they touch separate code.
+- C3, C4 and C5 follow C2.
+- C6 and C7 are the data track and need the rebuild window.
+- C8, C9 and C10 are independent of the data track.
 
-**For a demo**, the minimum is DAP-WP0 to DAP-WP3, plus "Source not connected" states for every widget DAP-WP4 has not
-fixed.
+### 8.2 Separate work (not part of the feedback delivery; on request)
+
+| Item | Why it is separate |
+|---|---|
+| DAP-E06: wider copy clean-up (page subtitles, layout jargon, other narrating leads) | Editorial, beyond the listed strings |
+| DAP-E08: navigation icon changes | Not requested; no functional defect |
+| DAP-E09: Health & topology presentation (single CPU/memory figure, hostname, traffic label) | No defect was named; the data is correct |
+| DAP-E10: model name and run beside every probability | Presentation improvement beyond the correctness fix in C7 |
+| DAP-A06: minor governance gaps (topology authorisation plane, non-human roles assignable, catalogue gate, background 403s) | Hardening, not an access-point failure; partly overlaps RR-2xx |
+| A metric dictionary generated into the docs; a catalogue-fed methodology system; a single tool registry; a served capability catalogue | Architectural improvements; C4/C6/C8 fix the confirmed defects without them |
+| DAP-D06: woreda incidence plausibility | Needs data-owner input; no code defect confirmed |
+| Debouncing and request coalescing | Performance, not correctness (C9 covers correctness) |
 
 ---
 
-## 8. Verification checklist
+## 9. Verification checklist
 
-Run on the target build after each package. Every line has an observable outcome.
+Run on the **live site** after each package ships (§8.0). A package is reported as "live and tested" only when its
+lines below pass, with the evidence attached.
 
-### 8.1 Roles
+### 9.1 Roles
 
 | Persona | Check | Expected |
 |---|---|---|
@@ -1260,25 +1636,25 @@ Run on the target build after each package. Every line has an observable outcome
 | Regional user (Oromia) | All pages | One locked "Oromia"; tamper → `403`; no widget computed over other regions (DAP-A02) |
 | HIV programme director | Disease, Service | HIV-only rows or an explicit scope notice; never national counts |
 | Low-privilege researcher | BI, MLflow, Superset, SQL tool, listings | "No access" page; `403` at MLflow, SQL execute, marts and templates |
-| Super-admin | Column Governance | 11 columns, 18 findings; can classify |
+| Super-admin | Column Governance | Loads the classified columns and review queue; can classify |
 | Steward | Column Governance | Can view and classify (test environment only) |
 | Security officer | Column Governance | View only; PUT `403` (after DAP-Q05) |
 | Ops admin | Health & topology, Alert routing, DQ | Correct labels; no false alerts; DQ states its cause |
 
-### 8.2 Filter combinations
+### 9.2 Filter combinations
 
 | Combination | Expected |
 |---|---|
 | Region = each region × every BI page | Request carries `geography=<code>`; values change; no silent hides beyond the documented "latest month only" |
 | Period = each option × Disease, Service, Resource | Window applies, or a "not filtered by period" note; one "All periods" entry |
-| Programme = each offered option | ≥ 1 row on at least one widget; no duplicates; the MNCH cascade visible for MNCH |
-| Commodity = each option (once supply data exists) | ≥ 1 row in the stock heatmap |
-| Region + period + programme | One coalesced request wave; final state matches the last selection |
-| Detection model = each option | Enabled options pass the acceptance check; disabled options show a reason; KPI strip names the same model |
-| Five rapid picks | ≤ 1 completed request per widget; screen and assistant registry equal the last pick |
-| Map click (per DAP-Q02) | Behaviour equals copy; a regional user cannot select outside scope |
+| Programme = each offered option | The option set equals the distinct programme values in the page's data within the user's scope; no duplicate labels; the MNCH cascade visible for MNCH |
+| Commodity = each option | The option set equals the distinct commodity keys in the supply data within scope (empty, and the filter hidden, while the supply source is not connected) |
+| Region + period + programme | Final state matches the last selection; superseded requests are aborted |
+| Detection model = each option | Enabled only if its latest run passed the DAP-D02 behaviour tests; disabled options show their method-specific reason; the KPI strip names the same model |
+| Rapid successive picks | The screen and the assistant registry show the result of the last pick only |
+| Map click (per DAP-Q02) | Behaviour equals the copy; a regional user cannot select outside their scope |
 
-### 8.3 Failure scenarios (inject in a test environment)
+### 9.3 Failure scenarios (inject in a test environment)
 
 | Scenario | Expected |
 |---|---|
@@ -1287,15 +1663,25 @@ Run on the target build after each package. Every line has an observable outcome
 | `502` (missing table) | Error state with a correlation id; no SQL text in the response |
 | Empty mart | "Source not connected" or "No data for this period"; never 0 or "healthy" |
 | NULL field in a row | "—" with a reason; tri-state status "unknown" |
-| Token expired mid-session | Silent refresh, or a sign-in prompt; never "No data for the selected filters" |
+| Token expired mid-session | Silent renewal, or a sign-in prompt; never "No data for the selected filters" |
 | Profile reference unavailable | Selector shows "Regions unavailable — retry"; no fallback country text |
 | Classification request held / `403` / `500` / abort | Never "nothing classified" |
 | Topology `/cluster` `500` | Error badge with the last good time |
 | Open-data manifest missing | "No datasets published yet" |
 
+### 9.4 Identity, from the first rendered frame
+
+| Check | Expected |
+|---|---|
+| `identity-flash/harness/run.sh --host all --scenario all` with each country profile active | Exit code 0 (every scenario CLEAN) |
+| Final identity on public, BI, admin, workshop, Keycloak | Contains "Data Intelligence Platform" and "Powered by Palladium" |
+| Slow (5 s) and failed profile requests | Target identity from the first frame; only the country context waits |
+| Returning browser after a deploy (`warm`, `newasset`) | Target identity; no stale title or favicon |
+| Text scan of built bundles, `index.html`, Keycloak theme, e-mail templates, API titles | No legacy pattern outside the don't-rename identifiers (§7.4) |
+
 ---
 
-## 9. Open questions and external dependencies
+## 10. Open questions and external dependencies
 
 These are only the items that the evidence cannot settle. Details are in §4.6.
 
@@ -1331,12 +1717,15 @@ These are only the items that the evidence cannot settle. Details are in §4.6.
 | Raw tokens and a three-way brand split | DAP-B01, B02, B03, B05, B06 |
 | Column Governance: super-admin denied, and states that claim "nothing classified" on failure | DAP-A01, DAP-F05 |
 
-**First package to execute: DAP-WP0 together with DAP-WP1.**
-- **DAP-WP0** makes the gateway refuse, rather than drop, a scope it cannot apply, alongside the release-readiness
-  audit-route fix.
-- **DAP-WP1** makes the three staff apps load profile, reference and map geometry with the user's token, and aligns
-  filter option values with the data keys.
+| Legacy product identity in every access point and state, on every profile, visible from the first frame (116 first-frame scenarios: 70 LEGACY, 9 FLASH, 36 CLEAN, 1 BLOCKED) | DAP-B10, DAP-B11 |
 
-Together they take about 2–3 engineer-days and touch separate code. They remove the most visible breakage (the
-selector, the maps, the branding source) and the one access-control fail-open, and every later package depends on
-them.
+**First step: the precondition in §8.0.** Preserve the live-only changes (captured on `chore/abeni-preserve-live-only`),
+merge them, and rebuild from one tagged commit, so that what is tested on the site is what is in git.
+
+**First packages: C1 together with C2.**
+- **C1** makes the gateway refuse, rather than drop, a scope it cannot apply, and closes the audit route.
+- **C2** makes the three staff apps load profile, reference and map geometry correctly, and aligns filter option values
+  with the data keys.
+
+They touch separate code, take about 2–3 engineer-days, and unblock C3–C5. **Every package is reported as "in code
+only" until it is deployed and passes §9 on the live site.**
