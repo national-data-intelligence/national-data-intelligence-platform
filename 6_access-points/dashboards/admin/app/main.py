@@ -167,20 +167,36 @@ async def auth_config() -> dict:
 _PROXY_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH")
 
 
+# The country profile is PUBLIC in the gateway by design (gateway routes/profile.py:
+# the masthead, map geometry and branding, served before anyone signs in). Some of
+# those reads cannot carry a Bearer (a ministry-crest <img src>, a stylesheet
+# url()) and the map geometry is fetched during SPA boot before the auth session
+# exists, so this proxy must not force a token on them. A signed-in caller still
+# relays their bearer; an un-authable one gets the public response. Everything else
+# still requires a valid session.
+def _is_public_gw(method: str, path: str) -> bool:
+    return method == "GET" and (path == "profile" or path.startswith("profile/"))
+
+
 @app.api_route("/gw/{path:path}", methods=list(_PROXY_METHODS))
 async def proxy(path: str, request: Request,
-                user: UserCtx = Depends(get_user)) -> Response:
+                user: UserCtx | None = Depends(get_user_or_none)) -> Response:
     """Forward to nhdw-gateway with the caller's identity. Bearer relays
-    the actual access token; DEV mode uses X-Mock-User headers."""
+    the actual access token; DEV mode uses X-Mock-User headers. Public
+    profile reads (masthead + map + branding) relay without a token."""
+    if user is None and not _is_public_gw(request.method, path):
+        raise HTTPException(status_code=401, detail="unauthenticated")
     target = f"{GATEWAY_URL.rstrip('/')}/api/{path}"
     headers = {k: v for k, v in request.headers.items()
                if k.lower() not in {"host", "content-length", "connection"}}
-    if user.access_token:
+    if user and user.access_token:
         headers["Authorization"] = f"Bearer {user.access_token}"
-    else:
+    elif user:
         headers.pop("Authorization", None)
         headers["X-Mock-User"] = user.sub
         headers["X-Mock-Role"] = user.primary_role
+    else:
+        headers.pop("Authorization", None)
     body = await request.body()
     try:
         async with httpx.AsyncClient(timeout=20) as client:

@@ -185,21 +185,41 @@ async def auth_config() -> dict:
 _PROXY_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH")
 
 
+# The country profile is PUBLIC in the gateway by design (gateway routes/profile.py:
+# "the masthead, not a secret… the map, which the public dashboard needs before
+# anyone signs in"). Several of those reads cannot carry a Bearer at all — a
+# ministry-crest <img src>, a stylesheet url() — and the map geometry is fetched
+# during SPA boot before the auth session is established. So this proxy must not
+# force a token on them, or it would 401 reads the gateway is glad to serve
+# unauthenticated. A signed-in caller still relays their bearer (identity costs
+# nothing and keeps any future row-filtering intact); an un-authable one gets the
+# public response. Everything else still requires a valid session.
+def _is_public_gw(method: str, path: str) -> bool:
+    return method == "GET" and (path == "profile" or path.startswith("profile/"))
+
+
 @app.api_route("/gw/{path:path}", methods=list(_PROXY_METHODS))
 async def gw_proxy(path: str, request: Request,
-                   user: UserCtx = Depends(get_user)) -> Response:
+                   user: UserCtx | None = Depends(get_user_or_none)) -> Response:
     """Forward to nhdw-gateway with the caller's identity. Bearer relays
     the user's access token; DEV mode sends mock identity headers the
-    gateway resolves via its own DEV_AUTH path."""
+    gateway resolves via its own DEV_AUTH path. Public profile reads
+    (masthead + map geometry + branding) relay without requiring a token —
+    see _is_public_gw."""
+    if user is None and not _is_public_gw(request.method, path):
+        raise HTTPException(status_code=401, detail="unauthenticated")
     target = f"{GATEWAY_URL.rstrip('/')}/api/{path}"
     headers = {k: v for k, v in request.headers.items()
                if k.lower() not in {"host", "content-length", "connection"}}
-    if user.access_token:
+    if user and user.access_token:
         headers["Authorization"] = f"Bearer {user.access_token}"
-    else:
+    elif user:
         headers.pop("Authorization", None)
         headers["X-Mock-User"] = user.sub
         headers["X-Mock-Role"] = user.primary_role
+    else:
+        # public profile read, no identity — the gateway serves it unauthenticated
+        headers.pop("Authorization", None)
     body = await request.body()
     # The AI-assistant endpoints call a local LLM (one round can take tens of
     # seconds — much more on CPU, and multi-round agentic turns stack up), so the
