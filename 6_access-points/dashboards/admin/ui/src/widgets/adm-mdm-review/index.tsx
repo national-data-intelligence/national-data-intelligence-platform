@@ -9,14 +9,17 @@
  * Reverting supersedes (recorded_to) and re-opens the candidate — proven live
  * to restore the previous conformed keys byte for byte.
  *
- * Two tabs: the work queue (pending candidates, best score first, rule
- * filter) and the decision log (current beliefs; full history on demand).
+ * Page shell: an underline tab strip (Review matches · Decisions · Publish)
+ * under the page title, each tab one page-section. Tabs are listed only when
+ * the caller's resolved catalog grants the widget behind them, and the active
+ * tab is mirrored in the URL hash (#mdm/<tab>) so a refresh keeps it.
  * No mock rows — an unreachable gateway degrades to a clear error note.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as mdm from '../../api/mdm';
 import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKit';
 import type { AdminWidget } from '../../runtime/types';
+import { useDashboardSpec, specAllowsWidget } from '../../api/spec';
 
 const RULE_LABEL: Record<string, string> = {
   name_exact: 'Exact name',
@@ -28,6 +31,16 @@ function rulePill(rule: string): string {
   if (rule === 'name_exact') return 'good';
   if (rule === 'name_ambiguous') return 'watch';
   return 'info';
+}
+
+/** Gateway failure line: plain sentence + retry; the raw error stays on hover. */
+function LoadError({ what, err, retry }: { what: string; err: string; retry: () => void }) {
+  return (
+    <p className="muted" title={err}>
+      Could not load {what}.{' '}
+      <button className="btn btn-sm btn-ghost" onClick={retry}>Try again</button>
+    </p>
+  );
 }
 
 function featureLine(f: Record<string, unknown>): string {
@@ -203,9 +216,10 @@ function QueueTab({ onDecided }: { onDecided: () => void }) {
         </div>
         {flash && <span className="muted text-xs">{flash}</span>}
       </div>
-      {err && <p className="muted">Queue unavailable: {err}</p>}
+      {err && <LoadError what="matches" err={err} retry={load} />}
+      {rows === null && !err && <p className="muted">Loading matches…</p>}
       {rows !== null && rows.length === 0 && !err &&
-        <p className="muted">Queue is clear — no pending candidates{rule ? ` for ${RULE_LABEL[rule]}` : ''}.</p>}
+        <p className="muted">No matches to review.</p>}
       {inspect && <MasterPanel entity={entity} masterBk={inspect} onClose={() => setInspect('')} />}
       {rows !== null && rows.length > 0 && (
         <>
@@ -294,9 +308,10 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
           {' '}show superseded history
         </label>
       </div>
-      {err && <p className="muted">Decision log unavailable: {err}</p>}
+      {err && <LoadError what="decisions" err={err} retry={load} />}
+      {rows === null && !err && <p className="muted">Loading decisions…</p>}
       {rows !== null && rows.length === 0 && !err &&
-        <p className="muted">No decisions yet — verdicts from the queue land here (append-only, bitemporal).</p>}
+        <p className="muted">No decisions in this view.</p>}
       {rows !== null && rows.length > 0 && (
         <>
           <TableToolbar kit={kit} placeholder="Search record, master, steward…" unit="decisions" />
@@ -391,14 +406,10 @@ function ReleasesTab() {
         </div>
         {flash && <span className="muted text-xs">{flash}</span>}
       </div>
-      <p className="muted text-xs">
-        A release pins the decision-log cut AND the source watermark, then records
-        the master counts — so a report quoting it can be re-derived exactly. It
-        stores the two coordinates, not a copy of the data.
-      </p>
-      {err && <p className="muted">Releases unavailable: {err}</p>}
+      {err && <LoadError what="releases" err={err} retry={load} />}
+      {rows === null && !err && <p className="muted">Loading releases…</p>}
       {rows !== null && rows.length === 0 && !err &&
-        <p className="muted">No releases published yet.</p>}
+        <p className="muted">No releases have been published yet.</p>}
       {rows !== null && rows.length > 0 && (
         <>
           <TableToolbar kit={kit} placeholder="Search release, steward, note…" unit="releases" />
@@ -448,33 +459,69 @@ function ReleasesTab() {
   );
 }
 
+type TabKey = 'review' | 'decisions' | 'publish';
+
+/* The workspace tabs. `widget` is the catalog widget each tab needs: a tab is
+   listed only when the caller's resolved spec grants it (never a role list
+   here). All three live in adm-mdm-review today; later tabs bring their own
+   widget ids. */
+const TABS: Array<{ key: TabKey; label: string; ico: string; widget: string }> = [
+  { key: 'review',    label: 'Review matches', ico: 'i-check-circle', widget: 'adm-mdm-review' },
+  { key: 'decisions', label: 'Decisions',      ico: 'i-list',         widget: 'adm-mdm-review' },
+  { key: 'publish',   label: 'Publish',        ico: 'i-upload',       widget: 'adm-mdm-review' },
+];
+
+const HASH_PREFIX = '#mdm/';
+
+function tabFromHash(): TabKey | null {
+  const h = window.location.hash;
+  if (!h.startsWith(HASH_PREFIX)) return null;
+  const key = h.slice(HASH_PREFIX.length).split('/')[0];
+  return TABS.some(t => t.key === key) ? key as TabKey : null;
+}
+
 function MdmReview() {
-  const [tab, setTab] = useState<'queue' | 'decisions' | 'releases'>('queue');
+  const { spec } = useDashboardSpec('admin');
+  const tabs = spec ? TABS.filter(t => specAllowsWidget(spec, 'admin/mdm', t.widget)) : TABS;
+  const [tab, setTab] = useState<TabKey>(() => tabFromHash() ?? 'review');
   const [decidedTick, setDecidedTick] = useState(0);
 
+  // Mirror the active tab in the hash; drop it when the page is left so the
+  // next page does not inherit an #mdm/ link.
+  useEffect(() => {
+    history.replaceState(null, '', HASH_PREFIX + tab);
+  }, [tab]);
+  useEffect(() => () => {
+    if (window.location.hash.startsWith('#mdm')) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }, []);
+
+  const active = tabs.find(t => t.key === tab) ?? tabs[0];
+
   return (
-    <div className="card card-elev">
-      <div className="section-hdr">
-        <h3>MDM stewardship</h3>
-        <div>
-          <button className={`btn btn-sm ${tab === 'queue' ? '' : 'btn-ghost'}`}
-                  onClick={() => setTab('queue')}>Candidate queue</button>{' '}
-          <button className={`btn btn-sm ${tab === 'decisions' ? '' : 'btn-ghost'}`}
-                  onClick={() => setTab('decisions')}>Decision log</button>{' '}
-          <button className={`btn btn-sm ${tab === 'releases' ? '' : 'btn-ghost'}`}
-                  onClick={() => setTab('releases')}>Releases</button>
+    <div className="mdm-page">
+      <nav className="tab-nav">
+        {tabs.map(t => (
+          <a key={t.key} className={t.key === active?.key ? 'active' : undefined}
+             href={HASH_PREFIX + t.key}
+             onClick={e => { e.preventDefault(); setTab(t.key); }}>
+            {t.label}
+          </a>
+        ))}
+      </nav>
+      {active && (
+        <div className="page-section">
+          <div className="ps-hdr">
+            <h3 className="ps-title"><svg className="ico"><use href={'#' + active.ico} /></svg> {active.label}</h3>
+          </div>
+          <div className="card card-elev">
+            {active.key === 'review' && <QueueTab onDecided={() => setDecidedTick(t => t + 1)} />}
+            {active.key === 'decisions' && <DecisionsTab refreshKey={decidedTick} />}
+            {active.key === 'publish' && <ReleasesTab />}
+          </div>
         </div>
-      </div>
-      <p className="muted text-xs">
-        Accepting maps the source record onto its master in the append-only
-        decision log, which the warehouse reads live — dashboards reflect it on
-        the next read, and the vault's insert-only history records it on the
-        next build. Nothing merges automatically: probabilistic matches always
-        wait here, and a revert restores the previous keys exactly.
-      </p>
-      {tab === 'queue' && <QueueTab onDecided={() => setDecidedTick(t => t + 1)} />}
-      {tab === 'decisions' && <DecisionsTab refreshKey={decidedTick} />}
-      {tab === 'releases' && <ReleasesTab />}
+      )}
     </div>
   );
 }
