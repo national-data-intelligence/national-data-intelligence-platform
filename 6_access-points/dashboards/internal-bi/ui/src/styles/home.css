@@ -116,6 +116,7 @@
     border-top: 1px solid rgba(255,255,255,0.08);
     font-size: 0.72rem; color: rgba(255,255,255,0.42);
     line-height: 1.5;
+    text-align: center;
   }
   .bi-sidebar-foot strong { color: rgba(255,255,255,0.7); }
 
