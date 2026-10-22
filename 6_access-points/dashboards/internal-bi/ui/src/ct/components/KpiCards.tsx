@@ -1,10 +1,12 @@
 import { summarize, filterMovements, type Slicer } from '../lib/select';
 import { KPIS, NODES, WH_BY_ID } from '../data/runtime';
-import { IconCoverBar, IconPallet, IconDepotFan, IconStockShort, IconShieldCheck, IconAlertTriangle, IconRunout, IconGauge } from '../icons';
+import { IconCoverBar, IconPallet, IconDepotFan, IconStockShort, IconShieldCheck, IconAlertTriangle, IconCalendar, IconGauge } from '../icons';
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
 
-const RING = { c: 150.8, good: '#15865b', mid: '#9a6a3a', bad: '#c73545', none: '#9ca3af' };
+// Health-ring status colours, softened 40% toward slate; the row above uses a cool family so
+// no hue repeats between the two rows.
+const RING = { c: 150.8, good: '#357F6E', mid: '#846E5A', bad: '#9F4E61', none: '#9ca3af' };
 
 /** Open donut ring in the icon slot's exact 58px footprint: track + arc + centre icon.
  *  Distinct from row 1's filled pastel discs; the colour carries the reading. */
@@ -12,7 +14,7 @@ function Ring({ f, color, label, value, Icon }:
   { f: number | null; color: string; label: string; value: string; Icon: (p: any) => JSX.Element }) {
   const fill = f == null ? 0 : Math.min(1, Math.max(0.02, f));
   return (
-    <span className="pct-kpi-ring" style={{ color }} role="img" aria-label={`${label}: ${value}`}>
+    <span className="pct-kpi-ring" style={{ color: 'var(--ink-3)' }} role="img" aria-label={`${label}: ${value}`}>
       <svg className="ring" viewBox="0 0 58 58" aria-hidden="true">
         <circle cx="29" cy="29" r="24" fill="none" stroke="#EAEDF1" strokeWidth="5" />
         <circle cx="29" cy="29" r="24" fill="none" stroke={color} strokeWidth="5" strokeLinecap="round"
@@ -40,11 +42,11 @@ export default function KpiCards({ slicer }: { slicer: Slicer }) {
   const movs = filterMovements(slicer);
   const s = summarize(movs);
   const cards = [
-    { key: 'cover', tint: 'green', Icon: IconCoverBar, label: 'Needs covered',
+    { key: 'cover', tint: 'blue', Icon: IconCoverBar, label: 'Needs covered',
       value: s.coveredPct != null ? `${Math.round(s.coveredPct)}%` : 'no data', sub: `${fmt(s.uncovered)} at-risk needs open` },
-    { key: 'units', tint: 'blue', Icon: IconPallet, label: 'Units to ship',
+    { key: 'units', tint: 'indigo', Icon: IconPallet, label: 'Units to ship',
       value: fmt(s.units), sub: `${fmt(s.legs)} deliveries` },
-    { key: 'runs', tint: 'amber', Icon: IconDepotFan, label: 'Delivery runs',
+    { key: 'runs', tint: 'sky', Icon: IconDepotFan, label: 'Delivery runs',
       value: fmt(s.runCount), sub: `${fmt(s.stops)} facilities served` },
     { key: 'risk', tint: 'violet', Icon: IconStockShort, label: 'Facilities at risk',
       value: fmt(s.facilitiesAtRisk), sub: `of ${fmt(s.facilities)} facilities` },
@@ -87,7 +89,7 @@ export default function KpiCards({ slicer }: { slicer: Slicer }) {
     { key: 'exp', Icon: IconAlertTriangle, label: 'Stockout exposure', value: pct(exposure),
       sub: 'Tracer facility-products', f: exposure != null ? exposure / 100 : null,
       color: ringColor(exposure, 10, 25, true), d: delta('stockout_exposure'), up: false },
-    { key: 'days', Icon: IconRunout, label: 'Stockout days', value: days == null ? 'no data' : days.toFixed(1),
+    { key: 'days', Icon: IconCalendar, label: 'Stockout days', value: days == null ? 'no data' : days.toFixed(1),
       sub: 'Per 100 days', f: days != null ? Math.min(days / 100, 1) : null,
       color: ringColor(days, 5, 20, true), d: delta('stockout_days_rate'), up: false },
     { key: 'pol', Icon: IconGauge, label: 'Stock within policy', value: pct(policy),
