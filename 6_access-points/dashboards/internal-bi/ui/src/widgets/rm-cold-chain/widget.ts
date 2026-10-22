@@ -38,8 +38,7 @@ const def: WidgetDef = {
             <span style="display:inline-grid;place-items:center;width:32px;height:32px;border-radius:8px;background:${tint(x.col, 0.12)};color:${x.col};flex-shrink:0"><svg class="ico" aria-hidden="true"><use href="#${x.icon}"/></svg></span>
             <span style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:${t.ink[3]}">${x.label}</span>
           </div>
-          <div style="font-size:1.9rem;font-weight:800;letter-spacing:-.03em;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1;margin-top:.1rem">${x.v.toLocaleString()}</div>
-          <div style="font-size:.72rem;color:${t.ink[3]}">${x.sub}</div></div>`).join('')}
+          <div style="font-size:1.9rem;font-weight:800;letter-spacing:-.03em;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1;margin-top:.1rem">${x.v.toLocaleString()}</div></div>`).join('')}
       </div>`;
     return () => { /* pure DOM */ };
   },

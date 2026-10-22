@@ -41,7 +41,6 @@ const def: WidgetDef = {
       </tr>`;
     }).join('');
     ctx.el.innerHTML = `
-      <p style="font-size:.82rem;color:${t.ink[2]};margin:0 0 .5rem">Estimated service loss during out-of-stock periods</p>
       <div class="scrollable"><table class="dash"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
     return () => { /* pure DOM */ };
   },

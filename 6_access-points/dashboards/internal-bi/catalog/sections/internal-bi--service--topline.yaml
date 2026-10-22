@@ -1,7 +1,6 @@
 id: internal-bi/service/topline
 page_id: internal-bi/service
 title: Headline
-eyebrow: Quality, access, trust
 ordering: 5
 columns: 12
 dense: true

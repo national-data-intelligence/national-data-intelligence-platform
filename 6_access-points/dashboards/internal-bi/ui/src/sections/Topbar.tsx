@@ -20,10 +20,6 @@ const PAGE_TITLES: Record<string, string> = {
 
 // Per-page masthead subtitle (from the redesign mockups).
 const PAGE_SUBTITLES: Record<string, string> = {
-  disease:  'Disease trends, risk distribution, response readiness, and active operations.',
-  resource: 'Supply-chain and commodity readiness, and the service impact of stockouts.',
-  'control-tower': 'Orders, delivery runs and stock risk from district stores to facilities.',
-  service:  'Track quality, access, and outcomes across programmes and facilities.',
 };
 
 function initials(name: string): string {

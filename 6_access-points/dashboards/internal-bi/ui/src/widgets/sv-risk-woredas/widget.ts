@@ -46,7 +46,6 @@ const def: WidgetDef = {
     ];
 
     ctx.el.innerHTML = `
-      <p style="font-size:.82rem;color:${t.ink[2]};margin:0 0 .2rem">EMR-active, ranked worst-first</p>
       <div class="sv-rw-tbl"></div>`;
     const mount = ctx.el.querySelector<HTMLElement>('.sv-rw-tbl')!;
     return paginatedTable(mount, shaped, columns, ctx.theme, { search: true, sort: true });

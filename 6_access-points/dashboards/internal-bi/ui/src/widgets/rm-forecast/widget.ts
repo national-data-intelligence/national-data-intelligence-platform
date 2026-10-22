@@ -21,7 +21,6 @@ const def: WidgetDef = {
       .sort((a, b) => a.value - b.value).slice(0, 12);
     const horizon = Number(rows[0]?.horizon_days ?? 30);
     ctx.el.innerHTML = `
-      <p class="widget-lead" style="color:var(--ink-3);font-size:.8rem;margin:0 0 .6rem">Commodities ordered by projected days until stockout, soonest first, from the latest forecast run.</p>
       <div class="rm-fc-mount"></div>`;
     const mount = ctx.el.querySelector('.rm-fc-mount') as HTMLElement;
     return lollipop(mount, data, t, { xMax: Math.max(horizon + 4, ...data.map(d => d.value)) });

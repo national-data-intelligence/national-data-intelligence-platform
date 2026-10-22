@@ -38,8 +38,7 @@ const def: WidgetDef = {
           <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:${t.ink[3]}">Wastage bands</div>
           ${mix.map(m => `<div>
             <div style="font-size:1.6rem;font-weight:800;color:${m.col};font-variant-numeric:tabular-nums;line-height:1">${m.v}<span style="font-size:.8rem;font-weight:600;color:${t.ink[3]}"> of ${rows.length}</span></div>
-            <div style="font-size:.76rem;font-weight:600;color:${t.ink[1]}">${m.label}</div>
-            <div style="font-size:.7rem;color:${t.ink[3]}">${m.sub}</div></div>`).join('')}
+            <div style="font-size:.76rem;font-weight:600;color:${t.ink[1]}">${m.label}</div></div>`).join('')}
         </div>
       </div>`;
 

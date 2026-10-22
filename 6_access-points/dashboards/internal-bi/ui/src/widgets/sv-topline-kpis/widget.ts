@@ -32,7 +32,6 @@ const def: WidgetDef = {
       return {
         label: String(r.metric ?? ''),
         value: val,
-        sub: r.subtitle ? String(r.subtitle) : undefined,
         delta: dt || undefined,
         deltaDir: dt.startsWith('-') || dt.startsWith('▼') ? 'down' : 'up',
         foot: r.target_text ? String(r.target_text) : undefined,

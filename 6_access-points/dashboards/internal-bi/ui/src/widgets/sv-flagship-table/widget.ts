@@ -52,7 +52,6 @@ const def: WidgetDef = {
     ];
 
     ctx.el.innerHTML = `
-      <p style="font-size:.82rem;color:${t.ink[2]};margin:0 0 .5rem">Official indicators with confidence and lineage</p>
       <div class="sv-fl-tbl"></div>`;
     const mount = ctx.el.querySelector<HTMLElement>('.sv-fl-tbl')!;
     return paginatedTable(mount, shaped, columns, ctx.theme, { search: true, sort: true });

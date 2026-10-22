@@ -17,7 +17,7 @@ const def: WidgetDef = {
     if (!rows || !rows.length) { ctx.empty('No regional drop-off data for the selected filters.'); return; }
     const t = ctx.theme;
     const cats = rows.map(r => regionName(String(r.region ?? '-')));
-    ctx.el.innerHTML = `<p class="widget-lead" style="color:var(--ink-3);font-size:.8rem;margin:0 0 .6rem">How each region's drop-off splits across the ANC, delivery and postnatal steps, so leakage is traceable to a stage.</p><div class="sv-do-mount"></div>`;
+    ctx.el.innerHTML = `<div class="sv-do-mount"></div>`;
     return stackedBar(ctx.el.querySelector('.sv-do-mount') as HTMLElement, {
       categories: cats,
       series: [

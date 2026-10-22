@@ -40,7 +40,6 @@ const def: WidgetDef = {
     let rowsByRegion: Record<string, any> = {};
 
     ctx.el.innerHTML = `
-      <p class="widget-lead" style="margin:0 0 .6rem;font-size:.8rem;line-height:1.35;color:var(--ink-3)">Regions shaded by composite supply stress, darkest where supply is tightest. Click a region to inspect its drivers.</p>
       <div class="local-controls"><span class="lc-label">View</span><div class="seg">
         ${OPTS.map((o, i) => `<button data-metric="${o.id}"${i === 0 ? ' class="active"' : ''}>${o.label}</button>`).join('')}
       </div></div>
