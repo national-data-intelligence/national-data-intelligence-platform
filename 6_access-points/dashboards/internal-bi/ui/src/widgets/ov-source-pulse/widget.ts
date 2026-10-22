@@ -10,6 +10,12 @@ const CHIP: Record<string, string> = {
   no_metric: 'var(--ink-4, #9ca3af)',
 };
 
+// Source system → house-sprite icon (no vendor logos in the repo).
+const SOURCE_ICON: [RegExp, string][] = [
+  [/dhis/i, 'i-database'], [/mfr|registry/i, 'i-building'], [/emr/i, 'i-hospital'],
+  [/ewars|climate|idsr/i, 'i-pulse'], [/lmis|supply/i, 'i-package'],
+];
+
 const def: WidgetDef = {
   id: 'ov-source-pulse',
   reactsTo: ['geography'],
@@ -28,8 +34,10 @@ const def: WidgetDef = {
       tile.style.cssText =
         'border-radius:12px;box-shadow:0 1px 2px rgba(15,23,42,.05),0 5px 16px rgba(15,23,42,.045);' +
         'padding:12px 14px;display:flex;flex-direction:column;gap:3px;background:var(--paper);';
+      const src = String(r.source);
+      const ico = SOURCE_ICON.find(([re]) => re.test(src))?.[1] ?? 'i-database';
       tile.innerHTML =
-        `<span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3,#667085);display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:${color};flex:none"></span>${String(r.source)}</span>` +
+        `<span style="font-size:.86rem;font-weight:700;color:var(--ink-2,#334155);display:flex;align-items:center;gap:8px"><svg class="ico" aria-hidden="true" style="width:20px;height:20px;color:${color};flex:none"><use href="#${ico}"/></svg>${src}</span>` +
         `<span style="font-size:22px;font-weight:650;color:${status === 'no_metric' ? 'var(--ink-3,#667085)' : 'var(--ink)'};">${compl}</span>`;
       wrap.appendChild(tile);
     }

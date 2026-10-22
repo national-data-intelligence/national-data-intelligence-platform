@@ -349,7 +349,7 @@ export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols =
   const hasDelta = cells.some(c => c.delta);
   const hasFoot = cells.some(c => c.foot || c.note);
   el.innerHTML =
-    `<div style="display:grid;grid-template-columns:repeat(${trackCols},1fr);gap:.7rem;height:100%">` +
+    `<div style="display:grid;grid-template-columns:repeat(${trackCols},minmax(0,1fr));gap:.7rem;height:100%">` +
     cells.map(c => {
       const ic = c.iconColor || theme.navy['600'];
       const head = c.icon

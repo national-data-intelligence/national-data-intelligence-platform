@@ -12,7 +12,7 @@ import { useDashboardSpec } from '../api/spec';
 
 const PAGES = [
   { id: 'overview', ico: 'i-grid',       title: 'Overview',           page_id: 'internal-bi/overview' },
-  { id: 'disease',  ico: 'i-alert',      title: 'Disease Surveillance', page_id: 'internal-bi/disease' },
+  { id: 'disease',  ico: 'i-surveillance',      title: 'Disease Surveillance', page_id: 'internal-bi/disease' },
   { id: 'resource', ico: 'i-package',    title: 'Resource Management', page_id: 'internal-bi/resource' },
   { id: 'control-tower', ico: 'i-truck', title: 'Supply Control Tower', page_id: 'internal-bi/control-tower' },
   { id: 'service',  ico: 'i-chart-line', title: 'Service Performance', page_id: 'internal-bi/service' },

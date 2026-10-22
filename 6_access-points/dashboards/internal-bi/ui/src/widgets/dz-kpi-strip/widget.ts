@@ -22,10 +22,22 @@ const def: WidgetDef = {
     if (!rows || !rows.length) { ctx.empty('No surveillance headline data for the selected filters.'); return; }
     const fmt = (v: number, unit: string) =>
       unit === 'percent' ? `${(+v).toFixed(Number.isInteger(+v) ? 0 : 1)}%` : (+v).toLocaleString();
+    const t = ctx.theme;
+    const ICON: [RegExp, string, string][] = [
+      [/outbreak|active/i, 'i-outbreak', t.status.alert],
+      [/new cases/i, 'i-trend-up', t.status.watch],
+      [/fatality/i, 'i-heart', t.status.alert],
+      [/woreda|district|highest/i, 'i-target', t.navy['600']],
+      [/completeness/i, 'i-check-circle', t.status.good],
+      [/alarm/i, 'i-bell', t.status.info],
+    ];
     const cells: KpiCell[] = rows.map(r => {
       const dir = String(r.delta_direction ?? '');
+      const hit = ICON.find(([re]) => re.test(String(r.tile ?? '')));
       return {
         label: String(r.tile ?? ''),
+        icon: hit?.[1],
+        iconColor: hit?.[2],
         value: String(r.unit) === 'text' ? String(r.value ?? '-') : fmt(Number(r.value ?? 0), String(r.unit ?? 'count')),
         status: dir === 'alert' ? 'alert' : dir === 'watch' ? 'watch' : dir === 'good' ? 'good' : 'info',
       };
