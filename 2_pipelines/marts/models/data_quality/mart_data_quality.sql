@@ -90,7 +90,7 @@ hcmis AS (
         100.0 * COUNT(DISTINCT lnk.hk_hcmis_item)::numeric
               / GREATEST((SELECT COUNT(*) FROM {{ source('nhdw_vault_raw', 'hub_hcmis_item') }}), 1) AS completeness_pct,
         NULL::numeric                           AS timeliness_pct,
-        100.0 * COUNT(*) FILTER (WHERE sat.soh >= 0)::numeric
+        100.0 * COUNT(*) FILTER (WHERE sat.soh ~ '^-?[0-9]+([.][0-9]+)?$' AND sat.soh::numeric >= 0)::numeric
               / GREATEST(COUNT(*), 1)           AS validity_pct,
         COUNT(*)::bigint                        AS reports_received,
         -- expected stays NULL: received counts stock EVENTS; the item
@@ -114,7 +114,7 @@ mbrana AS (
                             FROM {{ source('nhdw_vault_raw', 'hub_mbrana_ussd_facility') }}), 1)
                                                 AS completeness_pct,
         NULL::numeric                           AS timeliness_pct,
-        100.0 * COUNT(*) FILTER (WHERE sat.quantity >= 0)::numeric
+        100.0 * COUNT(*) FILTER (WHERE sat.quantity ~ '^-?[0-9]+([.][0-9]+)?$' AND sat.quantity::numeric >= 0)::numeric
               / GREATEST(COUNT(*), 1)           AS validity_pct,
         COUNT(*)::bigint                        AS reports_received,
         NULL::bigint                            AS reports_expected
