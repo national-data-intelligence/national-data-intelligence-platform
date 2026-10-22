@@ -59,11 +59,9 @@ export default function Sidebar() {
             ? <img src={logoSrc} alt="" className="sidehead-logo" />
             : null}
           <div className="sidehead-text">
-            {/* The surface name leads; Palladium is the attribution line beneath it. */}
+            {/* The surface name leads the header; the Palladium logo sits in the footer. */}
             <div className="title">Internal BI</div>
-            {logoSrc
-              ? <div className="subtitle">{platformAbbr}</div>
-              : <img src="/static/assets/brand/palladium-logo-white.png" alt={platformAbbr} className="sidehead-brand" />}
+            {logoSrc ? <div className="subtitle">{platformAbbr}</div> : null}
           </div>
         </a>
       </div>
@@ -79,6 +77,7 @@ export default function Sidebar() {
 
       {/* Static product identity only — no fabricated liveness/build claims. */}
       <div className="bi-sidebar-foot">
+        {logoSrc ? null : <img src="/static/assets/brand/palladium-logo-white.png" alt={platformAbbr} className="sidefoot-brand" />}
         <strong>National Data Intelligence Platform</strong><br />
         <span>v 1.0</span>
       </div>

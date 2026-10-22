@@ -56,11 +56,6 @@
     filter: brightness(0) invert(1) drop-shadow(0 2px 14px rgba(255,255,255,0.32));
     transform: scale(1.04);
   }
-  .bi-sidehead .sidehead-brand {
-    display: block; width: 78px; height: auto;
-    margin-top: 0.55rem;
-    opacity: 0.72;
-  }
   .bi-sidehead .sidehead-text {
     display: flex; flex-direction: column; justify-content: center;
     line-height: 1;
@@ -124,6 +119,11 @@
     text-align: center;
   }
   .bi-sidebar-foot strong { color: rgba(255,255,255,0.7); }
+  .bi-sidebar-foot .sidefoot-brand {
+    display: block; width: 132px; height: auto;
+    margin: 0 auto 0.85rem;
+    filter: drop-shadow(0 0 0.4px #fff) drop-shadow(0 0 0.4px #fff);   /* thickens the thin wordmark strokes */
+  }
 
   /* ═══ Main column · new texture (bg-content.avif) + gradient semi-transparent white overlay ═══ */
   .bi-main {
