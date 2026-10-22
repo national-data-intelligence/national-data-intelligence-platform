@@ -12,6 +12,7 @@
  */
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useDatasets, type DatasetLive } from '../../hooks/useDatasets';
+import { useProfile, finestLevel } from '../../hooks/useProfile';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
 
 type Tier = 'all' | 'aggregate' | 'facility-level' | 'bulletin';
@@ -85,6 +86,10 @@ function inferType(col: string, samples: string[]): string {
 
 function DataCatalogue({ host }: { host: PublicHost }) {
   const { openModal } = host;
+  const { profile } = useProfile();
+  // The aggregation floor named in the licence note — "woreda" in Ethiopia,
+  // "district" in Zambia — read from the profile's finest admin level.
+  const floorLevel = finestLevel(profile).toLowerCase();
   const [query, setQuery] = useState('');
   const [tier, setTier] = useState<Tier>('all');
   const [topic, setTopic] = useState<string>('all');
@@ -355,7 +360,7 @@ function DataCatalogue({ host }: { host: PublicHost }) {
           <span className="od-foot-note">
             <svg className="ico"><use href="#i-shield" /></svg>
             <span className="od-foot-note-txt">
-              <strong>CC-BY 4.0 · k-anonymity ≥ 5 · aggregated to woreda or coarser</strong>
+              <strong>CC-BY 4.0 · k-anonymity ≥ 5 · aggregated to {floorLevel} or coarser</strong>
               <span>Data are freely reusable with attribution. Facility-level data require additional approval.</span>
             </span>
           </span>

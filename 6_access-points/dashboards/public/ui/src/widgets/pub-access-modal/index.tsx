@@ -21,7 +21,8 @@
  *   not-started → sending → code-sent → verifying → verified
  *                                     ↘ (bad_code / expired stay on code-sent)
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useProfile } from '../../hooks/useProfile';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
 
 /** Explicit verification lifecycle — one clear status is rendered per state. */
@@ -53,13 +54,15 @@ const EMPTY: AccessForm = {
 type FieldErr = { name?: string; email?: string; purpose?: string; fan?: string; faydaEmail?: string; code?: string };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const FAN_RE = /^\d{12,16}$/;   // Ethiopia's FIN is 12 digits, the FAN 16.
+const DEFAULT_ID_RE = /^\d{12,16}$/;   // Ethiopia's FIN is 12 digits, the FAN 16.
 
-/** Format-check the FAN (shape only, not a verification). */
-function validateFan(value: string): string | null {
+/** Format-check the national-ID number (shape only, not a verification). The
+ *  pattern, label and hint all come from the active profile's `identity` block,
+ *  so a country with a different national-ID shape (or none) is not hardcoded. */
+function validateId(value: string, re: RegExp, label: string, hint: string): string | null {
   const v = value.trim();
-  if (!v) return 'Enter your Fayda number first.';
-  return FAN_RE.test(v) ? null : 'Enter a valid Fayda number (12 to 16 digits).';
+  if (!v) return `Enter your ${label} first.`;
+  return re.test(v) ? null : hint;
 }
 
 /** Turn a gateway access-request error into a friendly line. */
@@ -111,6 +114,20 @@ function faydaReason(reason: string | undefined): string {
 function AccessRequestModal({ host }: { host: PublicHost }) {
   const onClose = host.closeModal;
   const { setPage } = host;
+  // Access-request copy + identity verification are country facts. The whole
+  // verification card renders ONLY when the active profile ships an `identity`
+  // block (et-v3 → Fayda); a country with no national-ID verifier omits it, so
+  // the modal never offers a form that posts to an endpoint absent there.
+  const { copy, profile } = useProfile();
+  const ac = (copy?.access ?? {}) as Record<string, string>;
+  const idcfg = profile.identity;
+  const idLabel = idcfg?.id_label ?? 'ID number';
+  const idHint = idcfg?.id_hint ?? 'Enter a valid number.';
+  const idRe = useMemo(() => {
+    if (!idcfg?.id_pattern) return DEFAULT_ID_RE;
+    try { return new RegExp(idcfg.id_pattern); } catch { return DEFAULT_ID_RE; }
+  }, [idcfg?.id_pattern]);
+  const reviewOrg = ac.review_org || 'the platform administrators';
   const [form, setForm] = useState<AccessForm>(EMPTY);
   const [fieldErr, setFieldErr] = useState<FieldErr>({});
   const [submitted, setSubmitted] = useState<string | null>(null);
@@ -144,7 +161,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
 
   // Step 1 — confirm the FAN + registered email pair, then email a code to it.
   const sendCode = async () => {
-    const e = validateFan(form.fan);
+    const e = validateId(form.fan, idRe, idLabel, idHint);
     if (e) { setFieldErr(fe => ({ ...fe, fan: e })); return; }
     const em = form.faydaEmail.trim();
     if (!EMAIL_RE.test(em)) {
@@ -300,11 +317,14 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
         {!submitted && (
           <>
             <div className="modal-hdr">
-              <h2>Request NHDW access</h2>
-              <p>Tell us who you are and what you need. We respond within 2 business days.</p>
+              <h2>{ac.title || 'Request access'}</h2>
+              <p>{ac.subtitle || 'Tell us who you are and what you need. We respond within 2 business days.'}</p>
             </div>
             <div className="modal-body">
-              {/* Identity verification (optional) — Fayda email-OTP round-trip */}
+              {/* Identity verification — rendered ONLY when the active profile
+                  ships an `identity` block (Fayda for et-v3); omitted entirely
+                  for a country with no national-ID verifier. */}
+              {idcfg && (
               <div style={{
                 background: verified ? 'var(--good-50, #e7f5ee)' : 'var(--paper-2)',
                 border: verified ? '1px solid var(--good, #1d8b5a)' : '1px solid var(--border)',
@@ -317,21 +337,21 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                   </span>
                   <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                     <p className="text-sm" style={{ margin: 0, fontWeight: 600 }}>
-                      Verify your identity with Fayda (optional)
+                      {idcfg.card_title || `Verify your identity with ${idcfg.system} (optional)`}
                     </p>
                     <p className="text-xs muted" style={{ margin: '0.2rem 0 0' }}>
-                      Enter your Fayda number and the email registered to it; we send a one-time
-                      code to that address to confirm it is you. Helps reviewers approve faster. Not
-                      required for organisation accounts.
+                      {idcfg.help_text || `Enter your ${idLabel} and the email registered to it; `
+                        + 'we send a one-time code to that address to confirm it is you. Helps '
+                        + 'reviewers approve faster. Not required for organisation accounts.'}
                     </p>
                   </div>
                 </div>
 
-                {/* Step 1 — FAN + registered email (the pair) + Send code */}
+                {/* Step 1 — ID number + registered email (the pair) + Send code */}
                 <div className="field-group" style={{ marginTop: '0.8rem' }}>
-                  <label>Fayda number (FAN)</label>
+                  <label>{idLabel}</label>
                   <input type="text" inputMode="numeric"
-                         value={form.fan} placeholder="e.g. 1000000000000001"
+                         value={form.fan} placeholder={idcfg.id_placeholder || ''}
                          aria-invalid={!!fieldErr.fan}
                          disabled={verified}
                          onChange={e => changeFan(e.target.value)} />
@@ -342,7 +362,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                   )}
                 </div>
                 <div className="field-group" style={{ marginTop: '0.6rem' }}>
-                  <label>Email on your Fayda record</label>
+                  <label>{idcfg.email_label || 'Email on your ID record'}</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <input type="email" inputMode="email"
                            value={form.faydaEmail} placeholder="you@example.com"
@@ -397,31 +417,32 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                   </p>
                 )}
               </div>
+              )}
 
               <div className="grid grid-2 gap-sm">
                 <div className="field-group"><label>Full name</label>
-                  <input type="text" value={form.name} placeholder="Dr Tigist Bekele"
+                  <input type="text" value={form.name} placeholder={ac.ph_name || 'Full name'}
                          aria-invalid={!!fieldErr.name}
                          onChange={e => { update({ name: e.target.value }); if (fieldErr.name) setFieldErr(fe => ({ ...fe, name: undefined })); }} />
                   {fieldErr.name && <p className="text-xs" style={{ margin: '0.25rem 0 0', color: 'var(--alert, #c0392b)' }}>{fieldErr.name}</p>}
                 </div>
                 <div className="field-group"><label>Email</label>
-                  <input type="email" value={form.email} placeholder="tigist.bekele@moh.gov.et"
+                  <input type="email" value={form.email} placeholder={ac.ph_email || 'name@example.org'}
                          aria-invalid={!!fieldErr.email}
                          onChange={e => { update({ email: e.target.value }); if (fieldErr.email) setFieldErr(fe => ({ ...fe, email: undefined })); }} />
                   {fieldErr.email && <p className="text-xs" style={{ margin: '0.25rem 0 0', color: 'var(--alert, #c0392b)' }}>{fieldErr.email}</p>}
                 </div>
                 <div className="field-group"><label>Phone</label>
-                  <input type="tel" value={form.phone} placeholder="+251 911 000000"
+                  <input type="tel" value={form.phone} placeholder={ac.ph_phone || 'Phone number'}
                          onChange={e => update({ phone: e.target.value })} /></div>
                 <div className="field-group"><label>Organisation</label>
-                  <input type="text" value={form.org} placeholder="FMoH / RHB / EPHI / Partner"
+                  <input type="text" value={form.org} placeholder={ac.ph_org || 'Organisation'}
                          onChange={e => update({ org: e.target.value })} /></div>
               </div>
               <div className="field-group">
                 <label>Role / job title</label>
                 <input type="text" value={form.role}
-                       placeholder="Programme M&amp;E officer, RHB director, Researcher"
+                       placeholder={ac.ph_role || 'Programme officer, director, researcher'}
                        onChange={e => update({ role: e.target.value })} />
               </div>
               <div className="field-group">
@@ -457,7 +478,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                 <p className="text-xs muted">Supervisor letter, IRB approval, project proposal, employment verification (PDF/DOCX, up to 10MB each)</p>
               </div>
               <p className="text-xs muted">
-                By submitting, you accept the FMoH <a href="#">data use agreement</a> and confirm you will not redistribute restricted data.
+                By submitting, you accept the <a href="#">data use agreement</a> and confirm you will not redistribute restricted data.
               </p>
               {err && <p className="text-sm" role="alert" style={{ color: 'var(--alert)' }}>{err}</p>}
             </div>
@@ -474,7 +495,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
           <>
             <div className="modal-hdr">
               <h2><svg className="ico"><use href="#i-check-circle" /></svg> Request submitted</h2>
-              <p>Your request has been queued for FMoH IT review.</p>
+              <p>{ac.success_sub || `Your request has been queued for ${reviewOrg} review.`}</p>
             </div>
             <div className="modal-body">
               <div style={{ textAlign: 'center', padding: '1.2rem 0' }}>
@@ -490,7 +511,7 @@ function AccessRequestModal({ host }: { host: PublicHost }) {
                 }}>
                   <span>{submitted}</span>
                 </p>
-                <p className="text-sm muted">Keep this ID. You will receive an email confirmation, and the FMoH IT team will respond within 2 business days.</p>
+                <p className="text-sm muted">{ac.success_note || `Keep this ID. You will receive an email confirmation, and ${reviewOrg} will respond within 2 business days.`}</p>
               </div>
 
               <div style={{ background: 'var(--paper-2)', borderRadius: 'var(--radius-lg)', padding: '0.95rem 1.1rem', marginTop: '0.6rem' }}>

@@ -14,6 +14,7 @@
  */
 import { useEffect, useState } from 'react';
 import { loadSiblingBases, fallbackBases, type SiblingBases } from '../../hooks/accessPoints';
+import { useProfile } from '../../hooks/useProfile';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
 
 type DashboardSpec = {
@@ -55,11 +56,15 @@ const CHEVRON = (
   </svg>
 );
 
+// `audience` here is only a last-resort fallback; the live value comes from the
+// active profile's copy deck (copy.dashboards.*) so a country whose sub-national
+// bodies are named differently (RHB in Ethiopia, Provincial Health Office in
+// Zambia) says so without a rebuild.
 const DASHBOARDS: DashboardSpec[] = [
   {
     label: 'Internal Business Intelligence',
     base: 'internal-bi',
-    audience: 'FMoH staff · RHB · programme directors',
+    audience: 'Ministry staff · programme directors',
     description: 'Programme analytics, cascade, supply and equity dashboards.',
     icon: BI_ICON,
   },
@@ -82,6 +87,15 @@ const DASHBOARDS: DashboardSpec[] = [
 function DashboardsModal({ host }: { host: PublicHost }) {
   const onClose = host.closeModal;
   const openAccess = () => host.openModal('access');
+  const { copy } = useProfile();
+  // Profile-supplied audiences, keyed by dashboard, falling back to the spec.
+  const audienceFor = (base: keyof SiblingBases, fallback: string): string => {
+    const d = copy?.dashboards ?? {};
+    const key = base === 'internal-bi' ? 'bi_audience'
+              : base === 'admin' ? 'admin_audience'
+              : base === 'workshop' ? 'workshop_audience' : '';
+    return (key && typeof d[key] === 'string' && d[key]) ? d[key] : fallback;
+  };
 
   // Seed with the same-origin fallback so the cards work immediately, then
   // refine with the server-resolved bases once /api/access-points responds.
@@ -112,7 +126,7 @@ function DashboardsModal({ host }: { host: PublicHost }) {
                 <span className="dash-card-text">
                   <span className="dash-card-title">{d.label}</span>
                   <span className="dash-card-desc">{d.description}</span>
-                  <span className="dash-card-aud">{d.audience}</span>
+                  <span className="dash-card-aud">{audienceFor(d.base, d.audience)}</span>
                 </span>
                 {CHEVRON}
               </button>

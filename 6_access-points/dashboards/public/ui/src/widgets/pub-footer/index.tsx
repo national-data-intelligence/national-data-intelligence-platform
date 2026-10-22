@@ -3,16 +3,17 @@
  * (mockup L1355-1368). Persistent chrome (CHROME_BOTTOM); takes nothing from the
  * host.
  */
-import { useProfile } from '../../hooks/useProfile';
+import { useProfile, logoUrl } from '../../hooks/useProfile';
 import type { PublicWidget } from '../../runtime/types';
 
 function Footer() {
   const { profile, copy } = useProfile();
+  const logo = logoUrl(profile);
   return (
     <footer className="foot">
       <div className="foot-inner">
         <div className="foot-brand">
-          <img className="foot-logo" src={`/static/assets/${profile.ministry?.logo || 'logo-fmoh.png'}`} alt="" aria-hidden={true} />
+          {logo && <img className="foot-logo" src={logo} alt="" aria-hidden={true} />}
           <div>
             <strong>{copy.footer.brand_line}</strong><br />
             {copy.footer.owner_line}<br />

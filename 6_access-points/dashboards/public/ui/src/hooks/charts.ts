@@ -37,21 +37,18 @@ function mount(el: HTMLElement) {
 }
 
 /** `live` (from the pub-region widget-data seam: region × coverage indicator,
- *  latest month) replaces the static mockup bars when present. */
+ *  latest month) drives the bars. Country-specific by nature — the category axis
+ *  is a list of a country's admin-1 units — so there is NO hardcoded fallback:
+ *  the caller renders this chart only when it has live data, and an absent `live`
+ *  clears the node rather than drawing one country's regions under another. */
 export function regionChart(el: HTMLElement, live?: ChartData): void {
   const c = mount(el);
-  const regions = live ? live.x
-    : ['Addis Ababa','Sidama','Harari','Dire Dawa','Amhara','Oromia','South Ethiopia','Central','S.West','Tigray','Benishangul','Gambella','Afar','Somali'];
-  const series = live
-    ? live.series.map((s, i) => ({
-        name: s.name, type: 'bar' as const, data: s.data,
-        itemStyle: { color: PALETTE[i % PALETTE.length] }, barWidth: 8,
-      }))
-    : [
-        { name: 'Penta3', type: 'bar' as const, data: [96,93,94,92,89,90,86,84,81,75,68,62,54,48], itemStyle: { color: PALETTE[0] }, barWidth: 8 },
-        { name: 'ANC4',   type: 'bar' as const, data: [78,71,73,70,65,64,60,57,53,50,45,38,32,27], itemStyle: { color: PALETTE[1] }, barWidth: 8 },
-        { name: 'SBA',    type: 'bar' as const, data: [92,76,77,72,58,56,52,48,44,42,35,30,24,21], itemStyle: { color: PALETTE[2] }, barWidth: 8 },
-      ];
+  if (!live) { c.clear(); return; }
+  const regions = live.x;
+  const series = live.series.map((s, i) => ({
+    name: s.name, type: 'bar' as const, data: s.data,
+    itemStyle: { color: PALETTE[i % PALETTE.length] }, barWidth: 8,
+  }));
   c.setOption({
     grid: { left: 90, right: 12, top: 30, bottom: 40 },
     legend: { data: series.map(s => s.name), top: 0, textStyle: { fontSize: 11, color: AXIS.label } },

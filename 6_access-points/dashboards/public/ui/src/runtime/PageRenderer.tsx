@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import type { PublicHost } from './types';
 import { PAGES } from './pages';
 import { getWidget, registeredIds } from './registry';
+import { useProfile } from '../hooks/useProfile';
 
 /**
  * The public page composition (pages.ts) is static, but WHICH of those widgets a
@@ -78,11 +79,18 @@ export function WidgetSlot({ id, host }: { id: string; host: PublicHost }) {
 export default function PageRenderer({ host }: { host: PublicHost }) {
   const spec = PAGES[host.active];
   const { set: disabled, ready } = useDisabled();
+  const { profile } = useProfile();
   const keep = (id: string) => !disabled.has(id);
   const fullBleed = (spec?.fullBleed ?? []).filter(keep);
   // Hold profile-switchable content until the disable list is known, so a
   // wrong-country widget never flashes before it is filtered out.
   const content = ready ? (spec?.content ?? []).filter(keep) : [];
+  // A page whose every widget the active profile disables (e.g. a data-backed
+  // page under a country whose data layer is not yet ingested) renders a
+  // graceful note rather than a blank well — the nav link stays honest instead
+  // of leading nowhere.
+  const specHadContent = (spec?.content ?? []).length > 0;
+  const allDisabled = ready && specHadContent && content.length === 0 && fullBleed.length === 0;
 
   return (
     <>
@@ -94,6 +102,16 @@ export default function PageRenderer({ host }: { host: PublicHost }) {
           {content.map((id) => (
             <WidgetSlot key={id} id={id} host={host} />
           ))}
+        </div>
+      )}
+      {allDisabled && (
+        <div className="pub-content">
+          <div className="od-empty" style={{ minHeight: 220, display: 'flex', flexDirection: 'column',
+                 alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+            <p className="text-sm muted">
+              This section is not yet available{profile.country?.name ? ` for ${profile.country.name}` : ''}.
+            </p>
+          </div>
         </div>
       )}
     </>

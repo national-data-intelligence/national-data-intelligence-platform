@@ -4,12 +4,13 @@
  * active/setPage/openModal from the host. Persistent chrome (CHROME_TOP).
  */
 import type { PublicWidget, PublicHost } from '../../runtime/types';
-import { useProfile } from '../../hooks/useProfile';
+import { useProfile, logoUrl } from '../../hooks/useProfile';
 
 function GovBar({ host }: { host: PublicHost }) {
   const { active, setPage, openModal } = host;
   const { profile, copy } = useProfile();
   const t = copy.govbar;
+  const logo = logoUrl(profile);
   return (
     <>
       <a href="#main" className="gov-skip">{t.skip}</a>
@@ -20,11 +21,9 @@ function GovBar({ host }: { host: PublicHost }) {
             className="gov-mark"
             onClick={(e) => { e.preventDefault(); setPage('home'); }}
           >
-            <img
-              className="gov-mark-logo"
-              src={`/static/assets/${profile.ministry?.logo || 'logo-fmoh.png'}`}
-              alt="" aria-hidden={true}
-            />
+            {logo && (
+              <img className="gov-mark-logo" src={logo} alt="" aria-hidden={true} />
+            )}
             <span className="gov-mark-text">{t.mark_text}</span>
             <span className="gov-mark-tag">{t.mark_tag}</span>
           </a>

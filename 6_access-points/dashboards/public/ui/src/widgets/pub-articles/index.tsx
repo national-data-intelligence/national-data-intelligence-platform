@@ -17,6 +17,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { ARTICLE_CATEGORIES, type Article } from '../../data/articles';
 import { useArticles } from '../../hooks/useArticles';
+import { useProfile } from '../../hooks/useProfile';
 import type { PublicWidget, PublicHost } from '../../runtime/types';
 
 type Sort = 'newest' | 'oldest' | 'az';
@@ -73,6 +74,10 @@ function Articles({ host }: { host: PublicHost }) {
   const [page, setPageNum] = useState(0);
   const [featIdx, setFeatIdx] = useState(0);
   const ART = useArticles();
+  // Masthead copy from the active profile — so the newsroom intro names the
+  // right ministry/country (or stays neutral) instead of hardcoding Ethiopia.
+  const { copy } = useProfile();
+  const head = copy?.articles_page ?? {};
 
   // Featured lead = the newest few, independent of the browse filters below.
   const featured = useMemo(
@@ -151,11 +156,11 @@ function Articles({ host }: { host: PublicHost }) {
       <div className="nw">
         {/* Light editorial masthead — same opening as the rest of the site */}
         <header className="nw-head">
-          <p className="nw-eyebrow">Newsroom</p>
-          <h1 className="nw-title">News and health bulletins</h1>
+          <p className="nw-eyebrow">{head.eyebrow ?? 'Newsroom'}</p>
+          <h1 className="nw-title">{head.title ?? 'News and health bulletins'}</h1>
           <p className="nw-sub">
-            Weekly PHEM surveillance bulletins, official press releases from the Federal Ministry
-            of Health, and public-health advisories from Ethiopia's health institutions, most recent first.
+            {head.sub ?? 'Surveillance bulletins, official press releases and public-health '
+              + 'advisories, most recent first.'}
           </p>
         </header>
 

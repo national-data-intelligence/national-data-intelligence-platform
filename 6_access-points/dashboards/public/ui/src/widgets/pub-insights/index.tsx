@@ -140,23 +140,20 @@ function adaptSupply(d: WidgetData | null): Supply | null {
   };
 }
 
-// ── Offline fallback — used ONLY when the gateway returns nothing.
-//
-// These are REAL published figures, not fabricated deltas: a fallback must never
-// invent month-on-month movement the warehouse has not measured. Which is also
-// why the ACTIVE PROFILE supplies them now — a Zambia deployment quietly falling
-// back to Ethiopian DHS numbers would be a worse failure than showing nothing.
-// The array below is the last resort if the profile carries none, and is the
-// same Ethiopia DHS 2024-25 set that shipped before profiles existed.
+// ── Offline fallback — used ONLY when the gateway returns nothing AND the active
+// profile carries no `insights.fallback_kpis`. The country-specific figures live
+// in each profile's copy deck (profileKpis below), with their real source named
+// per line; a Zambia or Ghana deployment quietly falling back to Ethiopian DHS
+// numbers would be a worse failure than showing a generic set. So THIS array is
+// the extreme last resort and is deliberately COUNTRY-NEUTRAL — generic indicator
+// labels with no country-specific survey or plan name — rather than any one
+// country's published figures.
 const KPIS_FALLBACK: KPI[] = [
-  { key: 'PENTA3-COV', kind: 'coverage', order: 1, tone: 'alert', lbl: 'Penta3 coverage', val: '40%', deltaTrend: 'flat', deltaText: 'EDHS 2024-25', target: 'HSDIP target 95%' },
-  { key: 'ANC4-COV', kind: 'coverage', order: 2, tone: 'alert', lbl: 'ANC4 coverage', val: '53%', deltaTrend: 'up', deltaText: 'EDHS 2024-25', target: 'HSDIP target 81%' },
-  { key: 'SBA-COV', kind: 'coverage', order: 3, tone: 'watch', lbl: 'Skilled birth attendance', val: '64%', deltaTrend: 'up', deltaText: 'up from 12% in 2011', target: 'HSDIP target 76%' },
-  { key: 'FP-MCPR', kind: 'coverage', order: 4, tone: 'alert', lbl: 'Modern contraceptive use', val: '35%', deltaTrend: 'flat', deltaText: 'unchanged since 2016', target: 'HSDIP target 50%' },
-  { key: 'TB-TX-SUCC', kind: 'outcome', order: 5, tone: 'watch', lbl: 'TB treatment success', val: '89%', deltaTrend: 'flat', deltaText: 'programme data', target: 'HSDIP target 90%' },
-  { key: 'HIV-VL-SUPP', kind: 'outcome', order: 6, tone: 'watch', lbl: 'ART viral suppression', val: '90%', deltaTrend: 'up', deltaText: 'programme data', target: '95-95-95 third 95' },
-  { key: 'NUT-STUNT', kind: 'outcome', order: 7, tone: 'alert', lbl: 'Under-5 stunting', val: '40%', deltaTrend: 'flat', deltaText: 'EDHS 2024-25', target: 'SDG target ≤25%' },
-  { key: 'PHEM-COMPL', kind: 'trust', order: 8, tone: 'info', lbl: 'Reporting completeness', val: '92%', deltaTrend: 'up', deltaText: 'routine reporting', target: 'HSDIP target 95%' },
+  { key: 'PENTA3-COV', kind: 'coverage', order: 1, tone: 'info', lbl: 'Penta3 coverage', val: '—', deltaTrend: 'flat', deltaText: 'national estimate', target: '' },
+  { key: 'ANC4-COV', kind: 'coverage', order: 2, tone: 'info', lbl: 'ANC4 coverage', val: '—', deltaTrend: 'flat', deltaText: 'national estimate', target: '' },
+  { key: 'SBA-COV', kind: 'coverage', order: 3, tone: 'info', lbl: 'Skilled birth attendance', val: '—', deltaTrend: 'flat', deltaText: 'national estimate', target: '' },
+  { key: 'FP-MCPR', kind: 'coverage', order: 4, tone: 'info', lbl: 'Modern contraceptive use', val: '—', deltaTrend: 'flat', deltaText: 'national estimate', target: '' },
+  { key: 'PHEM-COMPL', kind: 'trust', order: 8, tone: 'info', lbl: 'Reporting completeness', val: '—', deltaTrend: 'flat', deltaText: 'routine reporting', target: '' },
 ];
 
 const trendIcon = (t: Trend) =>
@@ -178,9 +175,12 @@ function Tile({ k }: { k: KPI }) {
 
 function PublicInsights() {
   const { profile, copy } = useProfile();
-  // "regional" in Ethiopia, "provincial" elsewhere — the admin-1 label, lowered.
-  const levelLabel = (profile.geography?.levels?.find(l => l.code === 'admin1')?.singular
-                      ?? 'regional').toLowerCase();
+  // "region" in Ethiopia, "province" in Zambia — the admin-1 label from the
+  // profile, used wherever this widget names the sub-national level in its own
+  // markup instead of saying "region".
+  const a1 = profile.geography?.levels?.find(l => l.code === 'admin1');
+  const levelLabel = (a1?.singular ?? 'region').toLowerCase();
+  const levelPluralLower = (a1?.plural ?? 'regions').toLowerCase();
   const regionRef = useRef<HTMLDivElement>(null);
   const trendRef = useRef<HTMLDivElement>(null);
   const insightsData = useWidgetData('pub-insights');
@@ -188,13 +188,23 @@ function PublicInsights() {
   const supplyData = useWidgetData('pub-supply');
 
   const profileKpis = copy?.insights?.fallback_kpis as KPI[] | undefined;
+  // `fallback_only` marks a country whose coverage marts are NOT in this
+  // deployment (e.g. a profile onboarded at the presentation layer before its
+  // data layer is ingested). It renders the profile's own published figures and
+  // IGNORES the live widget-data seam, so the shared marts of another country
+  // are never surfaced under this one. et-v3/zm-v1 do not set it and are
+  // unaffected.
+  const fallbackOnly = copy?.insights?.fallback_only === true;
   const kpis = useMemo(
-    () => adaptKpis(insightsData) ?? (profileKpis?.length ? profileKpis : KPIS_FALLBACK),
-    [insightsData, profileKpis],
+    () => (fallbackOnly ? null : adaptKpis(insightsData)) ?? (profileKpis?.length ? profileKpis : KPIS_FALLBACK),
+    [insightsData, profileKpis, fallbackOnly],
   );
-  const trendLive = useMemo(() => adaptTrend(insightsData), [insightsData]);
-  const regionLive = useMemo(() => adaptRegion(regionData), [regionData]);
-  const supply = useMemo(() => adaptSupply(supplyData), [supplyData]);
+  const trendLive = useMemo(() => (fallbackOnly ? undefined : adaptTrend(insightsData)), [insightsData, fallbackOnly]);
+  const regionLive = useMemo(() => (fallbackOnly ? undefined : adaptRegion(regionData)), [regionData, fallbackOnly]);
+  // The service-readiness strip is live supply/facility data too — gate it on
+  // fallback_only so a dataless country never shows another country's facility
+  // counts and hub stock.
+  const supply = useMemo(() => (fallbackOnly ? null : adaptSupply(supplyData)), [supplyData, fallbackOnly]);
 
   const coverage = kpis.filter(k => k.kind !== 'trust');
   const trust = kpis.filter(k => k.kind === 'trust');
@@ -256,19 +266,29 @@ function PublicInsights() {
       <div className="grid grid-2 mt-lg">
         <div className="card card-elev">
           <div className="card-hdr">
-            <h4>Coverage by region, latest period</h4>
-            <span className="meta">{regionLive ? `${regionLive.series.length} indicators · all 14 regions` : 'Penta3 / ANC4 / SBA · all 14 regions'}</span>
+            <h4>Coverage by {levelLabel}, latest period</h4>
+            {regionLive && (
+              <span className="meta">{`${regionLive.series.length} indicators · ${regionLive.x.length} ${levelPluralLower}`}</span>
+            )}
           </div>
-          <div id="region-chart" ref={regionRef} className="ch-lg"></div>
+          {regionLive
+            ? <div id="region-chart" ref={regionRef} className="ch-lg"></div>
+            : <div className="od-empty" style={{ minHeight: 160, display: 'flex', flexDirection: 'column',
+                       alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                <p className="text-sm muted">Coverage by {levelLabel} appears once monthly indicator data is published.</p>
+              </div>}
         </div>
         <div className="card card-elev">
           <div className="card-hdr">
             <h4>National headline trends, last 24 months</h4>
-            <span className="meta">
-              {trendLive ? `Monthly · ${trendLive.series.length} indicators` : 'Monthly · 4 indicators'}
-            </span>
+            {trendLive && <span className="meta">{`Monthly · ${trendLive.series.length} indicators`}</span>}
           </div>
-          <div id="trend-chart" ref={trendRef} className="ch-lg"></div>
+          {trendLive
+            ? <div id="trend-chart" ref={trendRef} className="ch-lg"></div>
+            : <div className="od-empty" style={{ minHeight: 160, display: 'flex', flexDirection: 'column',
+                     alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                <p className="text-sm muted">Monthly indicator trends appear once a time series is published.</p>
+              </div>}
         </div>
       </div>
     </section>

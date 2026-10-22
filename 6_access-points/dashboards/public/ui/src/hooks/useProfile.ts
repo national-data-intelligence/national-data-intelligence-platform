@@ -26,10 +26,28 @@ export type Profile = {
   label: string;
   country: { name: string; official_name: string; adjective: string; iso2: string; iso3: string;
              native?: { lang?: string; country_name?: string } };
-  ministry: { abbr: string; name: string; native_name: string; logo?: string };
-  platform: { name: string; abbr: string; native_name: string };
+  ministry: { abbr: string; name: string; native_name?: string; logo?: string };
+  platform: { name: string; abbr: string; native_name?: string };
   geography: { levels: Level[]; admin1?: string; world?: string };
   brand: { accent: string };
+  locale?: { default?: string; fiscal_calendar?: string;
+             currency?: { code: string; symbol: string } };
+  health_plan?: { abbr: string; name: string };
+  /* Identity verification is a country fact, not a widget constant. et-v3 ships
+     a Fayda block; a country with no national-ID verifier omits it and the
+     access modal drops the whole verification card rather than offering a form
+     that posts to an endpoint that does not exist there. */
+  identity?: {
+    system: string;            // 'fayda' — names the backend verifier
+    card_title?: string;       // "Verify your identity with Fayda (optional)"
+    help_text?: string;        // the explanatory line under the title
+    id_label: string;          // "Fayda number (FAN)"
+    id_hint?: string;          // the inline validation error wording
+    id_pattern: string;        // a RegExp source the SPA compiles
+    id_placeholder?: string;   // the input placeholder
+    email_label?: string;      // "Email on your Fayda record"
+  };
+  contact?: { email?: string; phone?: string };
   geo_facts?: {
     bbox?: [number, number, number, number];
     centroid?: [number, number];
@@ -39,50 +57,52 @@ export type Profile = {
   };
 };
 
-/** What shipped before profiles existed. Also the shape contract. */
+/** The shape contract AND the gateway-unreachable fallback — COUNTRY-NEUTRAL,
+ *  deliberately. A fallback that names Ethiopia is the exact bug this mechanism
+ *  exists to remove: it would stamp Ethiopian chrome onto a Zambia or Ghana
+ *  deployment the instant the gateway blinked. Mirrors the admin/workshop
+ *  useProfile BUNDLED and the gateway's own _fallback_manifest — a plain,
+ *  un-branded national warehouse, never one country's masthead. */
 export const BUNDLED: Profile = {
   active: 'bundled',
-  label: 'Ethiopia',
-  country: {
-    name: 'Ethiopia', official_name: 'Federal Democratic Republic of Ethiopia',
-    adjective: 'Ethiopian', iso2: 'ET', iso3: 'ETH',
-    native: { lang: 'am', country_name: 'ኢትዮጵያ' },
-  },
-  ministry: { abbr: 'FMoH', name: 'Federal Ministry of Health', native_name: 'የጤና ሚኒስቴር',
-              logo: 'logo-fmoh.png' },
-  platform: { name: 'National Health Data Warehouse', abbr: 'NHDW',
-              native_name: 'የብሔራዊ የጤና መረጃ ማከማቻ' },
+  label: '',
+  country: { name: '', official_name: '', adjective: '', iso2: '', iso3: '' },
+  ministry: { abbr: '', name: 'Ministry of Health' },
+  platform: { name: 'National Health Data Warehouse', abbr: 'NHDW' },
   geography: {
     levels: [
       { code: 'admin1', singular: 'Region', plural: 'Regions' },
-      { code: 'admin2', singular: 'Zone', plural: 'Zones' },
-      { code: 'admin3', singular: 'Woreda', plural: 'Woredas' },
-      { code: 'admin4', singular: 'Kebele', plural: 'Kebeles' },
+      { code: 'admin2', singular: 'District', plural: 'Districts' },
     ],
   },
   brand: { accent: '#0374b8' },
+  locale: { default: 'en', fiscal_calendar: 'gregorian' },
 };
 
 export type Copy = Record<string, any>;
 
-/** The public deck as it shipped, used whenever the served one is unavailable
- *  or is missing a key. Keys mirror copy/public.json. */
+/** The public deck as the shape contract AND the gateway-unreachable fallback,
+ *  used whenever the served one is unavailable or is missing a key. Keys mirror
+ *  copy/public.json. COUNTRY-NEUTRAL for the same reason BUNDLED is: a deck that
+ *  names Ethiopia would surface on a Zambia/Ghana deployment the moment the
+ *  gateway blinked. The real, country-specific wording lives in each profile's
+ *  copy/public.json and is merged OVER this. */
 export const BUNDLED_COPY: Copy = {
   govbar: {
     skip: 'Skip to content', mark_text: 'NHDW',
-    mark_tag: 'Federal Ministry of Health · Ethiopia',
+    mark_tag: 'National Health Data Warehouse',
     nav: { home: 'Home', data: 'Open data', articles: 'Articles' },
     request_access: 'Request access', dashboards: 'Dashboards',
   },
   hero: {
     strip_volume: 'Vol. 01', strip_series: 'Public Series',
-    strip_owner: 'Federal Ministry of Health · የጤና ሚኒስቴር',
+    strip_owner: 'National Health Data Warehouse',
     eyebrow: 'Public health information service',
-    headline_lead: "Ethiopia's health data,", headline_accent: 'in one place.',
-    headline_native: 'የብሔራዊ የጤና መረጃ ማከማቻ',
+    headline_lead: 'National health data,', headline_accent: 'in one place.',
+    headline_native: '',
     lede: 'A single trusted entrance to dashboards, open data, and the analytic consoles '
         + 'that power public-health decisions, from a national bulletin down to a single '
-        + 'woreda in any of the 14 regions.',
+        + 'district.',
     trust: 'Privacy-protected national health data',
     trust_title: 'Aggregate and privacy-protected, k-anonymity at least 5, '
                + 'sourced from national health systems',
@@ -90,12 +110,41 @@ export const BUNDLED_COPY: Copy = {
   },
   footer: {
     brand_line: 'National Health Data Warehouse · NHDW',
-    owner_line: 'Federal Ministry of Health · Federal Democratic Republic of Ethiopia',
+    owner_line: 'Ministry of Health',
     columns: [
       { title: 'About', links: ['Methodology', 'Governance', 'Contact'] },
       { title: 'Open', links: ['API docs', 'dbt docs', 'Code repository'] },
       { title: 'Legal', links: ['Privacy notice', 'Terms of use', 'Data licence'] },
     ],
+  },
+  // Access-request modal. The identity-verification card is gated on
+  // profile.identity, not on copy; these are the surrounding labels + the
+  // neutral placeholders a profile overrides with country-appropriate examples.
+  access: {
+    title: 'Request access',
+    subtitle: 'Tell us who you are and what you need. We respond within 2 business days.',
+    review_org: 'the platform administrators',
+    agreement: 'By submitting, you accept the data use agreement and confirm you will not '
+             + 'redistribute restricted data.',
+    success_sub: 'Your request has been queued for review.',
+    success_note: 'Keep this ID. You will receive an email confirmation, and the administrators '
+                + 'will respond within 2 business days.',
+    ph_name: 'Full name', ph_email: 'name@example.org', ph_phone: 'Phone number',
+    ph_org: 'Organisation', ph_role: 'Programme officer, director, researcher',
+  },
+  // Articles ("newsroom") page masthead.
+  articles_page: {
+    eyebrow: 'Newsroom',
+    title: 'News and health bulletins',
+    sub: 'Surveillance bulletins, official press releases and public-health advisories, '
+       + 'most recent first.',
+  },
+  // Audiences shown on the "Open a dashboard" launcher. Only the first is
+  // country-flavoured (ministry / sub-national bodies); the others are neutral.
+  dashboards: {
+    bi_audience: 'Ministry staff · programme directors',
+    admin_audience: 'IT operations · security officers',
+    workshop_audience: 'Researchers · analysts · community contributors',
   },
 };
 
@@ -169,4 +218,25 @@ export function levelName(p: Profile, code: string, plural = false): string {
   const l = p.geography?.levels?.find(x => x.code === code);
   if (!l) return plural ? 'areas' : 'area';
   return plural ? l.plural : l.singular;
+}
+
+/** The finest administrative level this country reports at — Ethiopia's woreda,
+ *  Zambia's district — for copy that names the aggregation floor ("aggregated to
+ *  woreda or coarser"). Reads the LAST declared level so it is never hardcoded. */
+export function finestLevel(p: Profile, plural = false): string {
+  const levels = p.geography?.levels ?? [];
+  const l = levels[levels.length - 1];
+  if (!l) return plural ? 'areas' : 'area';
+  return plural ? l.plural : l.singular;
+}
+
+/** The ministry crest, served from the active profile, or null when the profile
+ *  declares none. A profile that ships no logo renders the word-mark instead —
+ *  showing the previous country's crest under a new profile is worse than none.
+ *  (Mirrors the admin/workshop logoUrl; the public SPA reaches the gateway
+ *  through its same-origin /api/proxy prefix.) */
+export function logoUrl(p: Profile): string | null {
+  return p.ministry?.logo
+    ? `/api/proxy/profile/asset/${encodeURIComponent(p.ministry.logo)}`
+    : null;
 }
