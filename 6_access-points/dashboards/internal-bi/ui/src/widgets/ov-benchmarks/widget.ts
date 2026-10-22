@@ -11,11 +11,14 @@
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 
+// Country-neutral empty-state: shown only when fetchData() returns nothing. Values
+// are em-dashes rather than a specific country's figures, and labels avoid
+// Ethiopia-only terms, so a profile with no benchmark data never shows Ethiopian numbers.
 const DEFAULTS = [
-  { icon: 'i-hospital', value: '17,550', label: 'Health facilities', note: 'On the master facility registry' },
-  { icon: 'i-users', value: '107.3M', label: 'Population', note: 'Catchment served' },
-  { icon: 'i-map', value: '14', label: 'Regions', note: 'Administrative regions' },
-  { icon: 'i-map', value: '1,082', label: 'Woredas covered', note: 'Districts with a facility' },
+  { icon: 'i-hospital', value: '—', label: 'Health facilities', note: 'On the master facility registry' },
+  { icon: 'i-users', value: '—', label: 'Population', note: 'Catchment served' },
+  { icon: 'i-map', value: '—', label: 'Regions', note: 'Administrative areas' },
+  { icon: 'i-map', value: '—', label: 'Districts covered', note: 'Districts with a facility' },
 ];
 
 const def: WidgetDef = {

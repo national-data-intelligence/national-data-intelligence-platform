@@ -1,15 +1,16 @@
 import { WAREHOUSES, REGION_NAMES, PERIODS } from '../data/runtime';
 import { COMMODITIES, type Slicer } from '../lib/select';
 import { IconRefresh } from '../icons';
+import { levelName } from '../../widgets/_shared/reference';
 
 interface Props { slicer: Slicer; setSlice: (p: Partial<Slicer>) => void; reset: () => void }
 
 export default function FilterBar({ slicer, setSlice, reset }: Props) {
   return (
     <div className="pct-filters">
-      <label className="pct-field">Region
+      <label className="pct-field">{levelName('admin1')}
         <select value={slicer.region} onChange={e => setSlice({ region: e.target.value })}>
-          <option value="all">All regions</option>
+          <option value="all">All {levelName('admin1', true).toLowerCase()}</option>
           {REGION_NAMES.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
       </label>

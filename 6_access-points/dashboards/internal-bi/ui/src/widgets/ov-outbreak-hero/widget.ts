@@ -12,14 +12,16 @@
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 
+// Country-neutral empty-state (shown only when fetchData() is empty): em-dashes
+// rather than a specific country's outbreak figures or place names.
 const DEFAULTS = {
   eyebrow: 'Active outbreaks, last 30 days',
-  headline: '1',
+  headline: '—',
   metrics: [
-    { icon: 'i-users', value: '528', label: 'new cases\nthis week' },
-    { icon: 'i-trend-up', value: '6.6%', label: 'CFR' },
-    { icon: 'i-pin', value: 'Aysha', label: 'Somali\ntop hotspot' },
-    { icon: 'i-shield-check', value: '74%', label: 'P(alarm)' },
+    { icon: 'i-users', value: '—', label: 'new cases\nthis week' },
+    { icon: 'i-trend-up', value: '—', label: 'CFR' },
+    { icon: 'i-pin', value: '—', label: 'top hotspot' },
+    { icon: 'i-shield-check', value: '—', label: 'P(alarm)' },
   ] as { icon: string; value: string; label: string }[],
 };
 
