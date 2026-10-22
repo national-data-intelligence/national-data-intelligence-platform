@@ -22,8 +22,6 @@ const def: WidgetDef = {
       const status = String(r.status ?? 'no_metric');
       const color = CHIP[status] ?? CHIP.no_metric;
       const compl = r.completeness_pct == null ? '—' : `${Number(r.completeness_pct).toFixed(1)}%`;
-      const reports = r.reports_received == null ? '' :
-        `${Number(r.reports_received).toLocaleString()} / ${Number(r.reports_expected ?? 0).toLocaleString()} reports`;
       const tile = document.createElement('div');
       // Borderless soft card (owner: cards never have borders; the status colour
       // moves from a left-accent border to a small dot).
@@ -32,10 +30,7 @@ const def: WidgetDef = {
         'padding:12px 14px;display:flex;flex-direction:column;gap:3px;background:var(--paper);';
       tile.innerHTML =
         `<span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3,#667085);display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:${color};flex:none"></span>${String(r.source)}</span>` +
-        `<span style="font-size:22px;font-weight:650;color:${status === 'no_metric' ? 'var(--ink-3,#667085)' : 'var(--ink)'};">${compl}</span>` +
-        `<span style="font-size:11px;color:var(--ink-3,#667085);">${reports}</span>` +
-        `<span style="font-size:11px;color:var(--ink-4,#9ca3af);">latest ${String(r.latest_period ?? '—')}, ` +
-        `<span style="color:${color};font-weight:600;">${status.replace('_', ' ')}</span></span>`;
+        `<span style="font-size:22px;font-weight:650;color:${status === 'no_metric' ? 'var(--ink-3,#667085)' : 'var(--ink)'};">${compl}</span>`;
       wrap.appendChild(tile);
     }
     ctx.el.appendChild(wrap);

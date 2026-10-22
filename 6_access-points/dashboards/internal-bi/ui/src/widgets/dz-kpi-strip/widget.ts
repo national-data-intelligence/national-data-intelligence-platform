@@ -27,11 +27,6 @@ const def: WidgetDef = {
       return {
         label: String(r.tile ?? ''),
         value: String(r.unit) === 'text' ? String(r.value ?? '-') : fmt(Number(r.value ?? 0), String(r.unit ?? 'count')),
-        sub: r.subtitle ? String(r.subtitle) : undefined,
-        delta: r.delta_text ? String(r.delta_text) : undefined,
-        deltaDir: dir === 'alert' ? 'down' : dir === 'good' ? 'up' : undefined,
-        foot: (r.footnote_label || r.footnote_value)
-          ? `${r.footnote_label ?? ''} ${r.footnote_value ?? ''}`.trim() : undefined,
         status: dir === 'alert' ? 'alert' : dir === 'watch' ? 'watch' : dir === 'good' ? 'good' : 'info',
       };
     });

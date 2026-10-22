@@ -18,7 +18,6 @@
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import type { TableColumn } from '../_shared/charts';
 import { paginatedTable } from '../_shared/charts';
-import { planLabel } from '../_shared/reference';
 
 const STATUS_TONE: Record<string, string> = { Good: 'good', Watch: 'watch', Alert: 'alert' };
 const CONF_TONE: Record<string, string> = { High: 'good', Medium: 'watch', Low: 'alert' };
@@ -54,8 +53,7 @@ const def: WidgetDef = {
 
     ctx.el.innerHTML = `
       <p style="font-size:.82rem;color:${t.ink[2]};margin:0 0 .5rem">Official indicators with confidence and lineage</p>
-      <div class="sv-fl-tbl"></div>
-      <p style="margin:.5rem 0 0;font-size:.72rem;color:${t.ink[3]}">Confidence context = data-trust, not coverage. Targets: ${planLabel('flagship')} (blank = none set).</p>`;
+      <div class="sv-fl-tbl"></div>`;
     const mount = ctx.el.querySelector<HTMLElement>('.sv-fl-tbl')!;
     return paginatedTable(mount, shaped, columns, ctx.theme, { search: true, sort: true });
   },
