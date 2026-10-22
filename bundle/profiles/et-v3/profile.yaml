@@ -34,11 +34,17 @@ country:
 ministry:
   abbr: Palladium
   name: Palladium
+  # The native-language name, rendered beside the Latin one in the public
+  # masthead. Ethiopia's official language is Amharic (Ge'ez script); a country
+  # whose official language is English (e.g. Zambia) omits this and the SPA drops
+  # the native line rather than printing an empty element or a raw {token}.
+  native_name: የጤና ሚኒስቴር
   # logo omitted → the SPA falls back to the bundled Palladium wordmark.
 
 platform:
   name: Data Intelligence Platform
   abbr: Palladium
+  native_name: የብሔራዊ የጤና መረጃ ማከማቻ
 
 # ── Administrative hierarchy ────────────────────────────────────────────────
 # What each level is CALLED here. Ethiopia: region → zone → woreda → kebele.
@@ -64,6 +70,14 @@ brand:
 locale:
   default: en
   fiscal_calendar: EFY            # Ethiopian Fiscal Year; 'gregorian' elsewhere
+  currency: {code: ETB, symbol: "ETB"}   # the dashboards print this on money figures
+
+# The national health-sector plan whose name the dashboards print beside flagship
+# and attainment metrics. Read from the profile so a switch renames it (Zambia:
+# NHSP) instead of the SPA hardcoding "HSTP-II".
+health_plan:
+  abbr: HSTP-II
+  name: Health Sector Transformation Plan II
 
 # ── The other two layers ────────────────────────────────────────────────────
 # Named here so one profile key resolves all three, but applied by the seed

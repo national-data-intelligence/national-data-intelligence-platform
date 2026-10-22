@@ -15,9 +15,10 @@
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { sparklineSvg } from '../_shared/charts';
+import { moneyM } from '../_shared/reference';
 
 const fmt = (v: number, unit: string) =>
-  unit === 'percent' ? `${v}%` : unit === 'etb-m' ? `ETB ${v}M`
+  unit === 'percent' ? `${v}%` : unit === 'etb-m' ? moneyM(v)
   : unit === 'months' ? `${v} mo` : Number(v).toLocaleString();
 
 const def: WidgetDef = {

@@ -94,6 +94,42 @@ export const scopeLabels = { allGeography: 'All areas' };
 export const REGION_BY_ID: Record<string, string> = {};
 export const regionName = (id: string): string => REGION_BY_ID[id] || id || '-';
 
+// ── profile presentation facts (country vocab, currency, health plan) ─────────
+// Filled from the active profile's manifest (/gw/profile) alongside the reference
+// tables, so widgets read the active COUNTRY's words — region/woreda labels,
+// currency, the national health-plan name — instead of hardcoding Ethiopia's.
+// Empty until loaded; every consumer has a neutral generic fallback so a profile
+// that omits a field (or a load failure) still renders sensible, country-neutral text.
+export const COUNTRY = { name: '', adjective: '' };
+export const CURRENCY = { code: '', symbol: '' };
+export const HEALTH_PLAN = { abbr: '', name: '' };
+let GEO_LEVELS_ORDERED: Array<{ code: string; singular: string; plural: string }> = [];
+let GEO_LEVELS: Record<string, { singular: string; plural: string }> = {};
+const _GENERIC_LEVELS: Record<string, [string, string]> = {
+  admin1: ['Region', 'Regions'], admin2: ['Zone', 'Zones'],
+  admin3: ['District', 'Districts'], admin4: ['Ward', 'Wards'],
+};
+/** The active profile's name for an admin level ('admin1'…'admin4'). A country
+ *  that lacks the level (Zambia has no admin3/'woreda') falls back to a neutral
+ *  generic, never to Ethiopia's term. */
+export function levelName(code: string, plural = false): string {
+  const l = GEO_LEVELS[code];
+  if (l) return plural ? l.plural : l.singular;
+  const g = _GENERIC_LEVELS[code];
+  return g ? (plural ? g[1] : g[0]) : code;
+}
+/** Format a monetary value already expressed in MILLIONS, in the active country's
+ *  currency (supply "value at risk"). Falls back to a bare number when unset. */
+export function moneyM(v: number): string {
+  const sym = CURRENCY.symbol || CURRENCY.code;
+  return sym ? `${sym} ${v}M` : `${Number(v).toLocaleString()}M`;
+}
+/** "HSTP-II flagships" → the active country's plan prefix, or just "flagships"
+ *  when no plan is configured. Keeps the sentence grammatical either way. */
+export function planLabel(suffix: string): string {
+  return HEALTH_PLAN.abbr ? `${HEALTH_PLAN.abbr} ${suffix}` : suffix;
+}
+
 // ── profile loading ─────────────────────────────────────────────────────────
 
 /** Replace an array's CONTENTS, keeping its identity so existing imports see it. */
@@ -123,6 +159,21 @@ let loaded = false;
 export async function loadReference(timeoutMs = 4000): Promise<void> {
   if (loaded) return;
   loaded = true;
+  // Presentation facts from the active profile's manifest — country vocabulary,
+  // currency and the national health-plan name — so the widgets speak the active
+  // country's language. Independent of the reference fetch below.
+  try {
+    const pres = await fetch('/gw/profile');
+    if (pres.ok) {
+      const m = await pres.json();
+      COUNTRY.name = m?.country?.name || COUNTRY.name;
+      COUNTRY.adjective = m?.country?.adjective || COUNTRY.adjective;
+      GEO_LEVELS_ORDERED = (m?.geography?.levels || []).map((l: any) => ({ code: l.code, singular: l.singular, plural: l.plural }));
+      GEO_LEVELS = Object.fromEntries(GEO_LEVELS_ORDERED.map(l => [l.code, l]));
+      if (m?.locale?.currency) { CURRENCY.code = m.locale.currency.code || ''; CURRENCY.symbol = m.locale.currency.symbol || ''; }
+      if (m?.health_plan) { HEALTH_PLAN.abbr = m.health_plan.abbr || ''; HEALTH_PLAN.name = m.health_plan.name || ''; }
+    }
+  } catch { /* manifest optional — widgets fall back to country-neutral generics */ }
   try {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);

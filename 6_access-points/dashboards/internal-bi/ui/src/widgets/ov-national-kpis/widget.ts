@@ -1,6 +1,7 @@
 /** National snapshot — whole-system headline numbers (cross-mart, national). */
 import type { WidgetDef } from '../../runtime/types';
 import { kpiStrip, type KpiCell } from '../_shared/charts';
+import { planLabel } from '../_shared/reference';
 
 const def: WidgetDef = {
   id: 'ov-national-kpis',
@@ -14,7 +15,7 @@ const def: WidgetDef = {
       { label: 'Regions reporting', value: String(r.regions_reporting ?? 0), note: 'Of 14 regions' },
       { label: 'Health facilities', value: Number(r.facilities ?? 0).toLocaleString(), note: 'On the master registry' },
       { label: 'Commodity availability', value: `${Math.round(avail)}%`, status: avail >= 80 ? 'good' : avail >= 50 ? 'watch' : 'alert', note: '≥ 3 months of stock' },
-      { label: 'Avg service coverage', value: `${Number(r.avg_coverage ?? 0).toFixed(0)}%`, note: 'HSTP-II indicators' },
+      { label: 'Avg service coverage', value: `${Number(r.avg_coverage ?? 0).toFixed(0)}%`, note: planLabel('indicators') },
     ];
     return kpiStrip(ctx.el, cells, ctx.theme, 5);
   },

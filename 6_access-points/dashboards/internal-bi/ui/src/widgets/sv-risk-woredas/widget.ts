@@ -14,7 +14,7 @@
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import type { TableColumn } from '../_shared/charts';
 import { paginatedTable } from '../_shared/charts';
-import { regionName } from '../_shared/reference';
+import { regionName, levelName } from '../_shared/reference';
 
 const BAND_TONE: Record<string, string> = { High: 'alert', Elevated: 'watch', Watch: 'neutral' };
 
@@ -23,7 +23,7 @@ const def: WidgetDef = {
   reactsTo: ['geography', 'programme', 'period'],
   async render(ctx: WidgetCtx) {
     const rows = await ctx.fetchData();
-    if (!rows || !rows.length) { ctx.empty('No high-risk woreda rows for the selected filters.'); return; }
+    if (!rows || !rows.length) { ctx.empty(`No high-risk ${levelName('admin3').toLowerCase()} rows for the selected filters.`); return; }
     const t = ctx.theme;
 
     const shaped = rows.map(r => ({
@@ -36,8 +36,8 @@ const def: WidgetDef = {
       band: String(r.risk_band ?? '-'),
     }));
     const columns: TableColumn[] = [
-      { id: 'woreda', label: 'Woreda' },
-      { id: 'region', label: 'Region' },
+      { id: 'woreda', label: levelName('admin3') },
+      { id: 'region', label: levelName('admin1') },
       { id: 'coverage_gap', label: 'Coverage gap', format: 'pct' },
       { id: 'stockout_days', label: 'Stockout days' },
       { id: 'reporting_completeness', label: 'Reporting completeness', format: 'pct' },

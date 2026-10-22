@@ -1,5 +1,5 @@
 id: ov-service-attainment
-title: HSTP-II attainment
+title: Service attainment
 kind: kpi
 requires:
   subject: PRG

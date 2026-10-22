@@ -36,7 +36,7 @@
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { choropleth, sparklineSvg } from '../_shared/charts';
 import { loadRegionContextGeo } from '../_shared/geo';
-import { regionName } from '../_shared/reference';
+import { regionName, COUNTRY, levelName } from '../_shared/reference';
 
 type Metric = 'burden' | 'readiness' | 'reliability';
 const META: Record<Metric, { col: string; label: string; icon: string; higherWorse: boolean; fmt: (v: number) => string; bands: string[] }> = {
@@ -181,7 +181,7 @@ const def: WidgetDef = {
       </style>
       <div class="dzm">
         <div class="dzm-head">
-          <div class="dzm-sub">Explore health burden and system readiness across Ethiopia's regions${focusName ? `, focused on <b>${esc(focusName)}</b>` : ''}.</div>
+          <div class="dzm-sub">Explore health burden and system readiness across ${COUNTRY.name ? `${esc(COUNTRY.name)}'s ` : ''}${esc(levelName('admin1', true).toLowerCase())}${focusName ? `, focused on <b>${esc(focusName)}</b>` : ''}.</div>
           <div class="seg dzm-seg">
             <button data-metric="burden" class="active"><svg class="ico ico-sm"><use href="#i-chart-bar"/></svg>Burden</button>
             <button data-metric="readiness"><svg class="ico ico-sm"><use href="#i-shield-check"/></svg>Readiness</button>

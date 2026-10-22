@@ -57,6 +57,11 @@ brand:
 locale:
   default: en
   fiscal_calendar: gregorian
+  currency: {code: ZMW, symbol: "K"}
+
+health_plan:
+  abbr: NHSP
+  name: National Health Strategic Plan
 
 layers:
   appsec:

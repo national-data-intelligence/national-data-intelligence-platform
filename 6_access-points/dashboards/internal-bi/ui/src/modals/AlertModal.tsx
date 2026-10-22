@@ -13,7 +13,7 @@
  */
 import { useState } from 'react';
 import { useBiApp } from '../useBiApp';
-import { REGIONS, DISEASES } from '../biApp';
+import { REGIONS, DISEASES, scopeLabels } from '../biApp';
 import { authFetch } from '../api/useAuth';
 
 export default function AlertModal() {
@@ -71,7 +71,7 @@ export default function AlertModal() {
             <div className="field-group">
               <label>2 · Geography</label>
               <select value={geography} onChange={(e) => setGeography(e.target.value)}>
-                <option value="all">All Ethiopia (national)</option>
+                <option value="all">{scopeLabels.allGeography} (national)</option>
                 {REGIONS.map((r: { code: string; name: string }) => <option key={r.code} value={r.code}>{r.name}</option>)}
               </select>
             </div>
@@ -118,7 +118,7 @@ export default function AlertModal() {
                     <span className="sub-meta">
                       <span>{app.diseaseLabelForSub?.(s.disease)}</span>
                       <span className="sep">·</span>
-                      <span>{s.geography === 'all' ? 'All Ethiopia' : s.geography}</span>
+                      <span>{s.geography === 'all' ? scopeLabels.allGeography : s.geography}</span>
                       <span className="sep">·</span>
                       <span>≥ <strong>{((s.threshold ?? 0) * 100).toFixed(0) + '%'}</strong></span>
                       <span className="sep">·</span>

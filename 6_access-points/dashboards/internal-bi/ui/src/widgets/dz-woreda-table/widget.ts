@@ -18,7 +18,7 @@
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import type { TableColumn } from '../_shared/charts';
 import { paginatedTable } from '../_shared/charts';
-import { regionName } from '../_shared/reference';
+import { regionName, levelName } from '../_shared/reference';
 
 // Value → pill token. Both cases covered so tone stays case-robust like the pre-X5 lookup.
 const READY_TONE: Record<string, string> = {
@@ -49,8 +49,8 @@ const def: WidgetDef = {
     }));
     const columns: TableColumn[] = [
       { id: 'rank', label: '#' },
-      { id: 'woreda', label: 'Woreda' },
-      { id: 'region', label: 'Region' },
+      { id: 'woreda', label: levelName('admin3') },
+      { id: 'region', label: levelName('admin1') },
       { id: 'cases', label: 'Cases (12w)' },
       { id: 'incidence', label: 'Incidence /100k' },
       { id: 'cfr', label: 'CFR %' },
