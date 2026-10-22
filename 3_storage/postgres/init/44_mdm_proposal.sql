@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS ops_governance.mdm_change_proposal (
     -- what the proposer saw: score, rule, features, rule threshold, names.
     evidence               jsonb       NOT NULL DEFAULT '{}'::jsonb,
     note                   text,
-    proposed_by            text        NOT NULL,           -- kc username
+    proposed_by            text        NOT NULL,           -- kc username (display)
+    proposed_by_sub        uuid        NOT NULL,           -- kc subject: the PERSON, for four-eyes
     proposed_at            timestamptz NOT NULL DEFAULT now(),
     -- the check: a fingerprint of the candidate + current decision it was
     -- computed against, and how long it may be approved. Approval re-computes
@@ -56,7 +57,8 @@ CREATE TABLE IF NOT EXISTS ops_governance.mdm_change_proposal (
     status                 text        NOT NULL DEFAULT 'proposed'
                              CHECK (status IN ('proposed', 'checked', 'check_failed',
                                                'applied', 'declined', 'withdrawn')),
-    reviewed_by            text,                           -- the approver / decliner
+    reviewed_by            text,                           -- the approver / decliner (display)
+    reviewed_by_sub        uuid,
     reviewed_at            timestamptz,
     review_note            text,
     applied_decision_id    uuid        REFERENCES ops_governance.mdm_match_decision(decision_id),
@@ -64,9 +66,12 @@ CREATE TABLE IF NOT EXISTS ops_governance.mdm_change_proposal (
     CONSTRAINT mdm_proposal_restore_target   CHECK (kind <> 'restore' OR restores_decision_id IS NOT NULL),
     CONSTRAINT mdm_proposal_candidate_kinds  CHECK (kind = 'restore' OR candidate_id IS NOT NULL),
     CONSTRAINT mdm_proposal_decline_reason   CHECK (status <> 'declined' OR review_note IS NOT NULL),
-    -- maker–checker: whoever approved or declined is never the proposer
-    CONSTRAINT mdm_proposal_four_eyes        CHECK (reviewed_by IS NULL OR reviewed_by <> proposed_by),
-    CONSTRAINT mdm_proposal_applied_link     CHECK (status <> 'applied' OR reviewed_by IS NOT NULL)
+    -- maker–checker: whoever approved or declined is never the proposer.
+    -- Compared on the Keycloak subject, not the username: one person can hold
+    -- several usernames (a personal login, a service token).
+    CONSTRAINT mdm_proposal_four_eyes        CHECK (reviewed_by_sub IS NULL OR reviewed_by_sub <> proposed_by_sub),
+    CONSTRAINT mdm_proposal_reviewed_by_both CHECK ((reviewed_by IS NULL) = (reviewed_by_sub IS NULL)),
+    CONSTRAINT mdm_proposal_applied_reviewed CHECK (status NOT IN ('applied', 'declined') OR reviewed_by_sub IS NOT NULL)
 );
 COMMENT ON TABLE ops_governance.mdm_change_proposal IS
     'Steward-proposed changes to the MDM decision log, waiting for a second '
