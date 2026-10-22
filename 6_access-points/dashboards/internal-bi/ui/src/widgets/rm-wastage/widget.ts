@@ -19,8 +19,10 @@ const def: WidgetDef = {
     if (!rows || !rows.length) { ctx.empty('No wastage and consistency data for the selected filters.'); return; }
     const t = ctx.theme;
     const ramp = t.ramps.wastageTreemap;              // high→low wastage
-    const max = Math.max(...rows.map(r => Number(r.wastage_score ?? 0))) || 1;
-    const colorFor = (v: number) => ramp[Math.min(ramp.length - 1, Math.round((1 - v / max) * (ramp.length - 1)))];
+    const scores = rows.map(r => Number(r.wastage_score ?? 0));
+    const max = Math.max(...scores), min = Math.min(...scores), span = (max - min) || 1;
+    // Shade across the scores actually shown, so close scores still read as different tiles.
+    const colorFor = (v: number) => ramp[Math.min(ramp.length - 1, Math.round((1 - (v - min) / span) * (ramp.length - 1)))];
 
     // Wastage bands from the fetcher (share of received units wasted): High ≥10%,
     // Moderate 3–10%, Low <3%. Counted over the commodities shown in the treemap.

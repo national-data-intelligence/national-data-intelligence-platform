@@ -132,7 +132,7 @@ const def: WidgetDef = {
         .dzm-sub{font-size:.78rem;color:${t.ink[2]};line-height:1.28;max-width:56ch}
         .dzm-seg .ico{margin-right:.32rem}
         /* map narrowed to ~0.9fr, metrics panel widened (ask #5) */
-        .dzm-main{display:grid;grid-template-columns:minmax(0,0.82fr) 384px;gap:.7rem;flex:1;min-height:362px}
+        .dzm-main{display:grid;grid-template-columns:minmax(0,1fr) 384px;gap:.7rem;flex:1;min-height:362px}
         .dzm-mapwrap{position:relative;min-width:0;min-height:350px;border-radius:16px;overflow:hidden;background:${t.paper};box-shadow:0 2px 10px rgba(15,23,42,.07),0 0 0 1px rgba(15,23,42,.04)}
         .dz-map-mount{width:100%;height:100%;min-height:350px}
         /* vertical burden legend, overlaid on the backdrop left of Ethiopia (ask #3) */

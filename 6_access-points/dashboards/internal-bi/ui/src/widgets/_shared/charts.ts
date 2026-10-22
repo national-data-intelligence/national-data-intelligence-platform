@@ -320,6 +320,27 @@ export function paginatedTable(
   return () => { /* pure DOM, nothing to dispose */ };
 }
 
+// ── Icon card (owner 2026-10-22): title top, value beneath, icon chip right, centred ──
+/** One stand-alone stat card in the house rule, for widgets that lay out their own grid.
+ *  `extra` is optional markup under the value (e.g. a status pill). */
+export function iconCard(theme: Theme, o: { label: string; value: string; icon?: string; color?: string; extra?: string; big?: boolean }): string {
+  const col = o.color || theme.navy['600'];
+  const m = /^#?([0-9a-f]{6})$/i.exec(col); const n = m ? parseInt(m[1], 16) : 0;
+  const tint = m ? `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},0.13)` : col;
+  const isText = !/^[0-9.,\s%+\-/—]+[KMB%a-z ]*$/.test(String(o.value).trim());
+  const val = isText
+    ? `font-size:1.05rem;font-weight:700;line-height:1.2;color:${theme.ink[0]}`
+    : `font-size:${o.big ? '2.2rem' : '1.85rem'};font-weight:800;letter-spacing:-.03em;line-height:1.05;color:${theme.ink[0]};font-variant-numeric:tabular-nums`;
+  return `<div style="background:${theme.paper};border-radius:16px;padding:1rem 1.15rem;box-shadow:var(--shadow-1);display:flex;align-items:center;justify-content:space-between;gap:.75rem;min-width:0;height:100%;box-sizing:border-box">
+    <div style="display:flex;flex-direction:column;gap:.35rem;min-width:0">
+      <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;line-height:1.25;color:${theme.ink[3]}">${o.label}</div>
+      <div style="${val}">${o.value}</div>
+      ${o.extra ?? ''}
+    </div>
+    ${o.icon ? `<span style="display:inline-grid;place-items:center;width:42px;height:42px;border-radius:11px;background:${tint};color:${col};flex-shrink:0"><svg class="ico" aria-hidden="true" style="width:22px;height:22px"><use href="#${o.icon}"/></svg></span>` : ''}
+  </div>`;
+}
+
 // ── KPI strip (DOM tiles) ──────────────────────────────────────────────
 export interface KpiCell {
   label: string; value: string;
@@ -402,7 +423,7 @@ export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols =
       </div>`;
       return `
       <div class="kpi kpi-${c.status || 'info'}" style="flex-direction:row;align-items:center;justify-content:space-between;gap:${narrow ? '.5rem' : '.75rem'}">
-      <div style="display:flex;flex-direction:column;gap:.3rem;min-width:0;flex:1">
+      <div style="display:flex;flex-direction:column;gap:.3rem;min-width:0;flex:1;align-self:flex-start">
         ${lbl}
         <div class="kpi-val" style="height:34px;${valStyle}" title="${escAttr(String(c.value))}">${c.value}</div>
         ${hasSub ? `<div style="height:16px;font-size:.73rem;color:${theme.ink[2]};${clamp}" title="${escAttr(c.sub || '')}">${c.sub || ''}</div>` : ''}

@@ -1,5 +1,5 @@
 id: sv-cascade-ncd
-title: NCD / HEARTS Cascade
+title: NCD Cascade
 kind: funnel
 requires:
   subject: PRG

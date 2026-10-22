@@ -35,7 +35,7 @@ const def: WidgetDef = {
       const dir = String(r.delta_direction ?? '');
       const hit = ICON.find(([re]) => re.test(String(r.tile ?? '')));
       return {
-        label: String(r.tile ?? ''),
+        label: String(r.tile ?? '').replace(/\s*·\s*/g, ' '),
         icon: hit?.[1],
         iconColor: hit?.[2],
         value: String(r.unit) === 'text' ? String(r.value ?? '-') : fmt(Number(r.value ?? 0), String(r.unit ?? 'count')),

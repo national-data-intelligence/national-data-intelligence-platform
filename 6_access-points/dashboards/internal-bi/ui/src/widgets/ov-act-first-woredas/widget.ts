@@ -55,7 +55,7 @@ const def: WidgetDef = {
     ];
 
     ctx.el.innerHTML = `
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:.6rem">
+      <div style="display:flex;align-items:flex-start;justify-content:flex-end;gap:1rem;margin-bottom:.6rem">
         <button type="button" class="ov-af-link" style="flex-shrink:0;background:${t.paper};color:${t.ink[1]};
           border-radius:8px;padding:.3rem .7rem;font-size:.78rem;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.08)">View full action queue</button>
       </div>

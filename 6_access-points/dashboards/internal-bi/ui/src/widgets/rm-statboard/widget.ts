@@ -14,7 +14,7 @@
  * reactsTo: geography · period · commodity.
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
-import { sparklineSvg } from '../_shared/charts';
+import { iconCard } from '../_shared/charts';
 import { moneyM } from '../_shared/reference';
 
 const fmt = (v: number, unit: string) =>
@@ -34,18 +34,13 @@ const def: WidgetDef = {
     const stats = rows.filter(r => r.kind !== 'integrity');
     const integ = rows.filter(r => r.kind === 'integrity');
 
+    const ICON: [RegExp, string, string][] = [
+      [/availab/i, 'i-check-circle', t.status.good], [/month/i, 'i-calendar', t.status.info],
+      [/stock(ed)? ?out/i, 'i-alert', t.status.alert], [/wastage/i, 'i-package', t.status.watch],
+    ];
     const card = (r: any) => {
-      const spark = Array.isArray(r.spark) ? r.spark.map(Number) : null;
-      const deltaColor = r.delta_good === false ? t.status.alert : t.status.good;
-      return `<div style="background:${t.paper};border-radius:12px;padding:1rem 1.1rem;box-shadow:var(--shadow-1);display:flex;flex-direction:column;justify-content:center;gap:.45rem">
-        <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${t.ink[3]}">${r.label}</div>
-        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.4rem">
-          <div style="font-size:1.85rem;font-weight:800;letter-spacing:-.03em;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1">${fmt(Number(r.value ?? 0), String(r.unit ?? ''))}</div>
-          ${spark ? sparklineSvg(spark, t, { w: 76, h: 26 }) : ''}
-        </div>
-        ${r.target ? `<div style="font-size:.7rem;color:${t.ink[4]}">${r.target}</div>` : ''}
-        ${r.delta_text ? `<div style="font-size:.72rem;font-weight:600;color:${deltaColor}">${r.delta_text}</div>` : ''}
-      </div>`;
+      const hit = ICON.find(([re]) => re.test(String(r.label ?? '')));
+      return iconCard(t, { label: String(r.label ?? ''), value: fmt(Number(r.value ?? 0), String(r.unit ?? '')), icon: hit?.[1] ?? 'i-chart-bar', color: hit?.[2] });
     };
 
     ctx.el.style.cssText = 'display:flex;flex-direction:column;height:100%';

@@ -23,7 +23,7 @@ const def: WidgetDef = {
     ctx.el.innerHTML = `
       <div class="rm-fc-mount"></div>`;
     const mount = ctx.el.querySelector('.rm-fc-mount') as HTMLElement;
-    return lollipop(mount, data, t, { xMax: Math.max(horizon + 4, ...data.map(d => d.value)) });
+    return lollipop(mount, data, t, { xMax: Math.max(5, Math.ceil(Math.max(...data.map(d => d.value)) * 1.15)) });
   },
 };
 export default def;

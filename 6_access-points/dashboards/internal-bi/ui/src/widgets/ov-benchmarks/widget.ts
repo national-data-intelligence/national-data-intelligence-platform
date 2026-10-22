@@ -10,6 +10,7 @@
  * reactsTo: geography · period.
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
+import { iconCard } from '../_shared/charts';
 
 // Country-neutral empty-state: shown only when fetchData() returns nothing. Values
 // are em-dashes rather than a specific country's figures, and labels avoid
@@ -32,29 +33,15 @@ const def: WidgetDef = {
 
     // Distinct on-palette accent per card — introduces color into the four icons.
     const accents = [t.status.info, t.status.good, t.status.watch, t.navy['600']];
-    const tint = (hex: string, a: number) => {
-      const m = /^#?([0-9a-f]{6})$/i.exec(hex); if (!m) return hex;
-      const n = parseInt(m[1], 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-    };
-
     ctx.el.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;height:100%">
         ${cards.map((c: any, i: number) => {
-          const col = accents[i % accents.length];
-          // The gateway ships icon tokens WITHOUT the sprite's `i-` prefix (e.g. "building",
-          // "check-circle"); the sprite ids are `i-building` etc. Normalise so `<use>` resolves,
-          // falling back to this card's positional default when the row omits an icon.
+          // The gateway ships icon tokens WITHOUT the sprite's `i-` prefix; normalise, falling
+          // back to this card's positional default when the row omits an icon.
           const raw = String(c.icon ?? '').trim();
           const iconId = raw ? (raw.startsWith('i-') ? raw : `i-${raw}`) : DEFAULTS[i % DEFAULTS.length].icon;
-          return `
-          <div style="background:${t.paper};border-radius:16px;padding:1.1rem 1.2rem;box-shadow:0 1px 3px rgba(15,23,42,.06),0 6px 20px rgba(15,23,42,.04);display:flex;flex-direction:column;gap:.35rem;min-width:0">
-            <div style="display:flex;align-items:center;gap:.55rem">
-              <span style="display:inline-grid;place-items:center;width:32px;height:32px;border-radius:8px;background:${tint(col, 0.12)};color:${col};flex-shrink:0">
-                <svg class="ico" aria-hidden="true"><use href="#${iconId}"/></svg></span>
-              <span style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:${t.ink[3]}">${c.label ?? ''}</span>
-            </div>
-            <div style="font-size:1.9rem;font-weight:800;letter-spacing:-.03em;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1;margin-top:.1rem">${c.value ?? ''}</div>
-          </div>`; }).join('')}
+          return iconCard(t, { label: String(c.label ?? ''), value: String(c.value ?? '—'), icon: iconId, color: accents[i % accents.length] });
+        }).join('')}
       </div>`;
     return () => { /* pure DOM */ };
   },
