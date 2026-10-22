@@ -10,7 +10,7 @@
  * to restore the previous conformed keys byte for byte.
  *
  * Page shell: an underline tab strip (Review matches · Decisions · Publish)
- * under the page title, each tab one page-section. Tabs are listed only when
+ * under the page title, the active tab's content in one card. Tabs are listed only when
  * the caller's resolved catalog grants the widget behind them, and the active
  * tab is mirrored in the URL hash (#mdm/<tab>) so a refresh keeps it.
  * No mock rows — an unreachable gateway degrades to a clear error note.
@@ -20,6 +20,7 @@ import * as mdm from '../../api/mdm';
 import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKit';
 import type { AdminWidget } from '../../runtime/types';
 import { useDashboardSpec, specAllowsWidget } from '../../api/spec';
+import '../../styles/review.css';
 
 const RULE_LABEL: Record<string, string> = {
   name_exact: 'Exact name',
@@ -33,13 +34,28 @@ function rulePill(rule: string): string {
   return 'info';
 }
 
-/** Gateway failure line: plain sentence + retry; the raw error stays on hover. */
+/** A failed read: an alert note with a retry, or — when the gateway answered
+ *  403 — the access sentence with no retry. The raw error stays on hover. */
 function LoadError({ what, err, retry }: { what: string; err: string; retry: () => void }) {
+  const denied = err.startsWith('403');
   return (
-    <p className="muted" title={err}>
-      Could not load {what}.{' '}
-      <button className="btn btn-sm btn-ghost" onClick={retry}>Try again</button>
-    </p>
+    <div className="rv-note rv-note-alert" role="alert" title={err}>
+      <svg className="ico ico-sm"><use href="#i-alert" /></svg>
+      <span className="rv-note-txt">
+        {denied ? `You do not have access to ${what}.` : `Could not load ${what}.`}
+      </span>
+      {!denied && <button className="btn btn-sm btn-ghost" onClick={retry}>Try again</button>}
+    </div>
+  );
+}
+
+/** A failed write (decide / revert / publish) — never shown as a failed load. */
+function ActionError({ text, err }: { text: string; err: string }) {
+  return (
+    <div className="rv-note rv-note-alert" role="alert" title={err}>
+      <svg className="ico ico-sm"><use href="#i-alert" /></svg>
+      <span className="rv-note-txt">{text}</span>
+    </div>
   );
 }
 
@@ -152,6 +168,7 @@ function QueueTab({ onDecided }: { onDecided: () => void }) {
   const [rule, setRule] = useState<string>('');
   const [entity, setEntity] = useState<'facility' | 'commodity'>('facility');
   const [err, setErr] = useState('');
+  const [actErr, setActErr] = useState('');
   const [busy, setBusy] = useState<string>('');   // candidate_id in flight
   const [flash, setFlash] = useState('');
   const [inspect, setInspect] = useState<string>('');   // master_bk being inspected
@@ -183,12 +200,13 @@ function QueueTab({ onDecided }: { onDecided: () => void }) {
 
   async function verdict(c: mdm.Candidate, d: 'accept' | 'reject') {
     setBusy(c.candidate_id);
+    setActErr('');
     try {
       await mdm.decide(c.candidate_id, d);
       setFlash(`${d === 'accept' ? 'Accepted' : 'Rejected'} — in effect on the next dashboard read`);
       load(); onDecided();
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setActErr(String(e?.message || e));
     } finally {
       setBusy('');
     }
@@ -216,10 +234,11 @@ function QueueTab({ onDecided }: { onDecided: () => void }) {
         </div>
         {flash && <span className="muted text-xs">{flash}</span>}
       </div>
+      {actErr && <ActionError text="Could not save the decision." err={actErr} />}
       {err && <LoadError what="matches" err={err} retry={load} />}
       {rows === null && !err && <p className="muted">Loading matches…</p>}
       {rows !== null && rows.length === 0 && !err &&
-        <p className="muted">No matches to review.</p>}
+        <p className="muted">{rule ? 'No matches for this filter.' : 'No matches to review.'}</p>}
       {inspect && <MasterPanel entity={entity} masterBk={inspect} onClose={() => setInspect('')} />}
       {rows !== null && rows.length > 0 && (
         <>
@@ -284,9 +303,11 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
   }, [history]);
   useEffect(load, [load, refreshKey]);
 
+  const [actErr, setActErr] = useState('');
   async function undo(d: mdm.Decision) {
+    setActErr('');
     try { await mdm.revert(d.decision_id); load(); }
-    catch (e: any) { setErr(String(e?.message || e)); }
+    catch (e: any) { setActErr(String(e?.message || e)); }
   }
 
   const kit = useTableKit(rows ?? [], {
@@ -308,6 +329,7 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
           {' '}show superseded history
         </label>
       </div>
+      {actErr && <ActionError text="Could not save the decision." err={actErr} />}
       {err && <LoadError what="decisions" err={err} retry={load} />}
       {rows === null && !err && <p className="muted">Loading decisions…</p>}
       {rows !== null && rows.length === 0 && !err &&
@@ -374,14 +396,16 @@ function ReleasesTab() {
   }, []);
   useEffect(load, [load]);
 
+  const [actErr, setActErr] = useState('');
   async function publish() {
     if (!name.trim()) return;
     setBusy(true);
+    setActErr('');
     try {
       const r = await mdm.publishRelease(name.trim(), note.trim() || undefined);
       setFlash(`Published ${r.release_id} — ${r.stats.masters} masters pinned`);
       setName(''); setNote(''); load();
-    } catch (e: any) { setErr(String(e?.message || e)); }
+    } catch (e: any) { setActErr(String(e?.message || e)); }
     finally { setBusy(false); }
   }
 
@@ -406,6 +430,7 @@ function ReleasesTab() {
         </div>
         {flash && <span className="muted text-xs">{flash}</span>}
       </div>
+      {actErr && <ActionError text="Release not published. Review the error and try again." err={actErr} />}
       {err && <LoadError what="releases" err={err} retry={load} />}
       {rows === null && !err && <p className="muted">Loading releases…</p>}
       {rows !== null && rows.length === 0 && !err &&
@@ -465,10 +490,10 @@ type TabKey = 'review' | 'decisions' | 'publish';
    listed only when the caller's resolved spec grants it (never a role list
    here). All three live in adm-mdm-review today; later tabs bring their own
    widget ids. */
-const TABS: Array<{ key: TabKey; label: string; ico: string; widget: string }> = [
-  { key: 'review',    label: 'Review matches', ico: 'i-check-circle', widget: 'adm-mdm-review' },
-  { key: 'decisions', label: 'Decisions',      ico: 'i-list',         widget: 'adm-mdm-review' },
-  { key: 'publish',   label: 'Publish',        ico: 'i-upload',       widget: 'adm-mdm-review' },
+const TABS: Array<{ key: TabKey; label: string; widget: string }> = [
+  { key: 'review',    label: 'Review matches', widget: 'adm-mdm-review' },
+  { key: 'decisions', label: 'Decisions',      widget: 'adm-mdm-review' },
+  { key: 'publish',   label: 'Publish',        widget: 'adm-mdm-review' },
 ];
 
 const HASH_PREFIX = '#mdm/';
@@ -481,40 +506,46 @@ function tabFromHash(): TabKey | null {
 }
 
 function MdmReview() {
-  const { spec } = useDashboardSpec('admin');
-  const tabs = spec ? TABS.filter(t => specAllowsWidget(spec, 'admin/mdm', t.widget)) : TABS;
+  const { spec, loaded, denied } = useDashboardSpec('admin');
+  const tabs = loaded ? TABS.filter(t => specAllowsWidget(spec, 'admin/mdm', t.widget)) : [];
   const [tab, setTab] = useState<TabKey>(() => tabFromHash() ?? 'review');
   const [decidedTick, setDecidedTick] = useState(0);
 
-  // Mirror the active tab in the hash; drop it when the page is left so the
+  const active = tabs.find(t => t.key === tab) ?? tabs[0];
+
+  // Mirror the shown tab in the hash; drop it when the page is left so the
   // next page does not inherit an #mdm/ link.
   useEffect(() => {
-    history.replaceState(null, '', HASH_PREFIX + tab);
-  }, [tab]);
+    if (active) history.replaceState(null, '', HASH_PREFIX + active.key);
+  }, [active?.key]);
   useEffect(() => () => {
     if (window.location.hash.startsWith('#mdm')) {
       history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   }, []);
 
-  const active = tabs.find(t => t.key === tab) ?? tabs[0];
-
   return (
-    <div className="mdm-page">
-      <nav className="tab-nav">
+    <>
+      {tabs.length > 0 && <nav className="tab-nav" aria-label="MDM Stewardship sections">
         {tabs.map(t => (
           <a key={t.key} className={t.key === active?.key ? 'active' : undefined}
+             aria-current={t.key === active?.key ? 'page' : undefined}
              href={HASH_PREFIX + t.key}
              onClick={e => { e.preventDefault(); setTab(t.key); }}>
             {t.label}
           </a>
         ))}
-      </nav>
+      </nav>}
+      {loaded && !active && (
+        <div className="rv-note rv-note-alert" role="alert">
+          <svg className="ico ico-sm"><use href="#i-alert" /></svg>
+          <span className="rv-note-txt">
+            {denied || spec ? 'You do not have access to MDM Stewardship.' : 'Could not load MDM Stewardship.'}
+          </span>
+        </div>
+      )}
       {active && (
         <div className="page-section">
-          <div className="ps-hdr">
-            <h3 className="ps-title"><svg className="ico"><use href={'#' + active.ico} /></svg> {active.label}</h3>
-          </div>
           <div className="card card-elev">
             {active.key === 'review' && <QueueTab onDecided={() => setDecidedTick(t => t + 1)} />}
             {active.key === 'decisions' && <DecisionsTab refreshKey={decidedTick} />}
@@ -522,7 +553,7 @@ function MdmReview() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
