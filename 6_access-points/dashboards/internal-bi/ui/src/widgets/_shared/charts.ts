@@ -352,10 +352,12 @@ export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols =
     `<div style="display:grid;grid-template-columns:repeat(${trackCols},minmax(0,1fr));gap:.7rem;height:100%">` +
     cells.map(c => {
       const ic = c.iconColor || theme.navy['600'];
+      // Five or more cards across leaves too little width for chip + label side by
+      // side, so the chip sits above a full-width label there.
       const head = c.icon
-        ? `<div style="min-height:30px;display:flex;align-items:center;gap:.5rem">
+        ? `<div style="min-height:30px;display:flex;${trackCols >= 5 ? 'flex-direction:column;align-items:flex-start;gap:.45rem' : 'align-items:center;gap:.5rem'}">
              <span style="display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;background:${tint(ic, 0.13)};color:${ic};flex-shrink:0"><svg class="ico" aria-hidden="true"><use href="#${c.icon}"/></svg></span>
-             <span style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;line-height:1.25;color:${theme.ink[3]};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" title="${escAttr(c.label)}">${c.label}</span>
+             <span style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;line-height:1.25;${trackCols >= 5 ? 'min-height:2.5em;' : ''}color:${theme.ink[3]};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" title="${escAttr(c.label)}">${c.label}</span>
            </div>`
         : `<div class="kpi-lbl" style="height:16px;${clamp}" title="${escAttr(c.label)}">${c.label}</div>`;
       // Normalised value row: numbers keep the large kpi-val size; long TEXT values
