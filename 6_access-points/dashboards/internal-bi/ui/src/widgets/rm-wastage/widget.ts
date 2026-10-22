@@ -22,23 +22,22 @@ const def: WidgetDef = {
     const max = Math.max(...rows.map(r => Number(r.wastage_score ?? 0))) || 1;
     const colorFor = (v: number) => ramp[Math.min(ramp.length - 1, Math.round((1 - v / max) * (ramp.length - 1)))];
 
-    // Use-vs-service mix = share of commodities in each band.
-    const total = rows.length;
-    const band = (b: string) => rows.filter(r => String(r.use_band) === b).length;
-    const pct = (n: number) => Math.round((n / total) * 100);
+    // Wastage bands from the fetcher (share of received units wasted): High ≥10%,
+    // Moderate 3–10%, Low <3%. Counted over the commodities shown in the treemap.
+    const band = (b: string) => rows.filter(r => String(r.use_band).toLowerCase() === b).length;
     const mix = [
-      { label: 'Adequate use', sub: 'within expected range', v: pct(band('adequate')), col: t.status.good },
-      { label: 'High use', sub: 'above expected range', v: pct(band('high')), col: t.status.watch },
-      { label: 'Low use', sub: 'below expected range', v: pct(band('low')), col: t.status.info },
+      { label: 'High wastage', sub: '10% or more wasted', v: band('high'), col: t.status.alert },
+      { label: 'Moderate', sub: '3 to 10% wasted', v: band('moderate'), col: t.status.watch },
+      { label: 'Low wastage', sub: 'under 3% wasted', v: band('low'), col: t.status.good },
     ];
 
     ctx.el.innerHTML = `
       <div style="display:flex;gap:1rem">
         <div class="rm-wt-tree" style="flex:1;min-width:0;height:300px"></div>
-        <div style="width:170px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;gap:.7rem">
-          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:${t.ink[3]}">Use vs service output</div>
+        <div style="width:170px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:.8rem">
+          <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:${t.ink[3]}">Wastage bands</div>
           ${mix.map(m => `<div>
-            <div style="font-size:1.4rem;font-weight:800;color:${m.col};font-variant-numeric:tabular-nums;line-height:1">${m.v}%</div>
+            <div style="font-size:1.6rem;font-weight:800;color:${m.col};font-variant-numeric:tabular-nums;line-height:1">${m.v}<span style="font-size:.8rem;font-weight:600;color:${t.ink[3]}"> of ${rows.length}</span></div>
             <div style="font-size:.76rem;font-weight:600;color:${t.ink[1]}">${m.label}</div>
             <div style="font-size:.7rem;color:${t.ink[3]}">${m.sub}</div></div>`).join('')}
         </div>

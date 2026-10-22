@@ -37,19 +37,20 @@ const def: WidgetDef = {
     const card = (r: any) => {
       const spark = Array.isArray(r.spark) ? r.spark.map(Number) : null;
       const deltaColor = r.delta_good === false ? t.status.alert : t.status.good;
-      return `<div style="background:${t.paper};border-radius:12px;padding:.7rem .8rem;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:.25rem">
-        <div style="font-size:.74rem;font-weight:600;color:${t.ink[2]}">${r.label}</div>
+      return `<div style="background:${t.paper};border-radius:12px;padding:1rem 1.1rem;box-shadow:var(--shadow-1);display:flex;flex-direction:column;justify-content:center;gap:.45rem">
+        <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${t.ink[3]}">${r.label}</div>
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.4rem">
-          <div style="font-size:1.5rem;font-weight:800;letter-spacing:-.03em;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1">${fmt(Number(r.value ?? 0), String(r.unit ?? ''))}</div>
+          <div style="font-size:1.85rem;font-weight:800;letter-spacing:-.03em;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1">${fmt(Number(r.value ?? 0), String(r.unit ?? ''))}</div>
           ${spark ? sparklineSvg(spark, t, { w: 76, h: 26 }) : ''}
         </div>
-        <div style="font-size:.7rem;color:${t.ink[4]}">${r.target ?? ''}</div>
+        ${r.target ? `<div style="font-size:.7rem;color:${t.ink[4]}">${r.target}</div>` : ''}
         ${r.delta_text ? `<div style="font-size:.72rem;font-weight:600;color:${deltaColor}">${r.delta_text}</div>` : ''}
       </div>`;
     };
 
+    ctx.el.style.cssText = 'display:flex;flex-direction:column;height:100%';
     ctx.el.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">${stats.map(card).join('')}</div>
+      <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:.8rem">${stats.map(card).join('')}</div>
       ${integ.length ? `<div style="margin-top:.8rem;padding-top:.7rem;border-top:1px solid ${t.line}">
         <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:${t.ink[3]};margin-bottom:.5rem">Facility Integrity</div>
         <div style="display:flex;gap:1.4rem">

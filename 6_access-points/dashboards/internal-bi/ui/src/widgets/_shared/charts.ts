@@ -16,7 +16,7 @@ export const ALARM_RAMP = ['#EAF7F0', '#A7E0C4', '#F5D98A', '#F19A3E', '#EF4444'
 export const alarmBandColor = (p: number): string =>
   p < 0.2 ? '#A7E0C4' : p < 0.5 ? '#F5D98A' : p < 0.8 ? '#F19A3E' : '#EF4444';
 /** Stock ramp — low = red (stockout risk), high = green (healthy). Cool palette. */
-export const STOCK_RAMP = ['#EF4444', '#F19A3E', '#F5D98A', '#A7E0C4', '#22A06B'];
+export const STOCK_RAMP = ['#E39A9F', '#EDBF8F', '#F2E2B0', '#C2DECB', '#86BFA0'];
 
 /** Wire an echarts instance to container resize + return its disposer. */
 function bindResize(chart: echarts.ECharts): () => void {
@@ -353,9 +353,9 @@ export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols =
     cells.map(c => {
       const ic = c.iconColor || theme.navy['600'];
       const head = c.icon
-        ? `<div style="height:30px;display:flex;align-items:center;gap:.5rem">
+        ? `<div style="min-height:30px;display:flex;align-items:center;gap:.5rem">
              <span style="display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;background:${tint(ic, 0.13)};color:${ic};flex-shrink:0"><svg class="ico" aria-hidden="true"><use href="#${c.icon}"/></svg></span>
-             <span style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${theme.ink[3]};${clamp}" title="${escAttr(c.label)}">${c.label}</span>
+             <span style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;line-height:1.25;color:${theme.ink[3]};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" title="${escAttr(c.label)}">${c.label}</span>
            </div>`
         : `<div class="kpi-lbl" style="height:16px;${clamp}" title="${escAttr(c.label)}">${c.label}</div>`;
       // Normalised value row: numbers keep the large kpi-val size; long TEXT values
