@@ -56,6 +56,10 @@
     filter: brightness(0) invert(1) drop-shadow(0 2px 14px rgba(255,255,255,0.32));
     transform: scale(1.04);
   }
+  .bi-sidehead .sidehead-brand {
+    display: block; width: 150px; height: auto;
+    margin-bottom: 0.55rem;
+  }
   .bi-sidehead .sidehead-text {
     display: flex; flex-direction: column; justify-content: center;
     line-height: 1;

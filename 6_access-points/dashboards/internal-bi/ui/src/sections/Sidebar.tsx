@@ -59,7 +59,9 @@ export default function Sidebar() {
             ? <img src={logoSrc} alt="" className="sidehead-logo" />
             : null}
           <div className="sidehead-text">
-            <div className="title">{platformAbbr}</div>
+            {logoSrc
+              ? <div className="title">{platformAbbr}</div>
+              : <img src="/static/assets/brand/palladium-logo-white.png" alt={platformAbbr} className="sidehead-brand" />}
             <div className="subtitle">Internal BI</div>
           </div>
         </a>
