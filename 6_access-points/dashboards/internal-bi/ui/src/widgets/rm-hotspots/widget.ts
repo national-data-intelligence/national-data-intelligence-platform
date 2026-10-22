@@ -38,8 +38,8 @@ const def: WidgetDef = {
       { id: 'region', label: 'Region' },
       // Top-3 hotspots (rows arrive ranked worst-first) get the composite in alert-red.
       { id: 'composite', label: 'Composite', cellClass: (_v, _row, i) => (i < 3 ? `color:${t.status.alert};font-weight:700` : '') },
-      { id: 'exposed', label: 'Exposed services' },
-      { id: 'volume', label: 'Service volume /mo' },
+      { id: 'exposed', label: 'Exposed' },
+      { id: 'volume', label: 'Volume /mo' },
     ];
 
     // A one-line executive lead sits above the table (no nested card): paginatedTable

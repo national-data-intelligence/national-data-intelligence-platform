@@ -29,6 +29,10 @@ const def: WidgetDef = {
       const val = unit === 'percent' ? `${Number(r.value ?? 0)}%` : Number(r.value ?? 0).toLocaleString();
       const dt = String(r.delta_text ?? '');
       const raw = String(r.icon ?? '');
+      // "Avg Coverage" is the mean of facilities reporting ÷ expected — a reporting
+      // rate, not service coverage — so it is labelled as one and drawn as a ring.
+      const isRate = /avg coverage/i.test(String(r.metric ?? '')) && unit === 'percent';
+      if (isRate) return { label: 'Reporting rate', value: val, ring: Number(r.value ?? 0) };
       return {
         label: String(r.metric ?? ''),
         value: val,

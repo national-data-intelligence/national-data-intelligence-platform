@@ -33,7 +33,7 @@ const def: WidgetDef = {
       rank: Number(r.rank ?? 0),
       woreda: r.woreda ?? '-',
       region: regionName(String(r.region ?? '')),
-      p_alarm: Number(r.p_alarm ?? 0),
+      p_alarm: Math.round(Number(r.p_alarm ?? 0) * 100),   // fetcher: 0–1 probability
       readiness: Number(r.readiness_index ?? 0),
       reliability: Number(r.reporting_reliability_pct ?? 0),
       evidence: r.evidence ?? '-',

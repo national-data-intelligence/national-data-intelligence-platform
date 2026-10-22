@@ -184,14 +184,14 @@ export function funnelCascade(el: HTMLElement, data: { name: string; pct: number
     return `<div style="position:relative;height:${segH.toFixed(1)}px">
         <div style="position:absolute;inset:0;background:${col};clip-path:${clip}"></div>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
-          <span style="font-size:12px;font-weight:600;color:${ink(col)};white-space:nowrap;font-family:${theme.fontSans}">${d.name} ${Math.round(d.pct)}</span>
+          <span style="font-size:11px;font-weight:600;color:${ink(col)};white-space:nowrap;font-family:${theme.fontSans}">${d.name} ${Math.round(d.pct)}</span>
         </div>
       </div>`;
   }).join('');
 
   el.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:${H + 56}px">
-      <div style="width:74%;display:flex;flex-direction:column;gap:${gap}px">${segs}</div>
+      <div style="width:94%;display:flex;flex-direction:column;gap:${gap}px">${segs}</div>
     </div>`;
   return () => { /* pure DOM */ };
 }
@@ -330,6 +330,32 @@ export interface KpiCell {
   status?: 'good' | 'watch' | 'alert' | 'info';
   icon?: string;                   // optional sprite id (e.g. 'i-shield-check') → colored chip + label row
   iconColor?: string;              // accent for the chip (defaults to a slate navy)
+  ring?: number;                   // 0–100: draw the value as an animated gradient ring instead of a number
+}
+
+/** Animated gradient ring (deep blue → green) with the value centred. The sweep
+ *  plays once on render and is skipped under prefers-reduced-motion. */
+let ringSeq = 0;
+export function ringSvg(pct: number, label: string, theme: Theme, size = 84): string {
+  if (!document.getElementById('ring-sweep-css')) {
+    const st = document.createElement('style');
+    st.id = 'ring-sweep-css';
+    st.textContent = '@keyframes ringSweep{from{stroke-dashoffset:var(--ring-c)}}' +
+      '.ring-arc{animation:ringSweep 1.1s cubic-bezier(.4,0,.2,1) both}' +
+      '@media (prefers-reduced-motion: reduce){.ring-arc{animation:none}}';
+    document.head.appendChild(st);
+  }
+  const p = Math.max(0, Math.min(100, pct));
+  const sw = Math.round(size * 0.13), r = (size - sw) / 2, c = 2 * Math.PI * r, id = `ringg${++ringSeq}`;
+  return `<div style="position:relative;width:${size}px;height:${size}px;flex-shrink:0" role="img" aria-label="${label}">
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <defs><linearGradient id="${id}" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#1D4ED8"/><stop offset="1" stop-color="${theme.status.good}"/></linearGradient></defs>
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${theme.navy['50'] || '#EEF2F7'}" stroke-width="${sw}"/>
+      <circle class="ring-arc" cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="url(#${id})" stroke-width="${sw}" stroke-linecap="round"
+        transform="rotate(-90 ${size / 2} ${size / 2})" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${(c * (1 - p / 100)).toFixed(2)}" style="--ring-c:${c.toFixed(2)}"/>
+    </svg>
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:${Math.round(size * 0.21)}px;color:${theme.ink[0]};font-variant-numeric:tabular-nums;letter-spacing:-.02em">${label.replace(/%$/, `<span style="font-size:.6em;font-weight:700;margin-left:1px">%</span>`)}</div>
+  </div>`;
 }
 export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols = 3): () => void {
   const tint = (hex: string, a: number) => {
@@ -366,6 +392,11 @@ export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols =
       const valStyle = isText
         ? `font-size:1.12rem;font-weight:700;line-height:34px;${clamp}`
         : 'line-height:34px';
+      if (c.ring != null) return `
+      <div class="kpi kpi-${c.status || 'info'}" style="flex-direction:row;align-items:center;justify-content:space-between;gap:.6rem">
+        <span style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${theme.ink[3]};${clamp}" title="${escAttr(c.label)}">${c.label}</span>
+        ${ringSvg(c.ring, c.value, theme)}
+      </div>`;
       return `
       <div class="kpi kpi-${c.status || 'info'}" style="gap:.25rem">
         ${head}

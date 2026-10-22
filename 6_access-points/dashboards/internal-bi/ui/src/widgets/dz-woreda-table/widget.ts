@@ -43,7 +43,7 @@ const def: WidgetDef = {
       cases: Number(r.cases_12w ?? 0).toLocaleString(),
       incidence: Number(r.incidence_100k ?? 0),
       cfr: `${Number(r.cfr_pct ?? 0).toFixed(1)}%`,
-      p_alarm: Number(r.p_alarm ?? 0),
+      p_alarm: Math.round(Number(r.p_alarm ?? 0) * 100),   // fetcher: 0–1 probability
       readiness: String(r.readiness ?? '-'),
       reliability: String(r.reliability ?? '-'),
     }));
