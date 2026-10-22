@@ -57,8 +57,9 @@
     transform: scale(1.04);
   }
   .bi-sidehead .sidehead-brand {
-    display: block; width: 150px; height: auto;
-    margin-bottom: 0.55rem;
+    display: block; width: 78px; height: auto;
+    margin-top: 0.55rem;
+    opacity: 0.72;
   }
   .bi-sidehead .sidehead-text {
     display: flex; flex-direction: column; justify-content: center;
@@ -67,7 +68,7 @@
   }
   .bi-sidehead .title {
     font-family: var(--font-serif);
-    font-size: 1.22rem;
+    font-size: 1.5rem;
     font-weight: 600;
     color: #fff;
     letter-spacing: -0.005em;

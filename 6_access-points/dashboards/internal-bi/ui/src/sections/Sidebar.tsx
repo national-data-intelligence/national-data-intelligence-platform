@@ -59,10 +59,11 @@ export default function Sidebar() {
             ? <img src={logoSrc} alt="" className="sidehead-logo" />
             : null}
           <div className="sidehead-text">
+            {/* The surface name leads; Palladium is the attribution line beneath it. */}
+            <div className="title">Internal BI</div>
             {logoSrc
-              ? <div className="title">{platformAbbr}</div>
+              ? <div className="subtitle">{platformAbbr}</div>
               : <img src="/static/assets/brand/palladium-logo-white.png" alt={platformAbbr} className="sidehead-brand" />}
-            <div className="subtitle">Internal BI</div>
           </div>
         </a>
       </div>
