@@ -79,6 +79,25 @@ health_plan:
   abbr: HSTP-II
   name: Health Sector Transformation Plan II
 
+# Identity verification for the public access-request modal. Present ONLY where
+# the deployment has a real national-ID verifier wired behind the gateway —
+# Ethiopia's Fayda, a genuine email-OTP round-trip (see pub-access-modal). A
+# country without one omits this block entirely and the modal drops the whole
+# verification card rather than offering a form that posts nowhere. The pattern
+# is a RegExp source the SPA compiles; everything else is a label.
+identity:
+  system: Fayda
+  card_title: Verify your identity with Fayda (optional)
+  help_text: >-
+    Enter your Fayda number and the email registered to it; we send a one-time
+    code to that address to confirm it is you. Helps reviewers approve faster.
+    Not required for organisation accounts.
+  id_label: Fayda number (FAN)
+  id_hint: Enter a valid Fayda number (12 to 16 digits).
+  id_pattern: '^\d{12,16}$'
+  id_placeholder: e.g. 1000000000000001
+  email_label: Email on your Fayda record
+
 # ── The other two layers ────────────────────────────────────────────────────
 # Named here so one profile key resolves all three, but applied by the seed
 # steps rather than read by the browser.

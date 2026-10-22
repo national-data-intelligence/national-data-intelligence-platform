@@ -154,5 +154,27 @@
     "eyebrow": "Latest · News & bulletins",
     "title": "What's happening",
     "sub": "Weekly bulletins from PHEM, official press releases from {ministry.abbr}, and public-health advisories, most recent first."
+  },
+  "articles_page": {
+    "_note": "Masthead for the Articles (newsroom) page. {country.adjective} resolves to Ethiopian.",
+    "eyebrow": "Newsroom",
+    "title": "News and health bulletins",
+    "sub": "Weekly PHEM surveillance bulletins, official press releases and public-health advisories from {country.adjective} health institutions, most recent first."
+  },
+  "access": {
+    "_note": "Access-request modal. The identity-verification card is gated on profile.identity (Fayda), not on this copy. Placeholders are illustrative {country.adjective} examples.",
+    "title": "Request {platform.abbr} access",
+    "review_org": "{ministry.name} data governance",
+    "ph_name": "Dr Tigist Bekele",
+    "ph_email": "tigist.bekele@moh.gov.et",
+    "ph_phone": "+251 911 000000",
+    "ph_org": "FMoH / RHB / EPHI / Partner",
+    "ph_role": "Programme M&E officer, RHB director, Researcher"
+  },
+  "dashboards": {
+    "_note": "Audiences on the 'Open a dashboard' launcher. Only the first names sub-national bodies (RHB) that differ by country.",
+    "bi_audience": "FMoH staff · RHB · programme directors",
+    "admin_audience": "IT operations · security officers",
+    "workshop_audience": "Researchers · analysts · community contributors"
   }
 }

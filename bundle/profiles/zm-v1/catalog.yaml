@@ -51,6 +51,14 @@ disable:
       why: DHIS2 coverage by Ethiopian region; no Zambian equivalent source.
     - id: pub-supply
       why: HCMIS/DHIS2 service readiness; superseded by pub-zm-supply on eLMIS.
+    - id: pub-newsroom
+      why: >-
+        The home newsroom serves live articles from ops_governance.public_article,
+        which holds the Ethiopian deployment's bulletins (Somali Region cholera,
+        FMoH/HSDIP). Zambia has no published newsroom, so — per this profile's own
+        articles note — the page shows nothing rather than Ethiopian bulletins.
+    - id: pub-articles
+      why: Same shared Ethiopian newsroom on the Articles page; off until a Zambian newsroom is published.
     - id: ov-act-first-woredas
       why: >-
         Ranks woredas for action. Zambia has no woreda level; the equivalent
