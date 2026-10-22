@@ -76,8 +76,8 @@ export default function Sidebar() {
 
       {/* Static product identity only — no fabricated liveness/build claims. */}
       <div className="bi-sidebar-foot">
-        <strong>Palladium v1.0</strong> · PROD<br />
-        <span>Data Intelligence Platform</span>
+        <strong>National Data Intelligence Platform</strong><br />
+        <span>v 1.0</span>
       </div>
     </aside>
   );
