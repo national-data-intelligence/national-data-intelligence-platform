@@ -82,7 +82,7 @@ export default function App() {
                 ? <img className="sidehead-logo" src={logoUrl(profile)!} alt="" />
                 : null}
               <span className="sidehead-text">
-                <span className="title">{profile.platform?.abbr || 'NHDW'}</span>
+                <span className="title">{profile.platform?.abbr || 'Palladium'}</span>
                 <span className="subtitle">Workshop portal</span>
               </span>
             </a>

@@ -38,13 +38,13 @@ const def: WidgetDef = {
       { id: 'region', label: 'Region' },
       // Top-3 hotspots (rows arrive ranked worst-first) get the composite in alert-red.
       { id: 'composite', label: 'Composite', cellClass: (_v, _row, i) => (i < 3 ? `color:${t.status.alert};font-weight:700` : '') },
-      { id: 'exposed', label: 'Exposed services' },
-      { id: 'volume', label: 'Service volume /mo' },
+      { id: 'exposed', label: 'Exposed' },
+      { id: 'volume', label: 'Volume /mo' },
     ];
 
     // A one-line executive lead sits above the table (no nested card): paginatedTable
     // clears its own container, so the table mounts into a child while the lead stays.
-    ctx.el.innerHTML = `<p class="widget-lead" style="margin:0 0 .6rem;font-size:.8rem;line-height:1.35;color:var(--ink-3)">Regions ranked worst first and weighted by service volume, so stockouts at busy facilities rise to the top.</p><div class="rmh-table" style="flex:1;min-height:0"></div>`;
+    ctx.el.innerHTML = `<div class="rmh-table" style="flex:1;min-height:0"></div>`;
     const mount = ctx.el.querySelector('.rmh-table') as HTMLElement;
     // No search/sort: the incoming worst-first ranking is load-bearing (top-3 highlight = the 3 worst).
     return paginatedTable(mount, shaped, columns, ctx.theme, {});

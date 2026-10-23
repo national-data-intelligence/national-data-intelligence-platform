@@ -26,7 +26,6 @@ const def: WidgetDef = {
     const delta = Number(r.delta_pp ?? 0);
     ctx.el.style.cssText = 'display:flex;flex-direction:column;justify-content:center;height:100%';
     ctx.el.innerHTML = `
-      <p style="font-size:.82rem;color:${t.ink[2]};margin:0 0 .4rem">Across selected high-priority indicators, EMR-active facilities only</p>
       <div class="sv-ag-ring" style="height:252px"></div>
       <div class="sv-ag-legend" style="display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem 1.2rem;margin-top:.4rem"></div>
       <div style="text-align:center;margin-top:.5rem;font-size:.74rem;font-weight:600;color:${delta >= 0 ? t.status.good : t.status.alert}">${delta >= 0 ? '+' : ''}${delta} pp vs last quarter</div>`;

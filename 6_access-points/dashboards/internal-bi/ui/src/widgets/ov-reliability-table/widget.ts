@@ -70,7 +70,6 @@ const def: WidgetDef = {
 
     ctx.el.innerHTML = `
       <div style="display:flex;justify-content:flex-end;margin-bottom:.6rem">
-        <span style="font-size:.72rem;color:${t.ink[3]};border:1px solid ${t.line};border-radius:999px;padding:.15rem .6rem">Pop-weighting pending</span>
       </div>
       <div class="ov-rt-tbl"></div>
       <div style="display:flex;align-items:center;gap:1rem;margin-top:.7rem;padding-top:.6rem;border-top:1px solid ${t.line}">

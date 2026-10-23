@@ -11,6 +11,7 @@
  * reactsTo: geography · period.
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
+import { iconCard } from '../_shared/charts';
 
 const def: WidgetDef = {
   id: 'rm-cold-chain',
@@ -33,13 +34,7 @@ const def: WidgetDef = {
     ];
     ctx.el.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:1rem;height:100%">
-        ${tiles.map(x => `<div style="background:${t.paper};border-radius:16px;padding:1rem 1.1rem;box-shadow:var(--shadow-1);display:flex;flex-direction:column;justify-content:center;gap:.35rem;min-width:0">
-          <div style="display:flex;align-items:center;gap:.55rem">
-            <span style="display:inline-grid;place-items:center;width:32px;height:32px;border-radius:8px;background:${tint(x.col, 0.12)};color:${x.col};flex-shrink:0"><svg class="ico" aria-hidden="true"><use href="#${x.icon}"/></svg></span>
-            <span style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:${t.ink[3]}">${x.label}</span>
-          </div>
-          <div style="font-size:1.9rem;font-weight:800;letter-spacing:-.03em;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1;margin-top:.1rem">${x.v.toLocaleString()}</div>
-          <div style="font-size:.72rem;color:${t.ink[3]}">${x.sub}</div></div>`).join('')}
+        ${tiles.map(x => iconCard(t, { label: x.label, value: x.v.toLocaleString(), icon: x.icon, color: x.col })).join('')}
       </div>`;
     return () => { /* pure DOM */ };
   },

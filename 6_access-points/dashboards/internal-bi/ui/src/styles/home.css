@@ -62,11 +62,12 @@
     min-width: 0;
   }
   .bi-sidehead .title {
-    font-family: var(--font-serif);
-    font-size: 1.22rem;
-    font-weight: 600;
+    /* Same face as the page headings (Topbar h2): sans, extra-bold, tight. */
+    font-family: var(--font-sans);
+    font-size: 1.45rem;
+    font-weight: 800;
     color: #fff;
-    letter-spacing: -0.005em;
+    letter-spacing: -0.02em;
     line-height: 1;
   }
   .bi-sidehead .subtitle {
@@ -116,8 +117,14 @@
     border-top: 1px solid rgba(255,255,255,0.08);
     font-size: 0.72rem; color: rgba(255,255,255,0.42);
     line-height: 1.5;
+    text-align: center;
   }
   .bi-sidebar-foot strong { color: rgba(255,255,255,0.7); }
+  .bi-sidebar-foot .sidefoot-brand {
+    display: block; width: 132px; height: auto;
+    margin: 0 auto 0.85rem;
+    filter: drop-shadow(0 0 0.4px #fff) drop-shadow(0 0 0.4px #fff);   /* thickens the thin wordmark strokes */
+  }
 
   /* ═══ Main column · new texture (bg-content.avif) + gradient semi-transparent white overlay ═══ */
   .bi-main {
@@ -140,7 +147,7 @@
      masthead: eyebrow + 2rem/800 title from Topbar.tsx, no band, no hairline) ═══ */
   .bi-topbar {
     /* Horizontal padding MUST match .bi-pageframe (5.5rem) so the masthead
-       title/breadcrumb sit flush-left with the page content below, not inset
+       title sits flush-left with the page content below, not inset
        further left. Both are siblings in .bi-main (same left edge). */
     padding: 1.3rem 5.5rem 1.1rem 5.5rem;
     display: flex; align-items: flex-end; justify-content: space-between;
@@ -151,13 +158,6 @@
     font-size: 1.6rem; font-weight: 600;
     color: var(--ink); margin: 0;
     line-height: 1.1;
-  }
-  .bi-topbar .tb-title .breadcrumb {
-    font-size: 0.7rem; color: var(--ink-3);
-    font-weight: 600; letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 0.3rem;
-    display: flex; align-items: center; gap: 0.4rem;
   }
   .bi-topbar .tb-actions {
     display: flex; align-items: center; gap: 0.6rem;

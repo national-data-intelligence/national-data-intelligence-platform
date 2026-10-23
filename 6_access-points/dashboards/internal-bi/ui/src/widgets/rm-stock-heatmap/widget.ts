@@ -18,7 +18,7 @@ const def: WidgetDef = {
     const heatRows = commodities.map(c => ({ name: c, probs: regions.map(reg => (byCommodity[c][reg] ?? null)) }));
     ctx.el.style.display = 'flex';
     ctx.el.style.flexDirection = 'column';
-    ctx.el.innerHTML = `<p class="widget-lead" style="color:var(--ink-3);font-size:.8rem;margin:0 0 .6rem">Months of stock on hand for each commodity across every region: red cells are running low, green cells are healthy. Scroll for more commodities.</p><div class="rm-hm-mount" style="flex:1;min-height:0"></div>`;
+    ctx.el.innerHTML = `<div class="rm-hm-mount" style="flex:1;min-height:0"></div>`;
     const mount = ctx.el.querySelector('.rm-hm-mount') as HTMLElement;
     return heatmap(mount, heatRows, regions.map(regionName), ctx.theme, {
       max: 6, ramp: STOCK_RAMP, fmt: (v: number) => `${v.toFixed(1)}mo`, label: 'Stock',
