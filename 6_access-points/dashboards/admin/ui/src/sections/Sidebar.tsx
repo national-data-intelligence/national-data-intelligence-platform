@@ -122,7 +122,7 @@ export default function Sidebar() {
             ? <img className="sidehead-logo" src={logoUrl(profile)!} alt="" />
             : null}
           <span className="sidehead-text">
-            <span className="title">{profile.platform?.abbr || 'NHDW'}</span>
+            <span className="title">{profile.platform?.abbr || 'Palladium'}</span>
             <span className="subtitle">Admin console</span>
           </span>
         </a>

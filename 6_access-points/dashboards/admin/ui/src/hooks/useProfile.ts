@@ -51,7 +51,7 @@ export const BUNDLED: Profile = {
   label: '',
   country: { name: '', official_name: '', adjective: '' },
   ministry: { abbr: '', name: 'Ministry of Health' },
-  platform: { name: 'National Health Data Warehouse', abbr: 'NHDW' },
+  platform: { name: 'Data Intelligence Platform', abbr: 'Palladium' },
   geography: {
     levels: [
       { code: 'admin1', singular: 'Region', plural: 'Regions' },

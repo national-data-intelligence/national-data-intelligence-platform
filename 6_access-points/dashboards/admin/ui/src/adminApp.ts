@@ -214,8 +214,8 @@ function adminApp() {
     emailSubject() {
       if (!this.selectedRequest) return '';
       return ({
-        approved:  `Your NHDW access request ${this.selectedRequest.id} has been approved`,
-        declined:  `Your NHDW access request ${this.selectedRequest.id} was not approved`,
+        approved:  `Your access request ${this.selectedRequest.id} has been approved`,
+        declined:  `Your access request ${this.selectedRequest.id} was not approved`,
         'more-info': `More information needed · ${this.selectedRequest.id}`,
       })[this.reviewDecision] || '';
     },
@@ -225,7 +225,7 @@ function adminApp() {
       const role = this.roleLabel(this.reviewRole);
       if (this.reviewDecision === 'approved') {
         return `Dear ${r.name},\n\n`
-             + `Your access request to the National Health Data Warehouse has been approved.\n\n`
+             + `Your access request to the National Data Intelligence Platform has been approved.\n\n`
              + `  Tracking ID: ${r.id}\n`
              + `  Granted role: ${role}\n`
              + `  Geographic scope: ${this.reviewScope.region === 'all' ? 'all regions' : this.reviewScope.region}\n`
@@ -238,13 +238,13 @@ function adminApp() {
       }
       if (this.reviewDecision === 'declined') {
         return `Dear ${r.name},\n\n`
-             + `Your access request to the National Health Data Warehouse (${r.id}) has not been approved at this time.\n\n`
+             + `Your access request to the National Data Intelligence Platform (${r.id}) has not been approved at this time.\n\n`
              + (this.reviewNote ? `Reason: ${this.reviewNote}\n\n` : `Reason: Access criteria for the requested dashboards were not fully met.\n\n`)
              + `You may submit a new request once the noted concerns are addressed.\n\n`
              + `${signOff()}\n`;
       }
       return `Dear ${r.name},\n\n`
-           + `Thank you for your access request to the NHDW (${r.id}). Before we can complete the review, we need additional information:\n\n`
+           + `Thank you for your access request to the National Data Intelligence Platform (${r.id}). Before we can complete the review, we need additional information:\n\n`
            + `  ${this.reviewNote || 'Please confirm your institutional affiliation and intended use.'}\n\n`
            + `Please reply to this email with the requested details. We will resume the review on receipt.\n\n`
            + `${signOff()}\n`;
