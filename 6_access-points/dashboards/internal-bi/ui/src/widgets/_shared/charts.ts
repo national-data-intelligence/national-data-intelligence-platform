@@ -357,7 +357,7 @@ export interface KpiCell {
 /** Half-circle gauge (fuel-gauge style): track + blue→green arc that sweeps in once,
  *  value in the bowl, 0 and 100 at the ends. No sweep under prefers-reduced-motion. */
 let gaugeSeq = 0;
-export function gaugeSvg(pct: number, label: string, theme: Theme): string {
+export function gaugeSvg(pct: number, label: string, theme: Theme, bare = false, width = 160): string {
   if (!document.getElementById('gauge-sweep-css')) {
     const st = document.createElement('style');
     st.id = 'gauge-sweep-css';
@@ -369,14 +369,14 @@ export function gaugeSvg(pct: number, label: string, theme: Theme): string {
   const p = Math.max(0, Math.min(100, pct)), id = `gaugeg${++gaugeSeq}`;
   const arc = 'M 22 104 A 78 78 0 0 1 178 104';
   const num = label.replace(/%$/, '');
-  return `<div style="width:100%;max-width:160px;margin:0 auto" role="img" aria-label="${label}">
-    <svg viewBox="0 0 200 122" width="100%" style="display:block;overflow:visible">
+  return `<div style="width:100%;max-width:${width}px;margin:0 auto;flex-shrink:0" role="img" aria-label="${label}">
+    <svg viewBox="0 0 200 ${bare ? 112 : 122}" width="100%" style="display:block;overflow:visible">
       <defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1D4ED8"/><stop offset="1" stop-color="${theme.status.good}"/></linearGradient></defs>
       <path d="${arc}" fill="none" stroke="${theme.navy['50'] || '#EEF2F7'}" stroke-width="16" stroke-linecap="round"/>
       <path class="gauge-arc" d="${arc}" pathLength="100" fill="none" stroke="url(#${id})" stroke-width="16" stroke-linecap="round" stroke-dasharray="${p.toFixed(1)} 100"/>
-      <text x="100" y="98" text-anchor="middle" font-size="46" font-weight="800" fill="${theme.ink[0]}" style="font-variant-numeric:tabular-nums;letter-spacing:-.02em">${num}<tspan font-size="24" font-weight="700">${label.endsWith('%') ? '%' : ''}</tspan></text>
-      <text x="22" y="121" text-anchor="middle" font-size="11" font-weight="600" fill="${theme.ink[3]}">0</text>
-      <text x="178" y="121" text-anchor="middle" font-size="11" font-weight="600" fill="${theme.ink[3]}">100</text>
+      ${bare ? '' : `<text x="100" y="98" text-anchor="middle" font-size="46" font-weight="800" fill="${theme.ink[0]}" style="font-variant-numeric:tabular-nums;letter-spacing:-.02em">${num}<tspan font-size="24" font-weight="700">${label.endsWith('%') ? '%' : ''}</tspan></text>`}
+      ${bare ? '' : `<text x="22" y="121" text-anchor="middle" font-size="11" font-weight="600" fill="${theme.ink[3]}">0</text>
+      <text x="178" y="121" text-anchor="middle" font-size="11" font-weight="600" fill="${theme.ink[3]}">100</text>`}
     </svg>
   </div>`;
 }
@@ -403,10 +403,10 @@ export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols =
     cells.map(c => {
       const ic = c.iconColor || theme.navy['600'];
       // Card layout (owner 2026-10-22): title at the top, value beneath it, icon chip on
-      // the right, centred vertically. Narrow strips (5+) let the title take two lines and
-      // reserve that height on every card so the values stay on one line.
+      // the right, centred vertically. Every title reserves two lines so the values of a
+      // strip sit on one line whether or not a title wraps.
       const narrow = trackCols >= 5;
-      const lbl = `<div style="font-size:${narrow ? '.66rem' : '.7rem'};font-weight:600;text-transform:uppercase;letter-spacing:${narrow ? '.02em' : '.06em'};line-height:1.25;${trackCols >= 5 ? 'min-height:2.5em;' : ''}color:${theme.ink[3]};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" title="${escAttr(c.label)}">${c.label}</div>`;
+      const lbl = `<div style="font-size:${narrow ? '.66rem' : '.7rem'};font-weight:600;text-transform:uppercase;letter-spacing:${narrow ? '.02em' : '.06em'};line-height:1.25;min-height:2.5em;color:${theme.ink[3]};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" title="${escAttr(c.label)}">${c.label}</div>`;
       const chipBox = c.icon
         ? `<span style="display:inline-grid;place-items:center;width:${narrow ? 32 : 40}px;height:${narrow ? 32 : 40}px;border-radius:${narrow ? 9 : 10}px;background:${tint(ic, 0.13)};color:${ic};flex-shrink:0"><svg class="ico" aria-hidden="true" style="width:${narrow ? 17 : 21}px;height:${narrow ? 17 : 21}px"><use href="#${c.icon}"/></svg></span>`
         : '';
@@ -417,9 +417,12 @@ export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols =
         ? 'font-size:.98rem;font-weight:700;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;align-content:center'
         : narrow ? 'line-height:34px' : 'font-size:2.15rem;font-weight:800;letter-spacing:-.02em;line-height:40px';
       if (c.ring != null) return `
-      <div class="kpi kpi-${c.status || 'info'}" style="gap:.4rem">
-        ${lbl}
-        ${gaugeSvg(c.ring, c.value, theme)}
+      <div class="kpi kpi-${c.status || 'info'}" style="flex-direction:row;align-items:center;justify-content:space-between;gap:.75rem">
+        <div style="display:flex;flex-direction:column;gap:.3rem;min-width:0;flex:1;align-self:flex-start">
+          ${lbl}
+          <div class="kpi-val" style="height:${narrow ? 34 : 40}px;${valStyle}">${c.value}</div>
+        </div>
+        <div style="width:112px;flex-shrink:0">${gaugeSvg(c.ring, c.value, theme, true, 112)}</div>
       </div>`;
       return `
       <div class="kpi kpi-${c.status || 'info'}" style="flex-direction:row;align-items:center;justify-content:space-between;gap:${narrow ? '.5rem' : '.75rem'}">
