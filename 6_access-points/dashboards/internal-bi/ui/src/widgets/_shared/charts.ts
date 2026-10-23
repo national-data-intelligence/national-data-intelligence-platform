@@ -369,12 +369,12 @@ export function gaugeSvg(pct: number, label: string, theme: Theme): string {
   const p = Math.max(0, Math.min(100, pct)), id = `gaugeg${++gaugeSeq}`;
   const arc = 'M 22 104 A 78 78 0 0 1 178 104';
   const num = label.replace(/%$/, '');
-  return `<div style="width:100%;max-width:230px;margin:0 auto" role="img" aria-label="${label}">
+  return `<div style="width:100%;max-width:160px;margin:0 auto" role="img" aria-label="${label}">
     <svg viewBox="0 0 200 122" width="100%" style="display:block;overflow:visible">
       <defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1D4ED8"/><stop offset="1" stop-color="${theme.status.good}"/></linearGradient></defs>
       <path d="${arc}" fill="none" stroke="${theme.navy['50'] || '#EEF2F7'}" stroke-width="16" stroke-linecap="round"/>
       <path class="gauge-arc" d="${arc}" pathLength="100" fill="none" stroke="url(#${id})" stroke-width="16" stroke-linecap="round" stroke-dasharray="${p.toFixed(1)} 100"/>
-      <text x="100" y="98" text-anchor="middle" font-size="38" font-weight="800" fill="${theme.ink[0]}" style="font-variant-numeric:tabular-nums;letter-spacing:-.02em">${num}<tspan font-size="20" font-weight="700">${label.endsWith('%') ? '%' : ''}</tspan></text>
+      <text x="100" y="98" text-anchor="middle" font-size="46" font-weight="800" fill="${theme.ink[0]}" style="font-variant-numeric:tabular-nums;letter-spacing:-.02em">${num}<tspan font-size="24" font-weight="700">${label.endsWith('%') ? '%' : ''}</tspan></text>
       <text x="22" y="121" text-anchor="middle" font-size="11" font-weight="600" fill="${theme.ink[3]}">0</text>
       <text x="178" y="121" text-anchor="middle" font-size="11" font-weight="600" fill="${theme.ink[3]}">100</text>
     </svg>
@@ -415,7 +415,7 @@ export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols =
       const isText = !/^[0-9.,\s%+\-/]+[KMB%]?$/.test(String(c.value).trim());
       const valStyle = isText
         ? 'font-size:.98rem;font-weight:700;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;align-content:center'
-        : 'line-height:34px';
+        : narrow ? 'line-height:34px' : 'font-size:2.15rem;font-weight:800;letter-spacing:-.02em;line-height:40px';
       if (c.ring != null) return `
       <div class="kpi kpi-${c.status || 'info'}" style="gap:.4rem">
         ${lbl}
@@ -425,7 +425,7 @@ export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols =
       <div class="kpi kpi-${c.status || 'info'}" style="flex-direction:row;align-items:center;justify-content:space-between;gap:${narrow ? '.5rem' : '.75rem'}">
       <div style="display:flex;flex-direction:column;gap:.3rem;min-width:0;flex:1;align-self:flex-start">
         ${lbl}
-        <div class="kpi-val" style="height:34px;${valStyle}" title="${escAttr(String(c.value))}">${c.value}</div>
+        <div class="kpi-val" style="height:${narrow ? 34 : 40}px;${valStyle}" title="${escAttr(String(c.value))}">${c.value}</div>
         ${hasSub ? `<div style="height:16px;font-size:.73rem;color:${theme.ink[2]};${clamp}" title="${escAttr(c.sub || '')}">${c.sub || ''}</div>` : ''}
         ${hasDelta ? `<div class="kpi-delta ${c.deltaDir || ''}" style="height:16px;${clamp}">${c.delta || ''}</div>` : ''}
         ${hasFoot ? `<div class="kpi-tgt" style="margin-top:auto;height:24px;${clamp}" title="${escAttr(c.foot || c.note || '')}">${c.foot || c.note || ''}</div>` : ''}
