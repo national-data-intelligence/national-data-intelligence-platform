@@ -86,6 +86,16 @@ hcmis_heartbeat AS (
         AND r.source_system      = 'HCMIS'
     JOIN env_heartbeat eh USING (environment_id)
     GROUP BY 1
+),
+-- As-of anchor for the reporting window. The synthetic warehouse is loaded to
+-- a fixed "as-of" date (its latest ingested period), which sits months behind
+-- wall-clock in a running demo — so a CURRENT_DATE window marks EVERY facility
+-- silent the moment the data ages past 60 days, which is a false story. Anchor
+-- the window to the DATA's own freshest heartbeat instead: a facility is
+-- "silent" only if it has not reported within 60 days of the latest reporting
+-- date in the warehouse. Falls back to CURRENT_DATE when no heartbeat exists.
+asof AS (
+    SELECT MAX(last_reporting_date) AS d FROM hcmis_heartbeat
 )
 SELECT
     d.facility_id,
@@ -104,7 +114,7 @@ SELECT
     morg.part_of_reference,
     hb.last_reporting_date,
     d.opening_date,
-    CASE WHEN hb.last_reporting_date >= (CURRENT_DATE - INTERVAL '60 days')
+    CASE WHEN hb.last_reporting_date >= (COALESCE((SELECT d FROM asof), CURRENT_DATE) - INTERVAL '60 days')
          THEN 'online' ELSE 'silent' END AS reporting_status
 FROM dhis2 d
 LEFT JOIN mfr_loc       mloc USING (facility_id)
