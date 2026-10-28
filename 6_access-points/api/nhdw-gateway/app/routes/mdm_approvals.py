@@ -65,7 +65,8 @@ APPROVE_CAPABILITY = "mdm_approve"
 
 CHECK_TTL_MINUTES = int(os.environ.get("MDM_CHECK_TTL_MINUTES", "30"))
 # Score at or above which the console offers "send for approval together".
-# Still a PROPOSAL — never an automatic link.
+# Still a PROPOSAL — never an automatic link. Ambiguous-name suggestions never
+# count: their 1.00 means the name matches SEVERAL masters, not certainty.
 HIGH_CONFIDENCE = float(os.environ.get("MDM_HIGH_CONFIDENCE_SCORE", "0.95"))
 
 OPEN = ("proposed", "checked")
@@ -344,7 +345,8 @@ async def review_queue(
         totals = await conn.fetchrow(f"""
             SELECT count(*) AS waiting,
                    count(*) FILTER (WHERE c.score >= $2
-                                      AND c.suggested_master_bk IS NOT NULL) AS high_confidence
+                                      AND c.suggested_master_bk IS NOT NULL
+                                      AND c.match_rule <> 'name_ambiguous') AS high_confidence
             {base}
         """, entity_class, HIGH_CONFIDENCE)
     return {

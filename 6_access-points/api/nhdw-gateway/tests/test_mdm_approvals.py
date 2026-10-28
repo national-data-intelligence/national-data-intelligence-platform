@@ -120,6 +120,13 @@ async def main() -> None:
         dec_before = (await q("SELECT count(*) n FROM ops_governance.mdm_match_decision"))[0]["n"]
         audit_start = (await q("SELECT COALESCE(max(id), 0) m FROM ops_audit.policy_log"))[0]["m"]
 
+        print("queue")
+        s, b = await call(c, STEWARD, "GET", "/review-queue", params={"limit": 500})
+        hc = [x for x in b["candidates"] if x["score"] >= b["high_confidence_score"]
+              and x["suggested_master_bk"] and x["match_rule"] != "name_ambiguous"]
+        check(s == 200 and b["high_confidence"] == len(hc),
+              "high-confidence count leaves out ambiguous-name suggestions")
+
         print("identity")
         s, _ = await call(c, NOSUB, "POST", f"/candidate/{c1}/propose", json={"verdict": "same"})
         check(s == 403, "no personal kc_sub → 403")
