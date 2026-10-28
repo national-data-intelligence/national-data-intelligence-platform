@@ -36,7 +36,7 @@ from . import mart_attrs, metrics, opa, ops_db
 from .routes import (access_requests, alerts, api_tokens, artifacts, audit,
                       chat, classification, ct, datasets, demo, docs, dq, exports,
                       graduation, groups, marts,
-                      mdm, me, ml, observability, perm_admin,
+                      mdm, mdm_workspace, me, ml, observability, perm_admin,
                       permissions as permissions_route,
                       policy, profile, projects, public_articles, queries,
                       reports, sql_lab, topology, workspace)
@@ -216,6 +216,7 @@ app.include_router(docs.router)
 app.include_router(workspace.router)
 app.include_router(graduation.router)
 app.include_router(mdm.router)
+app.include_router(mdm_workspace.router)   # MDM workspace: read side of the stewardship console
 app.include_router(classification.router)
 app.include_router(access_requests.public_router)
 app.include_router(access_requests.admin_router)
