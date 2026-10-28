@@ -11,7 +11,8 @@ BOTH databases are named *_test — never point it at live databases.
   TEST_VAULT_DSN=postgresql://…/nhdw_vault_s0_test python3 tests/test_mdm_workspace.py
 
 The contract under test:
-  gate        every route is stewards-only (R-STEW, R-OPS-ADM, R-SUPER)
+  gate        stewards (R-STEW, R-OPS-ADM, R-SUPER) and approvers read; anyone
+              else is refused
   overview    counts equal the warehouse and the ops store, per list
   facilities  one row per master; search, registry filter and paging agree
               with the warehouse; possible_match = a pending suggestion waits
@@ -64,6 +65,7 @@ def user(name: str, *roles: str) -> UserCtx:
 
 STEWARD = user("steward.one", "R-STEW")
 OPSADM = user("ops.admin", "R-OPS-ADM")
+APPROVER = user("approver.one", "R-STEW-APR")
 ANALYST = user("analyst.one", "R-CONS-ANA")
 
 _current = {"u": STEWARD}
@@ -136,6 +138,10 @@ async def main() -> None:
             check(r.status_code == 403, f"non-steward refused: {path.split('/')[3]}")
         _current["u"] = OPSADM
         check((await c.get("/api/mdm/overview")).status_code == 200, "ops admin allowed")
+        _current["u"] = APPROVER
+        check((await c.get("/api/mdm/overview")).status_code == 200
+              and (await c.get(f"/api/mdm/compare/{cand_id}")).status_code == 200,
+              "approver reads overview and the comparison it judges")
         _current["u"] = STEWARD
 
         print("overview")

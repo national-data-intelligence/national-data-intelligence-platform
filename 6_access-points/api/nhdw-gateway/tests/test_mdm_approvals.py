@@ -24,6 +24,9 @@ The contract under test:
   restore      undo is itself a proposal; approval supersedes + re-opens
   bulk         one result per item; partial failure is reported
   audit        every change leaves a policy_log row in the same transaction
+  capability   a person granted R-STEW-APR in ops_perm (console grant, no
+               token role) can approve; without the mdm_approve capability
+               they cannot. Needs TEST_ADMIN_DSN (to write the grant).
 """
 from __future__ import annotations
 
@@ -37,6 +40,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 if not os.environ.get("OPS_PG_DATABASE", "").endswith("_test"):
     sys.exit("refusing to run: OPS_PG_DATABASE must name a *_test database")
 
+import asyncpg                                  # noqa: E402
 import httpx                                    # noqa: E402
 from fastapi import FastAPI                     # noqa: E402
 
@@ -65,6 +69,9 @@ BOTH_TOKEN = user("pat:abcd1234", "R-STEW-APR", sub=BOTH.kc_sub)   # same person
 APPROVER = user("approver.one", "R-STEW-APR")
 APPROVER2 = user("approver.two", "R-STEW-APR")
 OPSADM = user("ops.admin", "R-OPS-ADM")
+CAPAPPROVER = user("cap.approver", "R-CONS-ANA")        # approver only through ops_perm
+NOCAP = user("plain.user", "R-CONS-ANA")
+ADMIN_DSN = os.environ.get("TEST_ADMIN_DSN", "")
 NOSUB = UserCtx(kc_sub="", username="dev:mock", realm="privileged-ops",
                 primary_role="R-STEW", roles=["R-STEW", "R-STEW-APR"])
 
@@ -284,6 +291,45 @@ async def main() -> None:
         check(s == 200 and b["requested"] == 3, "duplicates collapsed")
         check(res[c3]["ok"] and not res[c2]["ok"] and not res["not-a-uuid"]["ok"],
               "partial success reported per item (decided and bad id fail, open one succeeds)")
+
+        print("approver by capability (console role grant, no token role)")
+        if not ADMIN_DSN:
+            print("  skip TEST_ADMIN_DSN not set")
+        else:
+            admin = await asyncpg.connect(ADMIN_DSN)
+            rid = await admin.fetchval("""
+                INSERT INTO ops_perm.role (code, name) VALUES ('R-STEW-APR', 'MDM Approver')
+                ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id""")
+            await admin.execute("""INSERT INTO ops_perm.role_capability (role_id, capability_code)
+                                   VALUES ($1, 'mdm_approve') ON CONFLICT DO NOTHING""", rid)
+            for u in (CAPAPPROVER, NOCAP):
+                await admin.execute("""INSERT INTO ops_identity."user" (kc_sub, realm, username)
+                                       VALUES ($1::uuid, 'privileged-ops', $2)
+                                       ON CONFLICT (kc_sub) DO NOTHING""", u.kc_sub, u.username)
+            await admin.execute("""INSERT INTO ops_perm.user_role (kc_sub, role_id, source)
+                                   VALUES ($1::uuid, $2, 'admin_grant')""", CAPAPPROVER.kc_sub, rid)
+            await admin.close()
+            free = await q("""
+                SELECT c.candidate_id FROM ops_governance.mdm_match_candidate c
+                WHERE c.status = 'pending' AND c.suggested_master_bk IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM ops_governance.mdm_change_proposal p
+                                   WHERE p.source_system_code = c.left_source_system_code
+                                     AND p.source_record_key = c.left_source_record_key
+                                     AND p.status IN ('proposed', 'checked'))
+                LIMIT 1""")
+            check(len(free) == 1, "a free suggestion for the capability check")
+            s, b = await call(c, STEWARD, "POST", f"/candidate/{free[0]['candidate_id']}/propose",
+                              json={"verdict": "same"})
+            pc = b["proposal_id"]
+            s, _ = await call(c, NOCAP, "POST", f"/proposal/{pc}/approve", json={})
+            check(s == 403, "no token role and no capability → cannot approve")
+            s, b = await call(c, CAPAPPROVER, "GET", "/proposals", params={"view": "approvals"})
+            check(s == 200 and pc in [x["proposal_id"] for x in b["proposals"]],
+                  "granted in ops_perm → sees the approvals queue")
+            s, b = await call(c, CAPAPPROVER, "GET", f"/proposal/{pc}")
+            check(s == 200 and b["can_approve"] is True, "granted in ops_perm → detail offers approve")
+            s, b = await call(c, CAPAPPROVER, "POST", f"/proposal/{pc}/approve", json={})
+            check(s == 200 and b["status"] == "applied", "granted in ops_perm → approves (no Keycloak role)")
 
         print("audit")
         rows = await q("SELECT action, explanation FROM ops_audit.policy_log WHERE id > $1", audit_start)

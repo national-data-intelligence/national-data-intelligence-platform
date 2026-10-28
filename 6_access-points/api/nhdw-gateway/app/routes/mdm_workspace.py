@@ -12,8 +12,9 @@ and after a verdict, from the same objects the vault build produces:
   history         one master's timeline across the five lanes: sources,
                   matching, stewardship, master record, releases
 
-Writes stay in mdm.py (verdicts, releases) and mdm_approvals.py (proposals).
-Same direct steward gate as mdm.py: these reads have no OPA rego arm.
+Writes stay in mdm.py (releases) and mdm_approvals.py (proposals).
+Readers: stewards (mdm.py's direct gate — these reads have no OPA rego arm)
+and approvers, who judge a proposal from the same comparison and record.
 Warehouse reads go through Trino as bi_reader (catalog `marts`), ops reads
 through the asyncpg pool — never a write on either.
 """
@@ -28,7 +29,8 @@ from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, Query
 
 from ..auth import UserCtx, get_user
 from .. import ops_db, trino_client
-from .mdm import _cand_out, _require_steward
+from .mdm import _cand_out, _steward_gate
+from .mdm_approvals import is_approver
 
 log = logging.getLogger("gateway.mdm_workspace")
 router = APIRouter(prefix="/api/mdm", tags=["mdm"])
@@ -98,6 +100,12 @@ async def _tq(sql: str, params: list | None = None) -> list[dict]:
         raise HTTPException(502, "could not read the warehouse")
 
 
+async def _require_reader(user: UserCtx) -> None:
+    if _steward_gate(user).allow or await is_approver(user):
+        return
+    raise HTTPException(403, "stewards and approvers only")
+
+
 def _iso(v) -> str | None:
     return v.isoformat() if v is not None and hasattr(v, "isoformat") else (str(v) if v is not None else None)
 
@@ -112,7 +120,7 @@ async def overview(user: UserCtx = Depends(get_user)) -> dict:
     """The lists with a stewardship lane today (facility, commodity) and where
     each stands: masters, source records by source, suggestions waiting,
     current decisions and the latest published release."""
-    _require_steward(user)
+    await _require_reader(user)
     fac = (await _tq(f"""
         SELECT count(*) AS masters,
                count_if(mdm_state = 'conformed') AS conformed,
@@ -178,7 +186,7 @@ async def facilities(
     registry: linked (more than one source agrees) · single_source · possible_match
     (a suggestion waits to attach another record to this master) · all.
     """
-    _require_steward(user)
+    await _require_reader(user)
     if registry not in ("all", "linked", "single_source", "possible_match"):
         raise HTTPException(422, "registry must be all, linked, single_source or possible_match")
 
@@ -326,7 +334,7 @@ async def compare(candidate_id: str = PathParam(...),
     missing (a source that carries the field left it empty), not_reported (a
     source does not carry the field at all) or agreement. Values are the
     sources' own, read from their current satellites — never rewritten."""
-    _require_steward(user)
+    await _require_reader(user)
     try:
         UUID(candidate_id)
     except (ValueError, TypeError):
@@ -400,7 +408,7 @@ async def history(entity_class: str = PathParam(...),
     published_state says whether the latest release already carries the
     master as it stands now (first seen before the release watermark and no
     verdict recorded after the release's decision cut)."""
-    _require_steward(user)
+    await _require_reader(user)
     if entity_class != "facility":
         raise HTTPException(422, "history is available for facilities today")
 

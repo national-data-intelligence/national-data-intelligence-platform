@@ -22,6 +22,11 @@ and the steward checks again.
             POST proposal/{id}/decline      reason required
   both      GET  review-queue, proposals, proposal/{id}
 
+Who approves: a token role in APPROVER_ROLES, OR the `mdm_approve`
+capability on a role granted in ops_perm (the console's role grant). The
+capability path needs no Keycloak change; ops_perm.user_role is the single
+source of grants (#51), the same check perm_admin._require_capability makes.
+
 Audit rows are written INSIDE each transaction (ops_audit.policy_log), so a
 change and its audit entry commit or roll back together — an audit row that
 cannot be written stops the change.
@@ -39,12 +44,16 @@ import json
 import os
 from uuid import UUID
 
+import logging
+
 import asyncpg
 from fastapi import APIRouter, Body, Depends, HTTPException, Path as PathParam, Query
 
 from ..auth import UserCtx, get_user
-from .. import ops_db
+from .. import ops_db, permissions
 from .mdm import STEWARD_ROLES
+
+log = logging.getLogger("gateway.mdm_approvals")
 
 router = APIRouter(prefix="/api/mdm", tags=["mdm"])
 
@@ -52,6 +61,7 @@ router = APIRouter(prefix="/api/mdm", tags=["mdm"])
 # approver by default. R-SUPER stays for break-glass. Four-eyes is enforced
 # below and by a table constraint whatever the role.
 APPROVER_ROLES = ("R-STEW-APR", "R-SUPER")
+APPROVE_CAPABILITY = "mdm_approve"
 
 CHECK_TTL_MINUTES = int(os.environ.get("MDM_CHECK_TTL_MINUTES", "30"))
 # Score at or above which the console offers "send for approval together".
@@ -76,6 +86,28 @@ def _has(user: UserCtx, roles: tuple[str, ...]) -> bool:
 def _require(user: UserCtx, roles: tuple[str, ...], what: str) -> None:
     if not _has(user, roles):
         raise HTTPException(403, f"{what}: roles {user.roles} not allowed")
+
+
+async def is_approver(user: UserCtx) -> bool:
+    """Approver by token role, or by the mdm_approve capability granted in
+    ops_perm. Fails closed: no personal identity, or no ops_perm, means no."""
+    if _has(user, APPROVER_ROLES):
+        return True
+    if not user.kc_sub:
+        return False
+    pool = await ops_db.ensure_pool()
+    try:
+        async with pool.acquire() as conn:
+            rids = await permissions._resolve_role_ids(conn, user)
+            return APPROVE_CAPABILITY in await permissions._role_capabilities(conn, rids)
+    except (asyncpg.UndefinedTableError, asyncpg.InvalidSchemaNameError) as exc:
+        log.warning("approver capability check unavailable: %s", exc)
+        return False
+
+
+async def _require_approver(user: UserCtx, what: str) -> None:
+    if not await is_approver(user):
+        raise HTTPException(403, f"{what}: approvers only")
 
 
 def _person(user: UserCtx) -> str:
@@ -635,7 +667,7 @@ async def approve(
     """Approve and apply in one transaction. Refused when: the caller proposed
     it (403), it is not checked (409), the check expired (409 expired), or the
     records moved since the check (409 stale)."""
-    _require(user, APPROVER_ROLES, "mdm approve")
+    await _require_approver(user, "mdm approve")
     sub = _person(user)
     _uuid(proposal_id)
     pool = await ops_db.ensure_pool()
@@ -676,7 +708,7 @@ async def decline(
     user: UserCtx = Depends(get_user),
     note: str = Body("", embed=True),
 ) -> dict:
-    _require(user, APPROVER_ROLES, "mdm decline")
+    await _require_approver(user, "mdm decline")
     sub = _person(user)
     _uuid(proposal_id)
     if not note or not note.strip():
@@ -715,9 +747,10 @@ async def proposals(
        approvals  checked and in time, proposed by someone else (approvers)
        all        every proposal (approvers and ops)"""
     if view == "approvals":
-        _require(user, APPROVER_ROLES, "mdm approvals")
+        await _require_approver(user, "mdm approvals")
     elif view == "all":
-        _require(user, APPROVER_ROLES + STEWARD_ROLES, "mdm proposals")
+        if not (_has(user, STEWARD_ROLES) or await is_approver(user)):
+            raise HTTPException(403, "mdm proposals: stewards and approvers only")
     elif view in ("mine", "attention"):
         _require(user, STEWARD_ROLES, "mdm proposals")
     else:
@@ -759,7 +792,9 @@ async def proposal_detail(
 ) -> dict:
     """The drawer: the proposal, its step history, and whether the caller may
     approve it (the console renders Approve only when this says so)."""
-    _require(user, STEWARD_ROLES + APPROVER_ROLES, "mdm proposals")
+    approver = await is_approver(user)
+    if not (_has(user, STEWARD_ROLES) or approver):
+        raise HTTPException(403, "mdm proposals: stewards and approvers only")
     _uuid(proposal_id)
     pool = await ops_db.ensure_pool()
     async with pool.acquire() as conn:
@@ -771,7 +806,7 @@ async def proposal_detail(
     out = _prop_out(prop)
     out["events"] = [{"event": e["event"], "actor": e["actor"],
                       "at": e["at"].isoformat(), "detail": e["detail"]} for e in events]
-    out["can_approve"] = (_has(user, APPROVER_ROLES)
+    out["can_approve"] = (approver
                           and not _is_person(user, prop["proposed_by_sub"])
                           and prop["effective_status"] == "checked")
     out["can_withdraw"] = (_is_person(user, prop["proposed_by_sub"])
