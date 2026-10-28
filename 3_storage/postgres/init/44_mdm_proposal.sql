@@ -127,6 +127,9 @@ DO $$ BEGIN
         GRANT SELECT, INSERT, UPDATE ON ops_governance.mdm_change_proposal TO ops_gateway;
         -- events are append-only for the console
         GRANT SELECT, INSERT ON ops_governance.mdm_proposal_event TO ops_gateway;
+        -- event_id's sequence, granted like every other writable table's
+        -- (32, 38) so the cold-boot sequence check holds
+        GRANT USAGE, SELECT ON SEQUENCE ops_governance.mdm_proposal_event_event_id_seq TO ops_gateway;
         -- reviews: insert, and supersede by stamping recorded_to only
         GRANT SELECT, INSERT ON ops_governance.mdm_candidate_review TO ops_gateway;
         GRANT UPDATE (recorded_to) ON ops_governance.mdm_candidate_review TO ops_gateway;
