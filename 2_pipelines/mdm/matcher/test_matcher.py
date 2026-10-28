@@ -13,6 +13,9 @@ plus the real ops_governance DDL, then asserts the matcher contract:
   4. master with no twin           → no candidate at all
   5. steward-decided candidates    → NEVER touched by a rerun (status guard)
   6. rerun                         → idempotent (same rows, refreshed run uid)
+  7. commodity lane                → near-name only, vocabulary identity
+  8. rules registry + run log      → registry thresholds / disabled rules,
+                                     run row + sightings, first-seen kept
 
 Usage:  TEST_DSN=postgresql://... python3 test_matcher.py
 """
@@ -226,6 +229,101 @@ def main() -> int:
     n3 = q(conn, "SELECT count(*) FROM ops_governance.mdm_match_candidate "
                  "WHERE entity_class_code = 'commodity'")[0][0]
     check("commodity rerun is idempotent", n3 == 1, str(n3))
+
+    # ── 8. rules registry + run log (MDM workspace S2, init 45) ──────────
+    check("no registry yet → load_rules is None (0.1.0 behaviour)",
+          matcher.load_rules(conn, "ET") is None)
+    check("no run log yet → start_run opens nothing",
+          matcher.start_run(conn, str(uuid.uuid4()), "ET", {}) is False)
+
+    src45 = open(os.path.join(os.environ.get("REPO_ROOT", "/repo"),
+                              "3_storage/postgres/init/45_mdm_rules_runs.sql")).read()
+    body45 = "\n".join(l for l in src45.splitlines() if not l.startswith("\\connect"))
+    conn.execute(body45[: body45.index("DO $$")])   # grants need the real roles
+    conn.commit()
+
+    rules = matcher.load_rules(conn, "ET")
+    check("registry seeds the four built-in rules", rules is not None and len(rules) == 4, str(rules))
+    check("seeded similarity threshold is the old default 0.85",
+          matcher.sql_threshold(rules, "facility", 0.5) == 0.85)
+    check("unlisted class falls back to the env threshold",
+          matcher.sql_threshold(rules, "person", 0.5) == 0.5)
+    low = [{"match_rule": "name_probabilistic", "score": 0.80},
+           {"match_rule": "name_probabilistic", "score": 0.90},
+           {"match_rule": "unlisted_rule", "score": 0.10}]
+    kept = matcher.apply_rules(low, rules, "facility")
+    check("pairs under the rule threshold are dropped, unlisted rules pass",
+          [p["score"] for p in kept] == [0.90, 0.10], str(kept))
+
+    # disable name_ambiguous as version 2 (append-only supersede)
+    conn.execute("""UPDATE ops_governance.mdm_match_rule SET recorded_to = now()
+                     WHERE entity_class_code='facility' AND rule_code='name_ambiguous'
+                       AND recorded_to IS NULL""")
+    conn.execute("""INSERT INTO ops_governance.mdm_match_rule
+                       (entity_class_code, rule_code, label, description, threshold, enabled, version)
+                    VALUES ('facility','name_ambiguous','Ambiguous name','test',1.0,false,2)""")
+    conn.commit()
+    rules = matcher.load_rules(conn, "ET")
+    check("current version is read (v2, disabled)",
+          rules[("facility", "name_ambiguous")] == {"threshold": 1.0, "enabled": False, "version": 2},
+          str(rules.get(("facility", "name_ambiguous"))))
+
+    os.environ["VAULT_DSN"] = os.environ["OPS_DSN"] = dsn
+    os.environ["MDM_TRGM_THRESHOLD"] = "0.5"
+    s1 = matcher.run()
+    run_row = q(conn, """SELECT status, finished_at IS NOT NULL, settings->>'source',
+                                candidates_total, candidates_new, candidates_refreshed
+                         FROM ops_governance.mdm_matcher_run WHERE run_uid = %s""", s1["run_uid"])
+    check("run logged as succeeded with registry settings",
+          run_row and run_row[0][:3] == ("succeeded", True, "registry"), str(run_row))
+    sights = q(conn, """SELECT c.match_rule, c.status, s.outcome
+                        FROM ops_governance.mdm_candidate_sighting s
+                        JOIN ops_governance.mdm_match_candidate c USING (candidate_id)
+                        WHERE s.run_uid = %s""", s1["run_uid"])
+    check("new + refreshed counts match the sightings",
+          run_row and run_row[0][4] + run_row[0][5] == len(sights), f"{run_row} vs {len(sights)}")
+    check("decided candidates gain no sighting", all(st == "pending" for _, st, _ in sights), str(sights))
+    check("disabled rule proposed nothing this run",
+          not any(r == "name_ambiguous" for r, _, _ in sights), str(sights))
+    amb = q(conn, """SELECT count(*) FROM ops_governance.mdm_match_candidate
+                     WHERE match_rule='name_ambiguous' AND status='pending'""")[0][0]
+    check("disabling keeps existing suggestions (nothing deleted)", amb == 2, str(amb))
+
+    # re-enable (v3) and add a brand-new source record → one NEW + refreshed
+    conn.execute("""UPDATE ops_governance.mdm_match_rule SET recorded_to = now()
+                     WHERE entity_class_code='facility' AND rule_code='name_ambiguous'
+                       AND recorded_to IS NULL""")
+    conn.execute("""INSERT INTO ops_governance.mdm_match_rule
+                       (entity_class_code, rule_code, label, description, threshold, enabled, version)
+                    VALUES ('facility','name_ambiguous','Ambiguous name','test',1.0,true,3)""")
+    conn.execute("""INSERT INTO nhdw_vault_business.v_facility_resolution VALUES
+                    (decode(md5('mb-5'),'hex'),'mBrana.dbo','Lonely Hospital','lonely hospital',
+                     'lonely hospital','norm_name')""")
+    conn.commit()
+    s2 = matcher.run()
+    out2 = q(conn, """SELECT c.match_rule, s.outcome FROM ops_governance.mdm_candidate_sighting s
+                      JOIN ops_governance.mdm_match_candidate c USING (candidate_id)
+                      WHERE s.run_uid = %s ORDER BY 1, 2""", s2["run_uid"])
+    check("re-enabled rule refreshes its pending suggestions, new record is 'new'",
+          out2 == [("name_ambiguous", "refreshed"), ("name_ambiguous", "refreshed"),
+                   ("name_exact", "new")], str(out2))
+    FIRST = """SELECT min(r.started_at) FROM ops_governance.mdm_candidate_sighting s
+               JOIN ops_governance.mdm_matcher_run r USING (run_uid)
+               JOIN ops_governance.mdm_match_candidate c USING (candidate_id)
+               WHERE c.suggested_master_bk = 'FAC-AA-HO-l1'"""
+    first = q(conn, FIRST)[0][0]
+    s3 = matcher.run()
+    out3 = q(conn, "SELECT DISTINCT outcome FROM ops_governance.mdm_candidate_sighting "
+                   "WHERE run_uid = %s", s3["run_uid"])
+    check("third run only refreshes", out3 == [("refreshed",)], str(out3))
+    check("first-seen survives the rerun (the upsert no longer erases it)",
+          first is not None and q(conn, FIRST)[0][0] == first, str(first))
+
+    fail_uid = str(uuid.uuid4())
+    matcher.start_run(conn, fail_uid, "ET", {})
+    matcher.finish_run(conn, fail_uid, sightings=[], counts={}, total=0, error="boom")
+    st = q(conn, "SELECT status, error FROM ops_governance.mdm_matcher_run WHERE run_uid = %s", fail_uid)
+    check("a failed run is recorded as failed with its error", st == [("failed", "boom")], str(st))
 
     print(("PASS" if not fails else f"FAIL: {fails}"))
     return 0 if not fails else 1
