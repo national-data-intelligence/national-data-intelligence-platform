@@ -37,7 +37,7 @@ psql_() { docker exec -i "$RUN-pg" psql -U postgres -v ON_ERROR_STOP=1 -q "$@"; 
 
 psql_ -c "CREATE DATABASE nhdw_ops_ci_test" -c "CREATE DATABASE nhdw_vault_ci_test"
 psql_ -d nhdw_ops_ci_test < "$REPO/3_storage/postgres/init/05_ops_schemas.sql" >/dev/null
-for f in 17_perm_schemas.sql 35_mdm.sql 39_mdm_release.sql 44_mdm_proposal.sql; do
+for f in 17_perm_schemas.sql 35_mdm.sql 39_mdm_release.sql 44_mdm_proposal.sql 45_mdm_rules_runs.sql; do
   sed 's/^\\connect nhdw_ops$/\\connect nhdw_ops_ci_test/' "$REPO/3_storage/postgres/init/$f" | psql_ >/dev/null
 done
 psql_ -d nhdw_ops_ci_test < "$GW/tests/fixtures/mdm_ops_candidates.sql" >/dev/null

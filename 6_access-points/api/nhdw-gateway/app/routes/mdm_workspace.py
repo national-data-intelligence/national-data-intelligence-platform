@@ -11,6 +11,8 @@ and after a verdict, from the same objects the vault build produces:
                   field, from each source's current satellite
   history         one master's timeline across the five lanes: sources,
                   matching, stewardship, master record, releases
+  setup           the sources feeding the facility list (records, last
+                  received) and the matcher's current rules (init 45)
 
 Writes stay in mdm.py (releases) and mdm_approvals.py (proposals).
 Readers: stewards (mdm.py's direct gate — these reads have no OPA rego arm)
@@ -22,9 +24,11 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, Query
 
 from ..auth import UserCtx, get_user
@@ -507,4 +511,61 @@ async def history(entity_class: str = PathParam(...),
                      "first_seen": _iso(m["first_seen"]),
                      "last_changed": _iso(m["last_changed"])} for m in members],
         "events": events,
+    }
+
+
+# ── setup ─────────────────────────────────────────────────────────────────
+# Q15 (Bini, 2026-10-28): a narrow steward-readable route with only what the
+# Setup screen shows, not the broad ops console. Read-only: rule changes are
+# new registry versions written by a reviewed change, never from here.
+QUIET_AFTER_DAYS = 7
+LIST_WORDS = {"facility": "Facilities", "commodity": "Products"}
+VERSION_PREFIX = {"facility": "facility", "commodity": "product"}
+
+
+@router.get("/setup")
+async def setup(user: UserCtx = Depends(get_user)) -> dict:
+    """Sources feeding the facility list, and the matcher's current rules."""
+    await _require_reader(user)
+    src = await _tq(f"""
+        SELECT source_system, count(*) AS records, max(load_ts) AS last_received
+        FROM {BV}.v_facility_resolution GROUP BY source_system ORDER BY source_system""")
+    now = datetime.now(timezone.utc)
+
+    def status(last) -> str:
+        if last is None:
+            return "No data received"
+        if isinstance(last, str):
+            last = datetime.fromisoformat(last.replace(" ", "T"))
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        days = (now - last).days
+        return "Receiving" if days < QUIET_AFTER_DAYS else f"No new data in {days} days"
+
+    pool = await ops_db.ensure_pool()
+    async with pool.acquire() as conn:
+        try:
+            rules = await conn.fetch("""
+                SELECT entity_class_code, rule_code, label, description, threshold,
+                       enabled, version, recorded_from
+                FROM ops_governance.mdm_match_rule
+                WHERE deployment_context = 'ET' AND recorded_to IS NULL
+                ORDER BY entity_class_code DESC, threshold DESC, rule_code DESC""")
+            registry = True
+        except (asyncpg.UndefinedTableError, asyncpg.InvalidSchemaNameError):
+            rules, registry = [], False          # init 45 not applied yet
+
+    return {
+        "sources": [{"source_system": r["source_system"], "lists": [LIST_WORDS["facility"]],
+                     "records": int(r["records"]), "last_received": _iso(r["last_received"]),
+                     "status": status(r["last_received"])} for r in src],
+        "registry": registry,
+        "rules": [{"entity_class": r["entity_class_code"],
+                   "list": LIST_WORDS.get(r["entity_class_code"], r["entity_class_code"]),
+                   "rule_code": r["rule_code"], "label": r["label"],
+                   "description": r["description"], "threshold": _num(r["threshold"]),
+                   "enabled": r["enabled"],
+                   "version": f"{VERSION_PREFIX.get(r['entity_class_code'], r['entity_class_code'])}-"
+                              f"{r['rule_code'].replace('_', '-')}-v{r['version']}",
+                   "updated": _iso(r["recorded_from"])} for r in rules],
     }

@@ -133,7 +133,8 @@ async def main() -> None:
         print("gate")
         _current["u"] = ANALYST
         for path in ("/api/mdm/overview", "/api/mdm/facilities",
-                     f"/api/mdm/compare/{cand_id}", f"/api/mdm/master/facility/{bk}/history"):
+                     f"/api/mdm/compare/{cand_id}", f"/api/mdm/master/facility/{bk}/history",
+                     "/api/mdm/setup"):
             r = await c.get(path)
             check(r.status_code == 403, f"non-steward refused: {path.split('/')[3]}")
         _current["u"] = OPSADM
@@ -162,6 +163,29 @@ async def main() -> None:
         check(fac["waiting"] == n_wait, f"waiting = pending candidates ({n_wait})")
         check(com["masters"] == n_com and com["waiting"] >= 1, "commodity masters and waiting")
         check(fac["last_release"] is None, "no release yet")
+
+        print("setup")
+        su = (await c.get("/api/mdm/setup")).json()
+        by_src = {r["source_system"]: r for r in su["sources"]}
+        check({s["source_system"]: s["n"] for s in fac["sources"]}
+              == {k: v["records"] for k, v in by_src.items()},
+              "setup sources = overview per-source counts")
+        n_last = await vault.fetchval(f"""SELECT count(DISTINCT source_system)
+                                          FROM {BV}.v_facility_resolution WHERE load_ts IS NOT NULL""")
+        check(sum(1 for r in su["sources"] if r["last_received"]) == n_last,
+              "last received comes from the vault load time")
+        check(all(r["status"] == "Receiving" or r["status"].startswith(("No new data in ", "No data"))
+                  for r in su["sources"]), "every source has a plain status")
+        check(su["registry"] is True and len(su["rules"]) == 4, f"four seeded rules ({len(su['rules'])})")
+        rmap = {(r["entity_class"], r["rule_code"]): r for r in su["rules"]}
+        check(rmap[("facility", "name_exact")]["version"] == "facility-name-exact-v1"
+              and rmap[("commodity", "name_probabilistic")]["version"] == "product-name-probabilistic-v1"
+              and rmap[("facility", "name_exact")]["threshold"] == 1.0, "rule version and threshold")
+        check(rmap[("facility", "name_probabilistic")]["threshold"] == 0.85
+              and rmap[("commodity", "name_probabilistic")]["list"] == "Products",
+              "similarity threshold 0.85; commodity rule listed under Products")
+        check([r["rule_code"] for r in su["rules"][:3]] == ["name_exact", "name_ambiguous", "name_probabilistic"]
+              and su["rules"][3]["entity_class"] == "commodity", "facility rules first, exact → ambiguous → probabilistic")
 
         print("facilities")
         page = max(1, min(10, n_dim // 2))            # two full pages at any data size
@@ -276,6 +300,7 @@ async def main() -> None:
             "facilities": (await c.get("/api/mdm/facilities",
                                        params={"q": master_name, "limit": 200})).text,
             "history": (await c.get(f"/api/mdm/master/facility/{bk}/history")).text,
+            "setup": (await c.get("/api/mdm/setup")).text,
         }
         for name, body in bodies.items():
             keys = set()
