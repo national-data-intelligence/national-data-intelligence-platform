@@ -20,12 +20,16 @@ The contract under test:
               disagreement is difference; non-facility suggestions are 422
   history     members, revisions and verdicts land on the right lanes in time
               order; published_state follows the latest release's two pins
+  exposure    coordinates and phone numbers appear only in compare (stewards
+              only, the D11 carve-out); overview, facilities and history carry
+              neither the fields nor the values
   read-only   no route changes a row in the ops store
 """
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import sys
 import uuid
@@ -154,12 +158,13 @@ async def main() -> None:
         check(fac["last_release"] is None, "no release yet")
 
         print("facilities")
-        r = (await c.get("/api/mdm/facilities", params={"limit": 10})).json()
-        check(r["total"] == n_dim and len(r["facilities"]) == 10, "all masters, paged by 10")
+        page = max(1, min(10, n_dim // 2))            # two full pages at any data size
+        r = (await c.get("/api/mdm/facilities", params={"limit": page})).json()
+        check(r["total"] == n_dim and len(r["facilities"]) == page, f"all masters, paged by {page}")
         names = [f["name"] or "" for f in r["facilities"]]
         check(names == sorted(names, key=str.lower) and all(n == n.strip() for n in names),
               "ordered by name, case-insensitive, names trimmed")
-        r2 = (await c.get("/api/mdm/facilities", params={"limit": 10, "offset": 10})).json()
+        r2 = (await c.get("/api/mdm/facilities", params={"limit": page, "offset": page})).json()
         check(not {f["master_bk"] for f in r["facilities"]} & {f["master_bk"] for f in r2["facilities"]},
               "pages do not overlap")
         term = master_name.split()[0].lower()
@@ -253,6 +258,37 @@ async def main() -> None:
         check(next(x for x in ov2["lists"] if x["entity_class"] == "facility")["last_release"]
               ["release_id"] == "test-rel-1", "overview shows the latest release")
 
+        print("exposure")
+        golden = await vault.fetch(f"""
+            SELECT telecom, latitude::text AS lat, longitude::text AS lng
+            FROM {BV}.sat_facility_canonical s
+            JOIN {BV}.hub_facility_conformed hub USING (hk_facility_conformed)
+            WHERE hub.conformed_bk = $1""", bk)
+        secrets = {v for g in golden for v in (g["telecom"], g["lat"], g["lng"]) if v}
+        bodies = {
+            "overview": (await c.get("/api/mdm/overview")).text,
+            "facilities": (await c.get("/api/mdm/facilities",
+                                       params={"q": master_name, "limit": 200})).text,
+            "history": (await c.get(f"/api/mdm/master/facility/{bk}/history")).text,
+        }
+        for name, body in bodies.items():
+            keys = set()
+            def walk(o):
+                if isinstance(o, dict):
+                    keys.update(o.keys()); [walk(v) for v in o.values()]
+                elif isinstance(o, list):
+                    [walk(v) for v in o]
+            walk(json.loads(body))
+            check(not keys & {"latitude", "longitude", "telecom", "phone", "coordinates"},
+                  f"{name}: no coordinate or phone fields")
+            check(not any(v in body for v in secrets),
+                  f"{name}: none of the master's golden coordinates or phone values")
+        _current["u"] = ANALYST
+        r = await c.get(f"/api/mdm/compare/{cand_id}")
+        check(r.status_code == 403 and "Preferred name" not in r.text,
+              "compare (the only route with coordinates) refuses a non-steward before any data")
+        _current["u"] = STEWARD
+
         async with pool.acquire() as conn:
             await conn.execute("DELETE FROM ops_governance.mdm_release WHERE release_id = 'test-rel-1'")
             snap_after = await conn.fetchval("""
@@ -264,7 +300,7 @@ async def main() -> None:
         print("read-only")
         check(snap_after == snap_before, "routes changed nothing in the ops store")
 
-        print("live suggestions")
+        print("other suggestions in the store")
         async with pool.acquire() as conn:
             live = await conn.fetch("""SELECT candidate_id FROM ops_governance.mdm_match_candidate
                                        WHERE entity_class_code = 'facility'
@@ -273,14 +309,14 @@ async def main() -> None:
         for row in live:
             rr = await c.get(f"/api/mdm/compare/{row['candidate_id']}")
             ok += rr.status_code == 200 and rr.json()["records"][0]["found"]
-        check(ok == len(live), f"every copied live suggestion compares with its record found ({ok}/{len(live)})")
+        check(ok == len(live), f"every other suggestion compares with its record found ({ok}/{len(live)})")
         raw = 0
         for row in live:
             cj = (await c.get(f"/api/mdm/compare/{row['candidate_id']}")).json()
             code = next((f for f in cj["fields"] if f["field"] == "code"), None)
             raw += sum(1 for cell in (code["cells"] if code else [])
                        if cell["state"] == "value" and cell["value"].startswith(("[", "{")))
-        check(raw == 0, "no live suggestion shows an identifier as raw JSON")
+        check(raw == 0, "no other suggestion shows an identifier as raw JSON")
 
     await vault.close()
     print(f"\n{'PASS' if not FAILS else 'FAIL'}: {len(FAILS)} failure(s)")

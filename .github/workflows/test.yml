@@ -9,6 +9,9 @@ name: Tests (policy · data units · gateway · admin UI)
 #               contract (psycopg3 delete-sync) + the nhdw_ref vocabulary
 #               parity suite — against a real Postgres with pg_trgm
 #   gateway     the whole app imports + the masking-primitive contract
+#   mdm-workspace  the MDM workspace read routes against real Postgres 16 +
+#               Trino 476 (synthetic vault fixtures): gate, counts, comparison,
+#               history, and no coordinates / phone outside the steward compare
 #   admin-ui    tsc + vite build (type errors surface here, not mid-deploy)
 #   scripts     every bundle script parses; the workflows are valid YAML
 
@@ -80,6 +83,13 @@ jobs:
           python3 -c "import app.main"
       - name: masking primitives contract
         run: cd 6_access-points/api/nhdw-gateway && python3 tests/test_masking.py
+
+  mdm-workspace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: MDM workspace read routes (Postgres 16 + Trino 476)
+        run: bash 6_access-points/api/nhdw-gateway/tests/run_mdm_workspace_test.sh
 
   admin-ui:
     runs-on: ubuntu-latest
