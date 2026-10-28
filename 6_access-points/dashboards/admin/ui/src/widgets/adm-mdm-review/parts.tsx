@@ -58,5 +58,28 @@ export function fmtNum(n: number | null | undefined): string {
 }
 
 export function fmtWhen(iso: string | null | undefined): string {
-  return iso ? new Date(iso).toLocaleString() : '—';
+  return iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+}
+
+/** A confirmed change: the review kit's good note, dismissible. */
+export function DoneNote({ text, onClose }: { text: string; onClose: () => void }) {
+  return (
+    <div className="rv-note rv-note-good" role="status">
+      <svg className="ico ico-sm"><use href="#i-check-circle" /></svg>
+      <span className="rv-note-txt">{text}</span>
+      <button className="rv-note-dismiss" aria-label="Dismiss" onClick={onClose}>
+        <svg className="ico ico-sm"><use href="#i-x" /></svg>
+      </button>
+    </div>
+  );
+}
+
+/** An empty list: the review kit's empty block (icon + one line). */
+export function Empty({ text }: { text: string }) {
+  return (
+    <div className="rv-empty">
+      <svg className="ico"><use href="#i-check-circle" /></svg>
+      <h4>{text}</h4>
+    </div>
+  );
 }

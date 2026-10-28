@@ -33,11 +33,14 @@ const PW = process.env.SEED_PASSWORD || 'NhdwDemo2026.OK';
   ok('real candidates', body.includes('FAC-'), body.slice(0,300));
   ok('sources compared side by side', body.includes('What each source reported'), body.slice(0,400));
 
-  // the verdict asks first: open the confirm step, read it, cancel — never save on live
+  ok('steward does not see Approvals', !(await p.locator('nav.tab-nav').innerText()).includes('Approvals'));
+
+  // a verdict is a proposal for a second person: open the confirm step, read it,
+  // cancel — never send anything on live
   await p.click('button:text-is("Same facility")');
   await p.waitForTimeout(500);
   body = await p.locator('body').innerText();
-  ok('accurate timing copy', body.includes('next read'), body.slice(0,400));
+  ok('verdict goes to a second person', body.includes('second person approves') && body.includes('Send for approval'), body.slice(0,400));
   await p.click('button:text-is("Cancel")');
 
   // master detail: open the suggested master's record (Explore)

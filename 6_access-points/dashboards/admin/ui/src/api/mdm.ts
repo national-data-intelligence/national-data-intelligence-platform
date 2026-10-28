@@ -74,19 +74,9 @@ export function queue(status = 'pending', rule?: string, limit = 500,
   return _json(`queue?${q}`);
 }
 
-export function decide(candidateId: string, decision: 'accept' | 'reject', note?: string):
-    Promise<{ candidate_id: string; decision: string; decision_id: string }> {
-  return _post(`candidate/${candidateId}/decide`, { decision, note: note ?? null });
-}
-
 export function decisions(currentOnly = true, limit = 200):
     Promise<{ decisions: Decision[] }> {
   return _json(`decisions?current_only=${currentOnly}&limit=${limit}`);
-}
-
-export function revert(decisionId: string, note?: string):
-    Promise<{ decision_id: string; superseded: boolean }> {
-  return _post(`decision/${decisionId}/revert`, { note: note ?? null });
 }
 
 export type MasterDetail = {
@@ -138,7 +128,7 @@ export async function publishRelease(releaseId: string, note?: string, entityCla
 
 /* ── MDM workspace (read side) — append-only section ─────────────────────
    /api/mdm/{overview,facilities,compare,master/…/history}, served by
-   routes/mdm_workspace.py. All reads; verdicts stay with decide/revert. */
+   routes/mdm_workspace.py. All reads; verdicts are proposals (section below). */
 
 export type ListOverview = {
   entity_class: string;
@@ -223,4 +213,101 @@ export type MasterHistory = {
 
 export function history(entityClass: string, masterBk: string): Promise<MasterHistory> {
   return _json(`master/${encodeURIComponent(entityClass)}/${encodeURIComponent(masterBk)}/history`);
+}
+
+/* ── MDM maker–checker — append-only section ─────────────────────────────
+   /api/mdm/{review-queue, candidate/…/propose|review, proposals…, proposal/…}
+   served by routes/mdm_approvals.py. A steward proposes; a different person
+   approves; only an approval writes the decision log. */
+
+export type QueueCandidate = Omit<Candidate, 'status' | 'discovered_at' | 'deployment_context'> & {
+  review: { outcome: 'not_sure' | 'dismissed'; by: string } | null;
+};
+
+export type ReviewQueue = {
+  candidates: QueueCandidate[];
+  waiting: number;
+  high_confidence: number;
+  high_confidence_score: number;
+};
+
+export function reviewQueue(entityClass = 'facility', minScore?: number, limit = 500): Promise<ReviewQueue> {
+  const q = new URLSearchParams({ entity_class: entityClass, limit: String(limit) });
+  if (minScore != null) q.set('min_score', String(minScore));
+  return _json(`review-queue?${q}`);
+}
+
+export type CheckResult = { proposal_id: string; status: 'checked' | 'check_failed'; valid_until?: string; reason?: string };
+
+export function propose(candidateId: string, verdict: 'same' | 'different', note?: string): Promise<CheckResult> {
+  return _post(`candidate/${candidateId}/propose`, { verdict, note: note ?? null });
+}
+
+export function proposeBulk(candidateIds: string[]):
+    Promise<{ requested: number; proposed: number; results: Array<{ candidate_id: string; ok: boolean; error?: string }> }> {
+  return _post('proposals/bulk', { candidate_ids: candidateIds });
+}
+
+export function reviewCandidate(candidateId: string, outcome: 'not_sure' | 'dismissed', note?: string):
+    Promise<{ candidate_id: string; outcome: string }> {
+  return _post(`candidate/${candidateId}/review`, { outcome, note: note ?? null });
+}
+
+export function proposeRestore(decisionId: string, note?: string): Promise<CheckResult> {
+  return _post(`decision/${decisionId}/propose-restore`, { note: note ?? null });
+}
+
+export type ProposalStatus = 'proposed' | 'checked' | 'check_failed' | 'expired' | 'applied' | 'declined' | 'withdrawn';
+
+export type Proposal = {
+  proposal_id: string;
+  entity_class_code: string;
+  kind: 'link' | 'distinct' | 'restore';
+  candidate_id: string | null;
+  restores_decision_id: string | null;
+  source_system_code: string;
+  source_record_key: string;
+  master_bk: string | null;
+  evidence: Record<string, any>;
+  note: string | null;
+  proposed_by: string;
+  proposed_at: string;
+  status: ProposalStatus;
+  checked_at: string | null;
+  valid_until: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  applied_decision_id: string | null;
+};
+
+export type ProposalDetail = Proposal & {
+  events: Array<{ event: string; actor: string; at: string; detail: Record<string, any> }>;
+  can_approve: boolean;
+  can_withdraw: boolean;
+};
+
+export function proposals(view: 'mine' | 'attention' | 'approvals' | 'all', limit = 200):
+    Promise<{ proposals: Proposal[]; total: number }> {
+  return _json(`proposals?view=${view}&limit=${limit}`);
+}
+
+export function proposal(proposalId: string): Promise<ProposalDetail> {
+  return _json(`proposal/${encodeURIComponent(proposalId)}`);
+}
+
+export function recheck(proposalId: string): Promise<CheckResult> {
+  return _post(`proposal/${proposalId}/check`, {});
+}
+
+export function withdraw(proposalId: string): Promise<{ status: string }> {
+  return _post(`proposal/${proposalId}/withdraw`, {});
+}
+
+export function approve(proposalId: string, note?: string): Promise<{ status: string; decision_id: string }> {
+  return _post(`proposal/${proposalId}/approve`, { note: note ?? null });
+}
+
+export function decline(proposalId: string, note: string): Promise<{ status: string }> {
+  return _post(`proposal/${proposalId}/decline`, { note });
 }

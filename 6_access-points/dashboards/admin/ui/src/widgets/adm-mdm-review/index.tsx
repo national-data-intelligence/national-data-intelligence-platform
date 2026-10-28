@@ -11,24 +11,31 @@
  *
  * Page shell: an underline tab strip under the page title —
  *   Review matches  the queue with each suggestion's source records side by
- *                   side (ReviewTab.tsx)
+ *                   side; a verdict is a proposal (ReviewTab.tsx)
  *   Explore         the governed lists, one list, one record and its history
  *                   (ExploreTab.tsx)
- *   Decisions       the decision log, with revert
+ *   Approvals       proposals made by someone else, approve or decline
+ *                   (Proposals.tsx)
+ *   Decisions       my proposals, what needs me, and the decision log
  *   Publish         master-data releases
+ * Maker–checker: a steward proposes, a DIFFERENT person approves, and only an
+ * approval writes the decision log (routes/mdm_approvals.py).
  * Tabs are listed only when the caller's resolved catalog grants the widget
- * behind them, and the active tab is mirrored in the URL hash (#mdm/<tab>) so
- * a refresh keeps it. Every value is read from the gateway — no mock rows; an
- * unreachable gateway degrades to a clear error note.
+ * behind them AND the person holds the part they need (steward work vs
+ * approval — from the spec's role codes and capabilities; the gateway checks
+ * every call again). The active tab is mirrored in the URL hash (#mdm/<tab>).
+ * Every value is read from the gateway — no mock rows; an unreachable gateway
+ * degrades to a clear error note.
  */
 import { useCallback, useEffect, useState } from 'react';
 import * as mdm from '../../api/mdm';
 import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKit';
 import type { AdminWidget } from '../../runtime/types';
 import { useDashboardSpec, specAllowsWidget } from '../../api/spec';
-import { ActionError, LoadError } from './parts';
+import { ActionError, DoneNote, LoadError } from './parts';
 import ReviewTab from './ReviewTab';
 import ExploreTab from './ExploreTab';
+import { ApprovalsTab, MyProposals } from './Proposals';
 import '../../styles/review.css';
 import '../../styles/mdm.css';
 
@@ -45,9 +52,16 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
   useEffect(load, [load, refreshKey]);
 
   const [actErr, setActErr] = useState('');
+  const [sent, setSent] = useState('');
+  // MDM workspace (S1): an undo is a proposal another person approves; the
+  // one-step revert route is retired.
   async function undo(d: mdm.Decision) {
-    setActErr('');
-    try { await mdm.revert(d.decision_id); load(); }
+    setActErr(''); setSent('');
+    try {
+      const r = await mdm.proposeRestore(d.decision_id);
+      setSent(r.status === 'checked' ? 'Undo sent for approval.' : 'Undo not sent: the check failed.');
+      load();
+    }
     catch (e: any) { setActErr(String(e?.message || e)); }
   }
 
@@ -71,6 +85,7 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
         </label>
       </div>
       {actErr && <ActionError text="Could not save the decision." err={actErr} />}
+      {sent && <DoneNote text={sent} onClose={() => setSent('')} />}
       {err && <LoadError what="decisions" err={err} retry={load} />}
       {rows === null && !err && <p className="muted">Loading decisions…</p>}
       {rows !== null && rows.length === 0 && !err &&
@@ -85,7 +100,7 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
                   <SortTh kit={kit} k="record">Source record</SortTh>
                   <SortTh kit={kit} k="verdict">Verdict</SortTh>
                   <th>Master</th>
-                  <th>By</th>
+                  <th>Steward</th>
                   <SortTh kit={kit} k="when">Recorded</SortTh>
                   <th></th>
                 </tr>
@@ -103,7 +118,7 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
                     <td className="text-sm">{d.decided_by}</td>
                     <td className="text-sm">{new Date(d.recorded_from).toLocaleString()}</td>
                     <td>{d.current &&
-                      <button className="btn btn-sm btn-ghost" onClick={() => undo(d)}>Revert</button>}</td>
+                      <button className="btn btn-sm btn-ghost" onClick={() => undo(d)}>Propose undo</button>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -225,18 +240,48 @@ function ReleasesTab() {
   );
 }
 
-type TabKey = 'review' | 'explore' | 'decisions' | 'publish';
+type TabKey = 'review' | 'explore' | 'approvals' | 'decisions' | 'publish';
+type Part = 'steward' | 'approver' | 'either';
 
-/* The workspace tabs. `widget` is the catalog widget each tab needs: a tab is
-   listed only when the caller's resolved spec grants it (never a role list
-   here). All four live in adm-mdm-review today; later tabs (Approvals, Setup)
-   bring their own widget ids when their data exists. */
-const TABS: Array<{ key: TabKey; label: string; widget: string }> = [
-  { key: 'review',    label: 'Review matches', widget: 'adm-mdm-review' },
-  { key: 'explore',   label: 'Explore',        widget: 'adm-mdm-review' },
-  { key: 'decisions', label: 'Decisions',      widget: 'adm-mdm-review' },
-  { key: 'publish',   label: 'Publish',        widget: 'adm-mdm-review' },
+/* The workspace tabs. `widget` is the catalog widget each tab needs (a tab is
+   listed only when the caller's resolved spec grants it); `part` is the half
+   of maker–checker it serves. All live in adm-mdm-review today; Setup brings
+   its own widget id when its data exists. */
+const TABS: Array<{ key: TabKey; label: string; widget: string; part: Part }> = [
+  { key: 'review',    label: 'Review matches', widget: 'adm-mdm-review', part: 'steward' },
+  { key: 'explore',   label: 'Explore',        widget: 'adm-mdm-review', part: 'either' },
+  { key: 'approvals', label: 'Approvals',      widget: 'adm-mdm-review', part: 'approver' },
+  { key: 'decisions', label: 'Decisions',      widget: 'adm-mdm-review', part: 'steward' },
+  { key: 'publish',   label: 'Publish',        widget: 'adm-mdm-review', part: 'steward' },
 ];
+
+/* Mirrors the gateway: stewards = mdm.STEWARD_ROLES; approvers = the
+   mdm_approve capability (or R-SUPER). Only hides tabs — every call is
+   checked again server-side. */
+const STEWARD_CODES = ['R-STEW', 'R-OPS-ADM', 'R-SUPER'];
+function parts(spec: { role_codes?: string[]; capabilities?: string[] } | null) {
+  const roles = spec?.role_codes ?? [];
+  const steward = roles.some(r => STEWARD_CODES.includes(r));
+  const approver = (spec?.capabilities ?? []).includes('mdm_approve') || roles.includes('R-SUPER');
+  return { steward, approver };
+}
+
+function DecisionsTabs({ refreshKey }: { refreshKey: number }) {
+  const [view, setView] = useState<'mine' | 'attention' | 'log'>('mine');
+  return (
+    <>
+      <div className="seg mdm-seg" role="group" aria-label="Decisions view">
+        {([['mine', 'My proposals'], ['attention', 'Needs my attention'], ['log', 'Decision log']] as const).map(([k, l]) => (
+          <button key={k} className={view === k ? 'active' : undefined} aria-pressed={view === k}
+                  onClick={() => setView(k)}>{l}</button>
+        ))}
+      </div>
+      {view === 'log'
+        ? <div className="card card-elev"><DecisionsTab refreshKey={refreshKey} /></div>
+        : <MyProposals view={view} refreshKey={refreshKey} />}
+    </>
+  );
+}
 
 const HASH_PREFIX = '#mdm/';
 
@@ -249,7 +294,9 @@ function tabFromHash(): TabKey | null {
 
 function MdmReview() {
   const { spec, loaded, denied } = useDashboardSpec('admin');
-  const tabs = loaded ? TABS.filter(t => specAllowsWidget(spec, 'admin/mdm', t.widget)) : [];
+  const who = parts(spec);
+  const tabs = loaded ? TABS.filter(t => specAllowsWidget(spec, 'admin/mdm', t.widget)
+    && (t.part === 'either' || (t.part === 'steward' ? who.steward : who.approver))) : [];
   const [tab, setTab] = useState<TabKey>(() => tabFromHash() ?? 'review');
   const [decidedTick, setDecidedTick] = useState(0);
   const [openBk, setOpenBk] = useState('');     // a master opened from Review
@@ -292,10 +339,10 @@ function MdmReview() {
       {active && (
         <div className="page-section">
           {active.key === 'review' &&
-            <ReviewTab onDecided={() => setDecidedTick(t => t + 1)} onOpenMaster={openMaster} />}
+            <ReviewTab onProposed={() => setDecidedTick(t => t + 1)} onOpenMaster={openMaster} />}
           {active.key === 'explore' && <ExploreTab openBk={openBk} onOpened={() => setOpenBk('')} />}
-          {active.key === 'decisions' &&
-            <div className="card card-elev"><DecisionsTab refreshKey={decidedTick} /></div>}
+          {active.key === 'approvals' && <ApprovalsTab onChanged={() => setDecidedTick(t => t + 1)} />}
+          {active.key === 'decisions' && <DecisionsTabs refreshKey={decidedTick} />}
           {active.key === 'publish' && <div className="card card-elev"><ReleasesTab /></div>}
         </div>
       )}

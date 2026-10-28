@@ -45,7 +45,7 @@
 }
 
 /* ── Review matches ───────────────────────────────────────────────────── */
-.mdm-review .rv-list-hdr h4 { flex: 1; }
+.mdm-review .rv-list-hdr h4 { flex: 1; font-variant-numeric: lining-nums; }
 .mdm-review .rv-list-body { max-height: 640px; }
 table.dash.mdm-compare td, table.dash.mdm-compare th { vertical-align: top; }
 table.dash.mdm-compare td:first-child { font-weight: 700; color: var(--ink-2); white-space: nowrap; }
@@ -127,6 +127,9 @@ table.dash.mdm-compare td:first-child { font-weight: 700; color: var(--ink-2); w
   display: flex; justify-content: space-between; align-items: center; gap: 0.6rem;
   padding: 0.45rem 0; border-bottom: 1px solid var(--border);
 }
+
+/* ── Maker–checker: proposals, approvals ───────────────────────────────── */
+.mdm-seg { margin-bottom: 1rem; }
 
 /* ── Responsive ───────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
