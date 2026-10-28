@@ -19,6 +19,7 @@ through the asyncpg pool — never a write on either.
 """
 from __future__ import annotations
 
+import json
 import logging
 from decimal import Decimal
 from uuid import UUID
@@ -77,6 +78,14 @@ SOURCES: dict[str, tuple[str, str, dict[str, str | tuple[str, str]]]] = {
                           "phone": "telecom"}),
 }
 MAX_COMPARE_RECORDS = 5
+
+# Words the console uses for the matcher's vocabulary (same as the Review tab).
+RULE_WORDS = {"name_exact": "Exact name", "name_ambiguous": "Ambiguous name",
+              "name_probabilistic": "Probabilistic"}
+MATCH_WORDS = {"facility_id": "Matched on facility ID", "norm_name": "Matched on name",
+               "steward_decision": "Matched by a steward decision"}
+STATUS_WORDS = {"pending": "Waiting for review", "decided": "Decided",
+                "superseded": "Closed by another decision", "auto_accepted": "Accepted"}
 
 
 async def _tq(sql: str, params: list | None = None) -> list[dict]:
@@ -181,10 +190,13 @@ async def facilities(
               AND suggested_master_bk IS NOT NULL""")]
 
     where, params = ["(? = '' OR lower(d.facility_name) LIKE ?)"], [q.strip(), f"%{q.strip().lower()}%"]
+    not_pending = (f"d.facility_id NOT IN ({', '.join('?' for _ in pending)})" if pending else "TRUE")
     if registry == "linked":
-        where.append("d.mdm_state = 'conformed'")
+        where += ["d.mdm_state = 'conformed'", not_pending]
+        params += pending
     elif registry == "single_source":
-        where.append("d.mdm_state = 'single_source'")
+        where += ["d.mdm_state = 'single_source'", not_pending]
+        params += pending
     elif registry == "possible_match":
         if not pending:
             return {"facilities": [], "total": 0, "limit": limit, "offset": offset,
@@ -202,14 +214,14 @@ async def facilities(
             SELECT hk_facility_conformed,
                    array_join(array_sort(array_agg(DISTINCT source_system)), ', ') AS sources
             FROM {BV}.v_facility_resolution GROUP BY hk_facility_conformed)
-        SELECT d.facility_id AS master_bk, d.facility_name, d.mdm_state,
+        SELECT d.facility_id AS master_bk, trim(d.facility_name) AS facility_name, d.mdm_state,
                d.n_source_systems, c.operational_status, c.woreda_name, c.zone_name,
                s.sources, count(*) OVER () AS total
         FROM {BV}.dim_facility d
         LEFT JOIN canon c ON c.hk_facility_conformed = d.hk_facility_conformed AND c.rn = 1
         LEFT JOIN src s ON s.hk_facility_conformed = d.hk_facility_conformed
         WHERE {' AND '.join(where)}
-        ORDER BY d.facility_name, d.facility_id
+        ORDER BY lower(trim(d.facility_name)), d.facility_id
         OFFSET {offset} LIMIT {limit}""", params)
 
     pend = set(pending)
@@ -227,12 +239,17 @@ async def facilities(
 
 
 async def _facility_summary(pending: list[str]) -> dict:
+    """Counts with the same precedence as the rows: a master with a waiting
+    suggestion is a possible match, whatever its mdm_state — so the three
+    counts always add up to the number of masters."""
+    pend = (f"facility_id IN ({', '.join('?' for _ in pending)})" if pending else "FALSE")
     s = (await _tq(f"""
-        SELECT count_if(mdm_state = 'conformed') AS linked,
-               count_if(mdm_state = 'single_source') AS single_source
-        FROM {BV}.dim_facility"""))[0]
+        SELECT count_if({pend}) AS possible_match,
+               count_if(NOT ({pend}) AND mdm_state = 'conformed') AS linked,
+               count_if(NOT ({pend}) AND mdm_state = 'single_source') AS single_source
+        FROM {BV}.dim_facility""", pending * 3))[0]
     return {"linked": int(s["linked"]), "single_source": int(s["single_source"]),
-            "possible_match": len(pending)}
+            "possible_match": int(s["possible_match"])}
 
 
 # ── compare ───────────────────────────────────────────────────────────────
@@ -257,6 +274,21 @@ async def _source_attrs(records: list[tuple[str, str]]) -> dict[tuple[str, str],
     return found
 
 
+def _identifiers(v: str) -> str:
+    """MFR keeps identifiers as a FHIR list ([{"system": …, "value": …}]);
+    other sources keep the bare code. Compare the values, not the JSON."""
+    s = v.strip()
+    if not s.startswith(("[", "{")):
+        return s
+    try:
+        parsed = json.loads(s)
+    except ValueError:
+        return s
+    items = parsed if isinstance(parsed, list) else [parsed]
+    vals = [str(i.get("value")) for i in items if isinstance(i, dict) and i.get("value")]
+    return ", ".join(vals) if vals else s
+
+
 def _field_value(sysc: str, row: dict | None, field: str) -> tuple[str, str | None]:
     """(state, value): not_reported when the source does not carry the field,
     missing when it does but the record has no value."""
@@ -276,7 +308,8 @@ def _field_value(sysc: str, row: dict | None, field: str) -> tuple[str, str | No
     v = row.get(col)
     if v is None or (isinstance(v, str) and not v.strip()):
         return "missing", None
-    return "value", str(_num(v)).strip()
+    text = str(_num(v)).strip()
+    return "value", _identifiers(text) if field == "code" else text
 
 
 def _norm(v: str) -> str:
@@ -421,15 +454,14 @@ async def history(entity_class: str = PathParam(...),
     for m in members:
         events.append({"at": _iso(m["first_seen"]), "lane": "sources", "kind": "source_record",
                        "title": f"{m['source_system']} sent {m['source_name']}",
-                       "detail": f"resolved by {m['match_strategy'].replace('_', ' ')}"})
+                       "detail": MATCH_WORDS.get(m["match_strategy"], m["match_strategy"])})
     for c in cands:
         events.append({"at": _iso(c["discovered_at"]), "lane": "matching", "kind": "suggestion",
-                       "title": f"Suggested a {c['left_source_system_code']} record "
-                                f"({c['match_rule'].replace('_', ' ')}, score {float(c['score']):.2f})",
-                       "detail": f"status {c['status']}"
-                                 + (f" · run {c['matcher_run_uid']}" if c["matcher_run_uid"] else "")})
+                       "title": f"Suggested a {c['left_source_system_code']} record",
+                       "detail": f"{RULE_WORDS.get(c['match_rule'], c['match_rule'])} · "
+                                 f"{float(c['score']):.2f} · {STATUS_WORDS.get(c['status'], c['status'])}"})
     for d in decs:
-        verdict = {"accept": "same facility", "reject": "different facility",
+        verdict = {"accept": "same facility", "reject": "different facilities",
                    "merge": "merged"}.get(d["decision"], d["decision"])
         events.append({"at": _iso(d["recorded_from"]), "lane": "stewardship", "kind": "decision",
                        "title": f"{d['decided_by']} decided: {verdict}",

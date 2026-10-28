@@ -157,7 +157,8 @@ async def main() -> None:
         r = (await c.get("/api/mdm/facilities", params={"limit": 10})).json()
         check(r["total"] == n_dim and len(r["facilities"]) == 10, "all masters, paged by 10")
         names = [f["name"] or "" for f in r["facilities"]]
-        check(names == sorted(names), "ordered by name")
+        check(names == sorted(names, key=str.lower) and all(n == n.strip() for n in names),
+              "ordered by name, case-insensitive, names trimmed")
         r2 = (await c.get("/api/mdm/facilities", params={"limit": 10, "offset": 10})).json()
         check(not {f["master_bk"] for f in r["facilities"]} & {f["master_bk"] for f in r2["facilities"]},
               "pages do not overlap")
@@ -167,8 +168,20 @@ async def main() -> None:
                                    f"%{term}%")
         check(rs["total"] == n_q and all(term in (f["name"] or "").lower() for f in rs["facilities"]),
               f"search '{term}' matches the warehouse ({n_q})")
-        rl = (await c.get("/api/mdm/facilities", params={"registry": "linked", "limit": 1})).json()
-        check(rl["total"] == n_conf and rl["summary"]["linked"] == n_conf, "linked = conformed masters")
+        async with pool.acquire() as conn:
+            pend = [r[0] for r in await conn.fetch("""SELECT DISTINCT suggested_master_bk
+                FROM ops_governance.mdm_match_candidate WHERE entity_class_code = 'facility'
+                  AND status = 'pending' AND suggested_master_bk IS NOT NULL""")]
+        n_pend = await vault.fetchval(f"SELECT count(*) FROM {BV}.dim_facility WHERE facility_id = ANY($1)", pend)
+        n_link = await vault.fetchval(f"""SELECT count(*) FROM {BV}.dim_facility
+            WHERE mdm_state = 'conformed' AND NOT (facility_id = ANY($1))""", pend)
+        rl = (await c.get("/api/mdm/facilities", params={"registry": "linked", "limit": 200})).json()
+        check(rl["total"] == n_link and rl["summary"]["linked"] == n_link,
+              f"linked = conformed masters without a waiting suggestion ({n_link})")
+        check(all(f["registry"] == "linked" for f in rl["facilities"]), "the linked filter only returns Linked rows")
+        sm = rl["summary"]
+        check(sm["linked"] + sm["single_source"] + sm["possible_match"] == n_dim
+              and sm["possible_match"] == n_pend, "summary counts add up to the masters")
         rp = (await c.get("/api/mdm/facilities", params={"registry": "possible_match", "limit": 200})).json()
         check(any(f["master_bk"] == bk and f["registry"] == "possible_match" for f in rp["facilities"]),
               "the fixture's master shows as a possible match")
@@ -201,6 +214,10 @@ async def main() -> None:
               "an empty phone is missing, not a value")
         check("Preferred name" in cp["summary"]["difference"], "summary lists the difference")
         check(cp["candidate"]["matcher_version"] == "0.1.0", "matcher version shown")
+        if "code" in by:
+            vals = [c["value"] for c in by["code"]["cells"] if c["state"] == "value"]
+            check(all(not v.startswith(("[", "{")) for v in vals),
+                  "identifier lists compared by their values, not raw JSON")
 
         print("history")
         check((await c.get("/api/mdm/master/facility/NO-SUCH-MASTER/history")).status_code == 404,
@@ -216,6 +233,8 @@ async def main() -> None:
         check(len(h["revisions"]) == n_rev, f"revisions = golden rows ({n_rev})")
         lanes = {e["lane"] for e in h["events"]}
         check({"sources", "matching", "master"} <= lanes, "sources, matching and master lanes present")
+        check(not any("run " in (e["detail"] or "") or "_" in (e["detail"] or "")
+                      for e in h["events"]), "timeline details have no run ids or raw codes")
         ats = [e["at"] for e in h["events"]]
         check(ats == sorted(ats), "events in time order")
         check(h["published_state"] == "not_published", "no release: not published")
@@ -255,6 +274,13 @@ async def main() -> None:
             rr = await c.get(f"/api/mdm/compare/{row['candidate_id']}")
             ok += rr.status_code == 200 and rr.json()["records"][0]["found"]
         check(ok == len(live), f"every copied live suggestion compares with its record found ({ok}/{len(live)})")
+        raw = 0
+        for row in live:
+            cj = (await c.get(f"/api/mdm/compare/{row['candidate_id']}")).json()
+            code = next((f for f in cj["fields"] if f["field"] == "code"), None)
+            raw += sum(1 for cell in (code["cells"] if code else [])
+                       if cell["state"] == "value" and cell["value"].startswith(("[", "{")))
+        check(raw == 0, "no live suggestion shows an identifier as raw JSON")
 
     await vault.close()
     print(f"\n{'PASS' if not FAILS else 'FAIL'}: {len(FAILS)} failure(s)")

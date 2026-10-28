@@ -135,3 +135,92 @@ export async function publishRelease(releaseId: string, note?: string, entityCla
   }
   return r.json();
 }
+
+/* ── MDM workspace (read side) — append-only section ─────────────────────
+   /api/mdm/{overview,facilities,compare,master/…/history}, served by
+   routes/mdm_workspace.py. All reads; verdicts stay with decide/revert. */
+
+export type ListOverview = {
+  entity_class: string;
+  title: string;
+  masters: number;
+  conformed: number | null;
+  single_source: number | null;
+  source_records: number | null;
+  sources: Array<{ source_system: string; n: number }>;
+  waiting: number;
+  decisions: number;
+  last_release: { release_id: string; published_at: string | null; masters: number | null } | null;
+};
+
+export function overview(): Promise<{ lists: ListOverview[] }> {
+  return _json('overview');
+}
+
+export type Registry = 'all' | 'linked' | 'single_source' | 'possible_match';
+
+export type FacilityRow = {
+  master_bk: string;
+  name: string | null;
+  registry: Exclude<Registry, 'all'>;
+  n_source_systems: number;
+  sources: string | null;
+  operational_status: string | null;
+  woreda: string | null;
+  zone: string | null;
+};
+
+export type FacilityPage = {
+  facilities: FacilityRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  summary: { linked: number; single_source: number; possible_match: number };
+};
+
+export function facilities(q: string, registry: Registry, limit: number, offset: number): Promise<FacilityPage> {
+  const p = new URLSearchParams({ q, registry, limit: String(limit), offset: String(offset) });
+  return _json(`facilities?${p}`);
+}
+
+export type CellState = 'value' | 'missing' | 'not_reported';
+export type FieldResult = 'agreement' | 'difference' | 'missing' | 'not_reported';
+
+export type Comparison = {
+  candidate: Candidate & { matcher_version: string | null };
+  master_bk: string | null;
+  records: Array<{ role: 'suggested' | 'master_member'; source_system: string; record_key: string;
+                   name: string | null; match_strategy: string | null; found: boolean }>;
+  fields: Array<{ field: string; label: string; result: FieldResult;
+                  cells: Array<{ state: CellState; value: string | null }> }>;
+  summary: Record<FieldResult, string[]>;
+  more_members: number;
+};
+
+export function compare(candidateId: string): Promise<Comparison> {
+  return _json(`compare/${encodeURIComponent(candidateId)}`);
+}
+
+export type HistoryEvent = {
+  at: string | null;
+  lane: 'sources' | 'matching' | 'stewardship' | 'master' | 'releases';
+  kind: string;
+  title: string;
+  detail: string | null;
+};
+
+export type MasterHistory = {
+  master_bk: string;
+  entity_class: string;
+  first_seen: string | null;
+  published_state: 'published' | 'not_published';
+  latest_release: string | null;
+  revisions: Array<{ canonical_name: string; name_source: string; operational_status: string | null; load_ts: string }>;
+  members: Array<{ source_system: string; source_name: string; record_key: string; match_strategy: string;
+                   first_seen: string | null; last_changed: string | null }>;
+  events: HistoryEvent[];
+};
+
+export function history(entityClass: string, masterBk: string): Promise<MasterHistory> {
+  return _json(`master/${encodeURIComponent(entityClass)}/${encodeURIComponent(masterBk)}/history`);
+}
