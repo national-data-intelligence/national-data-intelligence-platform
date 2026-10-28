@@ -57,6 +57,11 @@ export function fmtNum(n: number | null | undefined): string {
   return n == null ? '—' : n.toLocaleString();
 }
 
+/** A date without the time, for "last changed" columns. */
+export function fmtDay(iso: string | null | undefined): string {
+  return iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' }) : '—';
+}
+
 export function fmtWhen(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
 }

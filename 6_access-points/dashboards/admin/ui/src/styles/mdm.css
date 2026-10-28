@@ -140,3 +140,6 @@ table.dash.mdm-compare td:first-child { font-weight: 700; color: var(--ink-2); w
 @media (prefers-reduced-motion: reduce) {
   .mdm-list-open:hover { transform: none; }
 }
+
+/* Setup (S2): dates and version labels stay on one line */
+.mdm-nowrap { white-space: nowrap; }

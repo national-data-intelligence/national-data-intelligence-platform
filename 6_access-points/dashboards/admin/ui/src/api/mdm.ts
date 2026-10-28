@@ -311,3 +311,31 @@ export function approve(proposalId: string, note?: string): Promise<{ status: st
 export function decline(proposalId: string, note: string): Promise<{ status: string }> {
   return _post(`proposal/${proposalId}/decline`, { note });
 }
+
+/* ── Setup (S2): sources and matching rules, read-only ───────────────────── */
+
+export type SetupSource = {
+  source_system: string;
+  lists: string[];
+  records: number;
+  last_received: string | null;
+  status: string;
+};
+
+export type MatchRule = {
+  entity_class: string;
+  list: string;
+  rule_code: string;
+  label: string;
+  description: string;
+  threshold: number;
+  enabled: boolean;
+  version: string;
+  updated: string;
+};
+
+export type Setup = { sources: SetupSource[]; registry: boolean; rules: MatchRule[] };
+
+export function setup(): Promise<Setup> {
+  return _json('setup');
+}

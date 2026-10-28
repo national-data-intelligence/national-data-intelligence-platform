@@ -18,6 +18,7 @@
  *                   (Proposals.tsx)
  *   Decisions       my proposals, what needs me, and the decision log
  *   Publish         master-data releases
+ *   Setup           sources and matching rules, read-only (SetupTab.tsx)
  * Maker–checker: a steward proposes, a DIFFERENT person approves, and only an
  * approval writes the decision log (routes/mdm_approvals.py).
  * Tabs are listed only when the caller's resolved catalog grants the widget
@@ -35,6 +36,7 @@ import { useDashboardSpec, specAllowsWidget } from '../../api/spec';
 import { ActionError, DoneNote, LoadError } from './parts';
 import ReviewTab from './ReviewTab';
 import ExploreTab from './ExploreTab';
+import SetupTab from './SetupTab';
 import { ApprovalsTab, MyProposals } from './Proposals';
 import '../../styles/review.css';
 import '../../styles/mdm.css';
@@ -240,19 +242,19 @@ function ReleasesTab() {
   );
 }
 
-type TabKey = 'review' | 'explore' | 'approvals' | 'decisions' | 'publish';
+type TabKey = 'review' | 'explore' | 'approvals' | 'decisions' | 'publish' | 'setup';
 type Part = 'steward' | 'approver' | 'either';
 
 /* The workspace tabs. `widget` is the catalog widget each tab needs (a tab is
    listed only when the caller's resolved spec grants it); `part` is the half
-   of maker–checker it serves. All live in adm-mdm-review today; Setup brings
-   its own widget id when its data exists. */
+   of maker–checker it serves. All live in adm-mdm-review today. */
 const TABS: Array<{ key: TabKey; label: string; widget: string; part: Part }> = [
   { key: 'review',    label: 'Review matches', widget: 'adm-mdm-review', part: 'steward' },
   { key: 'explore',   label: 'Explore',        widget: 'adm-mdm-review', part: 'either' },
   { key: 'approvals', label: 'Approvals',      widget: 'adm-mdm-review', part: 'approver' },
   { key: 'decisions', label: 'Decisions',      widget: 'adm-mdm-review', part: 'steward' },
   { key: 'publish',   label: 'Publish',        widget: 'adm-mdm-review', part: 'steward' },
+  { key: 'setup',     label: 'Setup',          widget: 'adm-mdm-review', part: 'either' },
 ];
 
 /* Mirrors the gateway: stewards = mdm.STEWARD_ROLES; approvers = the
@@ -344,6 +346,7 @@ function MdmReview() {
           {active.key === 'approvals' && <ApprovalsTab onChanged={() => setDecidedTick(t => t + 1)} />}
           {active.key === 'decisions' && <DecisionsTabs refreshKey={decidedTick} />}
           {active.key === 'publish' && <div className="card card-elev"><ReleasesTab /></div>}
+          {active.key === 'setup' && <SetupTab />}
         </div>
       )}
     </div>
