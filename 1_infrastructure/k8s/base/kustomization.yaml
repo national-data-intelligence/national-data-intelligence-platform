@@ -134,6 +134,8 @@ configMapGenerator:
       - ../../../3_storage/postgres/init/43_pct_plan_read.sql
       # MDM maker–checker (proposals wait for a second person before the decision log)
       - ../../../3_storage/postgres/init/44_mdm_proposal.sql
+      # MDM matcher rules registry + run log (Setup screen, record history)
+      - ../../../3_storage/postgres/init/45_mdm_rules_runs.sql
       - ../../../3_storage/postgres/init/99_init_complete.sql
 
 
