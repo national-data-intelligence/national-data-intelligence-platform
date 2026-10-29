@@ -108,3 +108,11 @@ jobs:
 
       - name: Redeploy changed components
         run: bash bundle/scripts/ci-redeploy.sh "${{ steps.scope.outputs.value }}"
+
+      # Host services (the profile-swap worker) run from /opt/nhdw-runtime, never
+      # from this work dir; keep that copy at the commit that just deployed.
+      - name: Sync the host runtime copy
+        run: |
+          [ -d /opt/nhdw-runtime ] || { echo "no /opt/nhdw-runtime on this host, skipped"; exit 0; }
+          rsync -a --delete --exclude .git --exclude 0_external/llm/models "$GITHUB_WORKSPACE"/ /opt/nhdw-runtime/
+          echo "$GITHUB_SHA" > /opt/nhdw-runtime/.deployed-sha

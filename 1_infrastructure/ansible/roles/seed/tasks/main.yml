@@ -62,6 +62,24 @@
 # canonical scripts the tasks above run, reporting stages back. Installed here
 # so a provisioned host can switch countries from the console without anyone
 # shelling in.
+# It runs from /opt/nhdw-runtime, a copy of this tree, not from nhdw_repo_root:
+# when provisioning runs on the CI runner that root is the runner work dir,
+# which every checkout cleans (deploy.yml keeps the copy in step afterwards).
+- name: Sync the host runtime copy the worker runs from  # noqa: command-instead-of-module
+  ansible.builtin.command: >-
+    rsync -a --delete --exclude .git --exclude 0_external/llm/models
+    {{ nhdw_repo_root }}/ /opt/nhdw-runtime/
+  changed_when: true
+  become: true
+
+- name: Own the runtime copy as the worker's user
+  ansible.builtin.file:
+    path: /opt/nhdw-runtime
+    owner: biniyam
+    group: biniyam
+    recurse: true
+  become: true
+
 - name: Install the profile-swap worker unit
   ansible.builtin.copy:
     src: "{{ nhdw_repo_root }}/bundle/systemd/nhdw-profile-swap.service"
