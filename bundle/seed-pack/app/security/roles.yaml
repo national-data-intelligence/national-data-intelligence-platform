@@ -203,3 +203,19 @@
   combine_strategy: union
   capabilities:
     - act_as_owner
+
+# ── MDM workspace — append-only section ────────────────────────────────
+# The CHECKER half of MDM maker–checker (init 44, gateway mdm_approvals.py):
+# a steward proposes a match decision, a different person holding this role
+# approves or declines it, and only an approval writes the decision log.
+# The gateway gates approval on the mdm_approve capability, so granting this
+# role to an existing person in the console (perm-admin user roles) is
+# enough — no Keycloak realm role or users.yaml change is needed.
+# Governance-only: no mart reads, so no OPA policy file (default-deny).
+- code: R-STEW-APR
+  name: MDM Approver
+  description: >
+    Approves or declines stewards' master-data match proposals. Never the
+    proposer of the change it approves (enforced on the person, server-side).
+  combine_strategy: union
+  capabilities: [mdm_approve]

@@ -48,6 +48,14 @@ Config (env):
   OPS_DSN              postgres DSN for nhdw_ops    (writes candidates)
   MDM_TRGM_THRESHOLD   default 0.85
   MDM_CONTEXT          deployment context, default ET
+
+Rules registry + run log (MDM workspace S2, 2026-10-28; init 45):
+  When ops_governance.mdm_match_rule exists, its CURRENT rows decide each
+  rule's threshold and whether it runs at all; MDM_TRGM_THRESHOLD is then
+  only the fallback for a rule the registry does not list. Each run writes
+  mdm_matcher_run (settings used, counts) and one mdm_candidate_sighting per
+  candidate it inserted or refreshed. Without those tables the matcher runs
+  exactly as 0.1.0 did.
 """
 from __future__ import annotations
 
@@ -59,7 +67,7 @@ from datetime import datetime, timezone
 
 import psycopg
 
-MATCHER_VERSION = "0.1.0"
+MATCHER_VERSION = "0.2.0"
 
 # Set-based candidate generation over the deployed resolution view. The
 # coordinate sats are typed (MFR: explicit landing schema; mBrana: typed by
@@ -212,6 +220,7 @@ DO UPDATE SET
       matcher_version     = EXCLUDED.matcher_version,
       discovered_at       = now()
 WHERE ops_governance.mdm_match_candidate.status = 'pending'
+RETURNING candidate_id, (xmax = 0) AS inserted
 """
 
 
@@ -233,9 +242,11 @@ def generate_candidates(vault_conn, threshold: float, *,
 
 
 def store_candidates(ops_conn, pairs: list[dict], *, context: str,
-                     run_uid: str, entity_class: str = "facility") -> dict[str, int]:
+                     run_uid: str, entity_class: str = "facility",
+                     sightings: list[dict] | None = None) -> dict[str, int]:
     """Upsert candidates; pending rows refresh, steward-decided rows are
-    never touched (the status guard). Returns counts per match rule."""
+    never touched (the status guard). Returns counts per match rule.
+    With `sightings`, appends one entry per row inserted or refreshed."""
     by_rule: dict[str, int] = {}
     with ops_conn.cursor() as cur:
         for p in pairs:
@@ -251,8 +262,91 @@ def store_candidates(ops_conn, pairs: list[dict], *, context: str,
                 "score": p["score"], "match_rule": p["match_rule"],
                 "features": json.dumps(p["match_features"], default=str),
             })
+            row = cur.fetchone()            # None = decided row, left untouched
+            if row is not None and sightings is not None:
+                sightings.append({"candidate_id": row[0], "score": p["score"],
+                                  "match_rule": p["match_rule"],
+                                  "outcome": "new" if row[1] else "refreshed"})
     ops_conn.commit()
     return by_rule
+
+
+# ── Rules registry + run log (MDM workspace S2, 2026-10-28; init 45) ────
+# Everything below degrades to 0.1.0 behaviour when the tables are absent,
+# so an image newer than its database never fails a run.
+
+def _has_table(conn, name: str) -> bool:
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass(%s) IS NOT NULL", (name,))
+        return bool(cur.fetchone()[0])
+
+
+def load_rules(ops_conn, context: str) -> dict[tuple[str, str], dict] | None:
+    """Current registry rows keyed by (entity_class, rule_code); None when
+    the registry table does not exist."""
+    if not _has_table(ops_conn, "ops_governance.mdm_match_rule"):
+        return None
+    with ops_conn.cursor() as cur:
+        cur.execute("""SELECT entity_class_code, rule_code, threshold, enabled, version
+                       FROM ops_governance.mdm_match_rule
+                       WHERE deployment_context = %s AND recorded_to IS NULL""", (context,))
+        return {(r[0], r[1]): {"threshold": float(r[2]), "enabled": r[3], "version": r[4]}
+                for r in cur.fetchall()}
+
+
+def sql_threshold(rules: dict | None, entity_class: str, fallback: float) -> float:
+    """The similarity floor the candidate SQL runs with: the registry's
+    name_probabilistic threshold, else the env fallback."""
+    rule = (rules or {}).get((entity_class, "name_probabilistic"))
+    return rule["threshold"] if rule else fallback
+
+
+def apply_rules(pairs: list[dict], rules: dict | None, entity_class: str) -> list[dict]:
+    """Drop pairs whose rule is disabled or scores under its threshold.
+    Rules the registry does not list pass through unchanged."""
+    if not rules:
+        return pairs
+    kept = []
+    for p in pairs:
+        rule = rules.get((entity_class, p["match_rule"]))
+        if rule is None or (rule["enabled"] and float(p["score"]) >= rule["threshold"]):
+            kept.append(p)
+    return kept
+
+
+def start_run(ops_conn, run_uid: str, context: str, settings: dict) -> bool:
+    """Open the run's log row; False (and no trail) when init 45 is absent."""
+    if not _has_table(ops_conn, "ops_governance.mdm_matcher_run"):
+        return False
+    with ops_conn.cursor() as cur:
+        cur.execute("""INSERT INTO ops_governance.mdm_matcher_run
+                           (run_uid, deployment_context, matcher_version, settings)
+                       VALUES (%s, %s, %s, %s::jsonb)""",
+                    (run_uid, context, MATCHER_VERSION, json.dumps(settings)))
+    ops_conn.commit()
+    return True
+
+
+def finish_run(ops_conn, run_uid: str, *, sightings: list[dict], counts: dict,
+               total: int, error: str | None = None) -> None:
+    with ops_conn.cursor() as cur:
+        for s in sightings:
+            cur.execute("""INSERT INTO ops_governance.mdm_candidate_sighting
+                               (run_uid, candidate_id, score, match_rule, outcome)
+                           VALUES (%s, %s, %s, %s, %s)
+                           ON CONFLICT DO NOTHING""",
+                        (run_uid, s["candidate_id"], s["score"], s["match_rule"], s["outcome"]))
+        cur.execute("""UPDATE ops_governance.mdm_matcher_run
+                          SET finished_at = now(), status = %s, counts = %s::jsonb,
+                              candidates_total = %s, candidates_new = %s,
+                              candidates_refreshed = %s, error = %s
+                        WHERE run_uid = %s""",
+                    ("failed" if error else "succeeded", json.dumps(counts), total,
+                     sum(1 for s in sightings if s["outcome"] == "new"),
+                     sum(1 for s in sightings if s["outcome"] == "refreshed"),
+                     error, run_uid))
+    ops_conn.commit()
+# ── end rules registry + run log ────────────────────────────────────────
 
 
 def run() -> dict:
@@ -264,14 +358,37 @@ def run() -> dict:
     total = 0
     with psycopg.connect(os.environ["VAULT_DSN"]) as vault, \
          psycopg.connect(os.environ["OPS_DSN"]) as ops:
-        for entity_class in ("facility", "commodity"):
-            pairs = generate_candidates(vault, threshold, entity_class=entity_class)
-            by_entity[entity_class] = store_candidates(
-                ops, pairs, context=context, run_uid=run_uid,
-                entity_class=entity_class)
-            total += len(pairs)
+        # ── rules registry + run log (MDM workspace S2) ──
+        rules = load_rules(ops, context)
+        settings = {"source": "registry" if rules is not None else "env",
+                    "env_threshold": threshold,
+                    "rules": {f"{c}/{r}": v for (c, r), v in (rules or {}).items()}}
+        tracing = start_run(ops, run_uid, context, settings)
+        sightings: list[dict] = []
+        try:
+            for entity_class in ("facility", "commodity"):
+                pairs = generate_candidates(
+                    vault, sql_threshold(rules, entity_class, threshold),
+                    entity_class=entity_class)
+                pairs = apply_rules(pairs, rules, entity_class)
+                seen: list[dict] = []       # kept only once this class commits
+                by_entity[entity_class] = store_candidates(
+                    ops, pairs, context=context, run_uid=run_uid,
+                    entity_class=entity_class, sightings=seen)
+                sightings += seen
+                total += len(pairs)
+        except Exception as exc:
+            if tracing:
+                ops.rollback()
+                finish_run(ops, run_uid, sightings=sightings, counts=by_entity,
+                           total=total, error=f"{type(exc).__name__}: {exc}"[:2000])
+            raise
+        if tracing:
+            finish_run(ops, run_uid, sightings=sightings, counts=by_entity, total=total)
+        # ── end ──
 
     summary = {"run_uid": run_uid, "context": context, "threshold": threshold,
+               "rules_source": settings["source"],
                "candidates": total, "by_entity": by_entity,
                "at": datetime.now(timezone.utc).isoformat()}
     print(json.dumps(summary))

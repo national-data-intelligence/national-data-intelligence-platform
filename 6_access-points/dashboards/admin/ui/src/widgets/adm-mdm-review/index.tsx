@@ -9,254 +9,37 @@
  * Reverting supersedes (recorded_to) and re-opens the candidate — proven live
  * to restore the previous conformed keys byte for byte.
  *
- * Two tabs: the work queue (pending candidates, best score first, rule
- * filter) and the decision log (current beliefs; full history on demand).
- * No mock rows — an unreachable gateway degrades to a clear error note.
+ * Page shell: an underline tab strip under the page title —
+ *   Review matches  the queue with each suggestion's source records side by
+ *                   side; a verdict is a proposal (ReviewTab.tsx)
+ *   Explore         the governed lists, one list, one record and its history
+ *                   (ExploreTab.tsx)
+ *   Approvals       proposals made by someone else, approve or decline
+ *                   (Proposals.tsx)
+ *   Decisions       my proposals, what needs me, and the decision log
+ *   Publish         master-data releases
+ *   Setup           sources and matching rules, read-only (SetupTab.tsx)
+ * Maker–checker: a steward proposes, a DIFFERENT person approves, and only an
+ * approval writes the decision log (routes/mdm_approvals.py).
+ * Tabs are listed only when the caller's resolved catalog grants the widget
+ * behind them AND the person holds the part they need (steward work vs
+ * approval — from the spec's role codes and capabilities; the gateway checks
+ * every call again). The active tab is mirrored in the URL hash (#mdm/<tab>).
+ * Every value is read from the gateway — no mock rows; an unreachable gateway
+ * degrades to a clear error note.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import * as mdm from '../../api/mdm';
 import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKit';
 import type { AdminWidget } from '../../runtime/types';
-
-const RULE_LABEL: Record<string, string> = {
-  name_exact: 'Exact name',
-  name_ambiguous: 'Ambiguous name',
-  name_probabilistic: 'Probabilistic',
-};
-
-function rulePill(rule: string): string {
-  if (rule === 'name_exact') return 'good';
-  if (rule === 'name_ambiguous') return 'watch';
-  return 'info';
-}
-
-function featureLine(f: Record<string, unknown>): string {
-  const bits: string[] = [];
-  if (f.norm_name) bits.push(String(f.source_name ?? f.norm_name));
-  if (f.master_name && f.master_name !== f.norm_name) bits.push(`≈ ${f.master_name}`);
-  if (f.similarity != null) bits.push(`sim ${Number(f.similarity).toFixed(2)}`);
-  if (f.n_targets != null && Number(f.n_targets) > 1) bits.push(`${f.n_targets} possible masters`);
-  if (f.left_woreda) bits.push(`woreda ${f.left_woreda}`);
-  if (f.left_zone) bits.push(`zone ${f.left_zone}`);
-  if (f.distance_km != null) bits.push(`${f.distance_km} km`);
-  return bits.join(' · ');
-}
-
-
-/** The "who is this?" panel: what the platform knows about one master —
- *  its source members and HOW each resolves, the golden record with
- *  per-field provenance, and every namespaced identifier it answers to.
- *  Sections the vault has not built yet come back empty rather than
- *  failing the panel. */
-function MasterPanel({ entity, masterBk, onClose }:
-    { entity: string; masterBk: string; onClose: () => void }) {
-  const [d, setD] = useState<mdm.MasterDetail | null>(null);
-  const [err, setErr] = useState('');
-
-  useEffect(() => {
-    let live = true;
-    mdm.master(entity, masterBk)
-      .then(r => { if (live) { setD(r); setErr(''); } })
-      .catch(e => { if (live) setErr(String(e?.message || e)); });
-    return () => { live = false; };
-  }, [entity, masterBk]);
-
-  const g = (d?.golden ?? {}) as Record<string, any>;
-  const goldenRows: Array<[string, any, string | undefined]> = d?.golden ? [
-    ['Name', g.canonical_name, g.name_source],
-    ['Status', g.operational_status, g.status_source],
-    ['Contact', g.telecom, g.telecom_source],
-    ['Coordinates', (g.latitude != null && g.longitude != null)
-      ? `${g.latitude}, ${g.longitude}` : null, g.coord_source],
-    ['Woreda', g.woreda_name, g.admin_source],
-    ['Zone', g.zone_name, g.admin_source],
-  ] : [];
-
-  return (
-    <div className="card" style={{ marginBottom: '0.75rem' }}>
-      <div className="section-hdr">
-        <h4 style={{ margin: 0 }}>{masterBk}</h4>
-        <button className="btn btn-sm btn-ghost" onClick={onClose}>Close</button>
-      </div>
-      {err && <p className="muted">Detail unavailable: {err}</p>}
-      {!d && !err && <p className="muted text-xs">Loading…</p>}
-      {d && (
-        <div className="tk-scroll">
-          <p className="muted text-xs">
-            {d.members.length} source record{d.members.length === 1 ? '' : 's'} from{' '}
-            {d.n_source_systems} system{d.n_source_systems === 1 ? '' : 's'}
-            {d.decisions.length > 0 && ` · ${d.decisions.length} standing steward decision(s)`}
-          </p>
-          <table className="dash">
-            <thead>
-              <tr><th>Source record</th><th>Resolves by</th><th>Golden attribute</th><th>From</th></tr>
-            </thead>
-            <tbody>
-              {d.members.map((m, i) => (
-                <tr key={m.source_record_key + m.source_system}>
-                  <td>
-                    <div className="v">{m.source_name || '—'}</div>
-                    <div className="muted text-xs">{m.source_system}</div>
-                  </td>
-                  <td>
-                    <span className={`pill ${m.match_strategy === 'steward_decision' ? 'good' : 'info'}`}>
-                      {m.match_strategy}
-                    </span>
-                  </td>
-                  <td>{goldenRows[i]
-                    ? <><span className="muted text-xs">{goldenRows[i][0]}: </span>
-                        <span className="v">{String(goldenRows[i][1] ?? '—')}</span></>
-                    : ''}</td>
-                  <td className="muted text-xs">{goldenRows[i]?.[2] ?? ''}</td>
-                </tr>
-              ))}
-              {goldenRows.slice(d.members.length).map(([label, value, src]) => (
-                <tr key={label}>
-                  <td></td><td></td>
-                  <td><span className="muted text-xs">{label}: </span>
-                      <span className="v">{String(value ?? '—')}</span></td>
-                  <td className="muted text-xs">{src ?? ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!d.golden &&
-            <p className="muted text-xs">No golden record yet — the canonical satellite builds with the vault.</p>}
-          <p className="muted text-xs" style={{ marginTop: '0.5rem' }}>
-            Known as: {d.identifiers.length === 0
-              ? 'no identifiers recorded yet'
-              : d.identifiers.map(i => `${i.identifier_namespace} ${i.identifier_value}`).join(' · ')}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function QueueTab({ onDecided }: { onDecided: () => void }) {
-  const [rows, setRows] = useState<mdm.Candidate[] | null>(null);
-  const [counts, setCounts] = useState<mdm.RuleCount[]>([]);
-  const [rule, setRule] = useState<string>('');
-  const [entity, setEntity] = useState<'facility' | 'commodity'>('facility');
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState<string>('');   // candidate_id in flight
-  const [flash, setFlash] = useState('');
-  const [inspect, setInspect] = useState<string>('');   // master_bk being inspected
-
-  const load = useCallback(() => {
-    mdm.queue('pending', rule || undefined, 500, entity)
-      .then(r => { setRows(r.candidates); setCounts(r.counts); setErr(''); })
-      .catch(e => setErr(String(e?.message || e)));
-  }, [rule, entity]);
-  useEffect(load, [load]);
-
-  const pending = useMemo(
-    () => counts.filter(c => c.status === 'pending')
-                .reduce<Record<string, number>>((a, c) => ({ ...a, [c.match_rule]: c.n }), {}),
-    [counts]);
-
-  const kit = useTableKit(rows ?? [], {
-    pageSize: 12,
-    search: c => `${c.left_source_system_code} ${c.left_source_record_key} `
-               + `${c.suggested_master_bk ?? ''} ${JSON.stringify(c.match_features)}`,
-    sortVals: {
-      score:  c => c.score,
-      record: c => `${c.left_source_system_code}/${c.left_source_record_key}`,
-      master: c => c.suggested_master_bk ?? '',
-      rule:   c => c.match_rule,
-    },
-    initialSort: { key: 'score', dir: 'desc' },
-  });
-
-  async function verdict(c: mdm.Candidate, d: 'accept' | 'reject') {
-    setBusy(c.candidate_id);
-    try {
-      await mdm.decide(c.candidate_id, d);
-      setFlash(`${d === 'accept' ? 'Accepted' : 'Rejected'} — in effect on the next dashboard read`);
-      load(); onDecided();
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setBusy('');
-    }
-  }
-
-  return (
-    <>
-      <div className="section-hdr">
-        <div>
-          {(['facility', 'commodity'] as const).map(e => (
-            <button key={e}
-                    className={`btn btn-sm ${entity === e ? '' : 'btn-ghost'}`}
-                    onClick={() => { setEntity(e); setRule(''); }}>
-              {e === 'facility' ? 'Facilities' : 'Commodities'}
-            </button>
-          ))}
-          <span className="muted"> · </span>
-          {Object.keys(RULE_LABEL).map(r => (
-            <button key={r}
-                    className={`btn btn-sm ${rule === r ? '' : 'btn-ghost'}`}
-                    onClick={() => setRule(rule === r ? '' : r)}>
-              {RULE_LABEL[r]} <span className="muted">{pending[r] ?? 0}</span>
-            </button>
-          ))}
-        </div>
-        {flash && <span className="muted text-xs">{flash}</span>}
-      </div>
-      {err && <p className="muted">Queue unavailable: {err}</p>}
-      {rows !== null && rows.length === 0 && !err &&
-        <p className="muted">Queue is clear — no pending candidates{rule ? ` for ${RULE_LABEL[rule]}` : ''}.</p>}
-      {inspect && <MasterPanel entity={entity} masterBk={inspect} onClose={() => setInspect('')} />}
-      {rows !== null && rows.length > 0 && (
-        <>
-          <TableToolbar kit={kit} placeholder="Search record, master, name…" unit="candidates" />
-          <div className="tk-scroll">
-            <table className="dash">
-              <thead>
-                <tr>
-                  <SortTh kit={kit} k="record">Source record</SortTh>
-                  <SortTh kit={kit} k="master">Suggested master</SortTh>
-                  <SortTh kit={kit} k="rule">Rule · evidence</SortTh>
-                  <SortTh kit={kit} k="score">Score</SortTh>
-                  <th>Verdict</th>
-                </tr>
-              </thead>
-              <tbody>
-                {kit.pageRows.map(c => (
-                  <tr key={c.candidate_id}>
-                    <td>
-                      <div className="v">{c.left_source_system_code}</div>
-                      <div className="muted text-xs">{c.left_source_record_key.slice(0, 16)}…</div>
-                    </td>
-                    <td>
-                      <button className="btn btn-sm btn-ghost"
-                              title="What does the platform know about this master?"
-                              onClick={() => setInspect(c.suggested_master_bk ?? '')}>
-                        {c.suggested_master_bk}
-                      </button>
-                    </td>
-                    <td>
-                      <span className={`pill ${rulePill(c.match_rule)}`}>{RULE_LABEL[c.match_rule] ?? c.match_rule}</span>
-                      <div className="muted text-xs">{featureLine(c.match_features)}</div>
-                    </td>
-                    <td className="v">{c.score.toFixed(2)}</td>
-                    <td>
-                      <button className="btn btn-sm" disabled={busy === c.candidate_id}
-                              onClick={() => verdict(c, 'accept')}>Accept</button>{' '}
-                      <button className="btn btn-sm btn-ghost" disabled={busy === c.candidate_id}
-                              onClick={() => verdict(c, 'reject')}>Reject</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <TablePager kit={kit} />
-        </>
-      )}
-    </>
-  );
-}
+import { useDashboardSpec, specAllowsWidget } from '../../api/spec';
+import { ActionError, DoneNote, LoadError } from './parts';
+import ReviewTab from './ReviewTab';
+import ExploreTab from './ExploreTab';
+import SetupTab from './SetupTab';
+import { ApprovalsTab, MyProposals } from './Proposals';
+import '../../styles/review.css';
+import '../../styles/mdm.css';
 
 function DecisionsTab({ refreshKey }: { refreshKey: number }) {
   const [rows, setRows] = useState<mdm.Decision[] | null>(null);
@@ -270,9 +53,18 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
   }, [history]);
   useEffect(load, [load, refreshKey]);
 
+  const [actErr, setActErr] = useState('');
+  const [sent, setSent] = useState('');
+  // MDM workspace (S1): an undo is a proposal another person approves; the
+  // one-step revert route is retired.
   async function undo(d: mdm.Decision) {
-    try { await mdm.revert(d.decision_id); load(); }
-    catch (e: any) { setErr(String(e?.message || e)); }
+    setActErr(''); setSent('');
+    try {
+      const r = await mdm.proposeRestore(d.decision_id);
+      setSent(r.status === 'checked' ? 'Undo sent for approval.' : 'Undo not sent: the check failed.');
+      load();
+    }
+    catch (e: any) { setActErr(String(e?.message || e)); }
   }
 
   const kit = useTableKit(rows ?? [], {
@@ -294,9 +86,12 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
           {' '}show superseded history
         </label>
       </div>
-      {err && <p className="muted">Decision log unavailable: {err}</p>}
+      {actErr && <ActionError text="Could not save the decision." err={actErr} />}
+      {sent && <DoneNote text={sent} onClose={() => setSent('')} />}
+      {err && <LoadError what="decisions" err={err} retry={load} />}
+      {rows === null && !err && <p className="muted">Loading decisions…</p>}
       {rows !== null && rows.length === 0 && !err &&
-        <p className="muted">No decisions yet — verdicts from the queue land here (append-only, bitemporal).</p>}
+        <p className="muted">No decisions in this view.</p>}
       {rows !== null && rows.length > 0 && (
         <>
           <TableToolbar kit={kit} placeholder="Search record, master, steward…" unit="decisions" />
@@ -307,7 +102,7 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
                   <SortTh kit={kit} k="record">Source record</SortTh>
                   <SortTh kit={kit} k="verdict">Verdict</SortTh>
                   <th>Master</th>
-                  <th>By</th>
+                  <th>Steward</th>
                   <SortTh kit={kit} k="when">Recorded</SortTh>
                   <th></th>
                 </tr>
@@ -325,7 +120,7 @@ function DecisionsTab({ refreshKey }: { refreshKey: number }) {
                     <td className="text-sm">{d.decided_by}</td>
                     <td className="text-sm">{new Date(d.recorded_from).toLocaleString()}</td>
                     <td>{d.current &&
-                      <button className="btn btn-sm btn-ghost" onClick={() => undo(d)}>Revert</button>}</td>
+                      <button className="btn btn-sm btn-ghost" onClick={() => undo(d)}>Propose undo</button>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -359,14 +154,16 @@ function ReleasesTab() {
   }, []);
   useEffect(load, [load]);
 
+  const [actErr, setActErr] = useState('');
   async function publish() {
     if (!name.trim()) return;
     setBusy(true);
+    setActErr('');
     try {
       const r = await mdm.publishRelease(name.trim(), note.trim() || undefined);
       setFlash(`Published ${r.release_id} — ${r.stats.masters} masters pinned`);
       setName(''); setNote(''); load();
-    } catch (e: any) { setErr(String(e?.message || e)); }
+    } catch (e: any) { setActErr(String(e?.message || e)); }
     finally { setBusy(false); }
   }
 
@@ -391,14 +188,11 @@ function ReleasesTab() {
         </div>
         {flash && <span className="muted text-xs">{flash}</span>}
       </div>
-      <p className="muted text-xs">
-        A release pins the decision-log cut AND the source watermark, then records
-        the master counts — so a report quoting it can be re-derived exactly. It
-        stores the two coordinates, not a copy of the data.
-      </p>
-      {err && <p className="muted">Releases unavailable: {err}</p>}
+      {actErr && <ActionError text="Release not published. Review the error and try again." err={actErr} />}
+      {err && <LoadError what="releases" err={err} retry={load} />}
+      {rows === null && !err && <p className="muted">Loading releases…</p>}
       {rows !== null && rows.length === 0 && !err &&
-        <p className="muted">No releases published yet.</p>}
+        <p className="muted">No releases have been published yet.</p>}
       {rows !== null && rows.length > 0 && (
         <>
           <TableToolbar kit={kit} placeholder="Search release, steward, note…" unit="releases" />
@@ -448,33 +242,113 @@ function ReleasesTab() {
   );
 }
 
+type TabKey = 'review' | 'explore' | 'approvals' | 'decisions' | 'publish' | 'setup';
+type Part = 'steward' | 'approver' | 'either';
+
+/* The workspace tabs. `widget` is the catalog widget each tab needs (a tab is
+   listed only when the caller's resolved spec grants it); `part` is the half
+   of maker–checker it serves. All live in adm-mdm-review today. */
+const TABS: Array<{ key: TabKey; label: string; widget: string; part: Part }> = [
+  { key: 'review',    label: 'Review matches', widget: 'adm-mdm-review', part: 'steward' },
+  { key: 'explore',   label: 'Explore',        widget: 'adm-mdm-review', part: 'either' },
+  { key: 'approvals', label: 'Approvals',      widget: 'adm-mdm-review', part: 'approver' },
+  { key: 'decisions', label: 'Decisions',      widget: 'adm-mdm-review', part: 'steward' },
+  { key: 'publish',   label: 'Publish',        widget: 'adm-mdm-review', part: 'steward' },
+  { key: 'setup',     label: 'Setup',          widget: 'adm-mdm-review', part: 'either' },
+];
+
+/* Mirrors the gateway: stewards = mdm.STEWARD_ROLES; approvers = the
+   mdm_approve capability (or R-SUPER). Only hides tabs — every call is
+   checked again server-side. */
+const STEWARD_CODES = ['R-STEW', 'R-OPS-ADM', 'R-SUPER'];
+function parts(spec: { role_codes?: string[]; capabilities?: string[] } | null) {
+  const roles = spec?.role_codes ?? [];
+  const steward = roles.some(r => STEWARD_CODES.includes(r));
+  const approver = (spec?.capabilities ?? []).includes('mdm_approve') || roles.includes('R-SUPER');
+  return { steward, approver };
+}
+
+function DecisionsTabs({ refreshKey }: { refreshKey: number }) {
+  const [view, setView] = useState<'mine' | 'attention' | 'log'>('mine');
+  return (
+    <>
+      <div className="seg mdm-seg" role="group" aria-label="Decisions view">
+        {([['mine', 'My proposals'], ['attention', 'Needs my attention'], ['log', 'Decision log']] as const).map(([k, l]) => (
+          <button key={k} className={view === k ? 'active' : undefined} aria-pressed={view === k}
+                  onClick={() => setView(k)}>{l}</button>
+        ))}
+      </div>
+      {view === 'log'
+        ? <div className="card card-elev"><DecisionsTab refreshKey={refreshKey} /></div>
+        : <MyProposals view={view} refreshKey={refreshKey} />}
+    </>
+  );
+}
+
+const HASH_PREFIX = '#mdm/';
+
+function tabFromHash(): TabKey | null {
+  const h = window.location.hash;
+  if (!h.startsWith(HASH_PREFIX)) return null;
+  const key = h.slice(HASH_PREFIX.length).split('/')[0];
+  return TABS.some(t => t.key === key) ? key as TabKey : null;
+}
+
 function MdmReview() {
-  const [tab, setTab] = useState<'queue' | 'decisions' | 'releases'>('queue');
+  const { spec, loaded, denied } = useDashboardSpec('admin');
+  const who = parts(spec);
+  const tabs = loaded ? TABS.filter(t => specAllowsWidget(spec, 'admin/mdm', t.widget)
+    && (t.part === 'either' || (t.part === 'steward' ? who.steward : who.approver))) : [];
+  const [tab, setTab] = useState<TabKey>(() => tabFromHash() ?? 'review');
   const [decidedTick, setDecidedTick] = useState(0);
+  const [openBk, setOpenBk] = useState('');     // a master opened from Review
+
+  const active = tabs.find(t => t.key === tab) ?? tabs[0];
+
+  // Mirror the shown tab in the hash; drop it when the page is left so the
+  // next page does not inherit an #mdm/ link.
+  useEffect(() => {
+    if (active) history.replaceState(null, '', HASH_PREFIX + active.key);
+  }, [active?.key]);
+  useEffect(() => () => {
+    if (window.location.hash.startsWith('#mdm')) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }, []);
+
+  const openMaster = useCallback((bk: string) => { setOpenBk(bk); setTab('explore'); }, []);
 
   return (
-    <div className="card card-elev">
-      <div className="section-hdr">
-        <h3>MDM stewardship</h3>
-        <div>
-          <button className={`btn btn-sm ${tab === 'queue' ? '' : 'btn-ghost'}`}
-                  onClick={() => setTab('queue')}>Candidate queue</button>{' '}
-          <button className={`btn btn-sm ${tab === 'decisions' ? '' : 'btn-ghost'}`}
-                  onClick={() => setTab('decisions')}>Decision log</button>{' '}
-          <button className={`btn btn-sm ${tab === 'releases' ? '' : 'btn-ghost'}`}
-                  onClick={() => setTab('releases')}>Releases</button>
+    <div className="mdm-workspace">
+      {tabs.length > 0 && <nav className="tab-nav" aria-label="MDM Stewardship sections">
+        {tabs.map(t => (
+          <a key={t.key} className={t.key === active?.key ? 'active' : undefined}
+             aria-current={t.key === active?.key ? 'page' : undefined}
+             href={HASH_PREFIX + t.key}
+             onClick={e => { e.preventDefault(); setTab(t.key); }}>
+            {t.label}
+          </a>
+        ))}
+      </nav>}
+      {loaded && !active && (
+        <div className="rv-note rv-note-alert" role="alert">
+          <svg className="ico ico-sm"><use href="#i-alert" /></svg>
+          <span className="rv-note-txt">
+            {denied || spec ? 'You do not have access to MDM Stewardship.' : 'Could not load MDM Stewardship.'}
+          </span>
         </div>
-      </div>
-      <p className="muted text-xs">
-        Accepting maps the source record onto its master in the append-only
-        decision log, which the warehouse reads live — dashboards reflect it on
-        the next read, and the vault's insert-only history records it on the
-        next build. Nothing merges automatically: probabilistic matches always
-        wait here, and a revert restores the previous keys exactly.
-      </p>
-      {tab === 'queue' && <QueueTab onDecided={() => setDecidedTick(t => t + 1)} />}
-      {tab === 'decisions' && <DecisionsTab refreshKey={decidedTick} />}
-      {tab === 'releases' && <ReleasesTab />}
+      )}
+      {active && (
+        <div className="page-section">
+          {active.key === 'review' &&
+            <ReviewTab onProposed={() => setDecidedTick(t => t + 1)} onOpenMaster={openMaster} />}
+          {active.key === 'explore' && <ExploreTab openBk={openBk} onOpened={() => setOpenBk('')} />}
+          {active.key === 'approvals' && <ApprovalsTab onChanged={() => setDecidedTick(t => t + 1)} />}
+          {active.key === 'decisions' && <DecisionsTabs refreshKey={decidedTick} />}
+          {active.key === 'publish' && <div className="card card-elev"><ReleasesTab /></div>}
+          {active.key === 'setup' && <SetupTab />}
+        </div>
+      )}
     </div>
   );
 }

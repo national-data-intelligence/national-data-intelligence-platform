@@ -1,8 +1,9 @@
 """MDM stewardship — the human half of master-data conformance.
 
 The matcher (2_pipelines/mdm) fills ops_governance.mdm_match_candidate with
-scored same-entity proposals; stewards work the queue here. Every verdict
-lands in ops_governance.mdm_match_decision — APPEND-ONLY and BITEMPORAL: a
+scored same-entity proposals; stewards work the queue here. Verdicts are
+proposed and approved by two people in routes/mdm_approvals.py, and only an
+approval lands in ops_governance.mdm_match_decision — APPEND-ONLY and BITEMPORAL: a
 change of mind supersedes (stamps recorded_to + inserts anew), never rewrites.
 The vault build reads the CURRENT decisions (v_facility_resolution v3), so a
 rebuild from sources + the decision log always reproduces the same masters.
@@ -15,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import re
-from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path as PathParam, Query
 
@@ -104,102 +104,10 @@ async def queue(
     }
 
 
-@router.post("/candidate/{candidate_id}/decide")
-async def decide(
-    candidate_id: str = PathParam(...),
-    user: UserCtx = Depends(get_user),
-    decision: str = Body(..., embed=True),
-    note: str | None = Body(default=None, embed=True),
-) -> dict:
-    """Record a steward verdict on one candidate.
-
-    accept → the left source record maps onto suggested_master_bk. The
-             resolution views read the decision log live, so dashboards
-             reflect it on the next read; the insert-only hubs/links record
-             it on the next vault build. Sibling pending candidates for the
-             same record become superseded (the record has its master).
-    reject → recorded as a current 'reject' decision (the matcher will keep
-             re-proposing the pair otherwise); conformance falls back to the
-             deterministic derivation.
-    Any earlier CURRENT decision for the record is superseded (recorded_to
-    stamped) — never updated in place.
-    """
-    gate = _require_steward(user)
-    if decision not in ("accept", "reject"):
-        raise HTTPException(422, "decision must be accept or reject")
-    try:
-        UUID(candidate_id)
-    except (ValueError, TypeError):
-        raise HTTPException(404, "not found")
-
-    pool = await ops_db.ensure_pool()
-    async with pool.acquire() as conn:
-        cand = await conn.fetchrow("""
-            SELECT * FROM ops_governance.mdm_match_candidate
-            WHERE candidate_id = $1::uuid
-        """, candidate_id)
-        if cand is None:
-            raise HTTPException(404, "not found")
-        if cand["status"] not in ("pending", "auto_accepted"):
-            raise HTTPException(409, f"candidate already {cand['status']}")
-        if decision == "accept" and not cand["suggested_master_bk"]:
-            raise HTTPException(409, "candidate carries no suggested_master_bk")
-
-        async with conn.transaction():
-            # supersede whatever the platform currently believes about this record
-            await conn.execute("""
-                UPDATE ops_governance.mdm_match_decision
-                   SET recorded_to = now()
-                 WHERE deployment_context = $1 AND entity_class_code = $2
-                   AND source_system_code = $3 AND source_record_key = $4
-                   AND recorded_to IS NULL
-            """, cand["deployment_context"], cand["entity_class_code"],
-                 cand["left_source_system_code"], cand["left_source_record_key"])
-            dec = await conn.fetchrow("""
-                INSERT INTO ops_governance.mdm_match_decision
-                    (deployment_context, entity_class_code,
-                     source_system_code, source_record_key,
-                     decision, master_bk, candidate_id, score, decided_by, note)
-                VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8, $9, $10)
-                RETURNING decision_id
-            """, cand["deployment_context"], cand["entity_class_code"],
-                 cand["left_source_system_code"], cand["left_source_record_key"],
-                 decision,
-                 cand["suggested_master_bk"] if decision == "accept" else None,
-                 candidate_id, cand["score"], user.username, note)
-            await conn.execute("""
-                UPDATE ops_governance.mdm_match_candidate
-                   SET status = 'decided' WHERE candidate_id = $1::uuid
-            """, candidate_id)
-            superseded = 0
-            if decision == "accept":
-                superseded = int((await conn.execute("""
-                    UPDATE ops_governance.mdm_match_candidate
-                       SET status = 'superseded'
-                     WHERE deployment_context = $1 AND entity_class_code = $2
-                       AND left_source_system_code = $3
-                       AND left_source_record_key = $4
-                       AND status = 'pending' AND candidate_id <> $5::uuid
-                """, cand["deployment_context"], cand["entity_class_code"],
-                     cand["left_source_system_code"],
-                     cand["left_source_record_key"],
-                     candidate_id)).split()[-1])
-
-    await ops_db.log_policy_decision(
-        user=user, action="mdm.decide", resource=candidate_id,
-        decision="allow", rule_hits=gate.rule_hits,
-        explanation={"verdict": decision,
-                     "master_bk": cand["suggested_master_bk"] if decision == "accept" else None,
-                     "record": f"{cand['left_source_system_code']}/{cand['left_source_record_key']}",
-                     "siblings_superseded": superseded})
-    return {"candidate_id": candidate_id, "decision": decision,
-            "decision_id": str(dec["decision_id"]),
-            "siblings_superseded": superseded,
-            # the resolution views, dims and marts are VIEWS that read the
-            # decision log live through the FDW seam, so a verdict is visible
-            # on the next read; only the insert-only hub/link history catches
-            # up on the next vault build (verified live 2026-09-21)
-            "note": "in effect on the next read; vault history catches up on the next build"}
+# ── One-step verdicts retired (MDM workspace, 2026-10-28) ──────────────
+# POST candidate/{id}/decide and POST decision/{id}/revert moved, verbatim, to
+# _archive/2026-10-28/mdm-oneclick/. Verdicts are now proposed and approved
+# by two people in routes/mdm_approvals.py; only an approval writes the log.
 
 
 @router.get("/releases")
@@ -446,51 +354,3 @@ async def decisions(
         "recorded_to": r["recorded_to"].isoformat() if r["recorded_to"] else None,
         "current": r["recorded_to"] is None,
     } for r in rows], "limit": limit, "offset": offset}
-
-
-@router.post("/decision/{decision_id}/revert")
-async def revert(
-    decision_id: str = PathParam(...),
-    user: UserCtx = Depends(get_user),
-    note: str | None = Body(default=None, embed=True),
-) -> dict:
-    """Supersede a CURRENT decision (append-only change of mind): stamp its
-    recorded_to and re-open the candidate so the queue shows it again. The
-    record falls back to deterministic conformance on the next vault build."""
-    gate = _require_steward(user)
-    try:
-        UUID(decision_id)
-    except (ValueError, TypeError):
-        raise HTTPException(404, "not found")
-
-    pool = await ops_db.ensure_pool()
-    async with pool.acquire() as conn:
-        dec = await conn.fetchrow("""
-            SELECT * FROM ops_governance.mdm_match_decision
-            WHERE decision_id = $1::uuid
-        """, decision_id)
-        if dec is None:
-            raise HTTPException(404, "not found")
-        if dec["recorded_to"] is not None:
-            raise HTTPException(409, "decision already superseded")
-
-        async with conn.transaction():
-            await conn.execute("""
-                UPDATE ops_governance.mdm_match_decision
-                   SET recorded_to = now() WHERE decision_id = $1::uuid
-            """, decision_id)
-            if dec["candidate_id"]:
-                await conn.execute("""
-                    UPDATE ops_governance.mdm_match_candidate
-                       SET status = 'pending' WHERE candidate_id = $1::uuid
-                """, dec["candidate_id"])
-
-    await ops_db.log_policy_decision(
-        user=user, action="mdm.revert", resource=decision_id,
-        decision="allow", rule_hits=gate.rule_hits,
-        explanation={"superseded_verdict": dec["decision"],
-                     "master_bk": dec["master_bk"],
-                     "record": f"{dec['source_system_code']}/{dec['source_record_key']}",
-                     "note": note})
-    return {"decision_id": decision_id, "superseded": True,
-            "candidate_reopened": bool(dec["candidate_id"])}

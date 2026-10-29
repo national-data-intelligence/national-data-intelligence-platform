@@ -114,6 +114,10 @@ configMapGenerator:
       - ../../../3_storage/postgres/init/30_demo_patient_phi.sql
       - ../../../3_storage/postgres/init/31_superset_db.sh
       - ../../../3_storage/postgres/init/23_seaweedfs_filer_db.sh
+      # 32/33 were applied only by seed-app-security.sh; listed so a cold
+      # boot and this configmap carry the same files the cold-boot test runs.
+      - ../../../3_storage/postgres/init/32_permission_store.sql
+      - ../../../3_storage/postgres/init/33_workshop_group_flows.sh
       # vocabulary + MDM (Track A). initdb runs the configmap in FILENAME
       # order on a fresh volume, so these must be listed or a cold boot comes
       # up without nhdw_ref / the MDM decision tier and the vocabulary seed
@@ -128,6 +132,10 @@ configMapGenerator:
       - ../../../3_storage/postgres/init/41_ml_read.sql
       - ../../../3_storage/postgres/init/42_pct_plan.sql
       - ../../../3_storage/postgres/init/43_pct_plan_read.sql
+      # MDM maker–checker (proposals wait for a second person before the decision log)
+      - ../../../3_storage/postgres/init/44_mdm_proposal.sql
+      # MDM matcher rules registry + run log (Setup screen, record history)
+      - ../../../3_storage/postgres/init/45_mdm_rules_runs.sql
       - ../../../3_storage/postgres/init/99_init_complete.sql
 
 

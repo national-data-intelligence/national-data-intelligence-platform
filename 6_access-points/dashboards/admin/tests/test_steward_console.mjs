@@ -30,16 +30,26 @@ const PW = process.env.SEED_PASSWORD || 'NhdwDemo2026.OK';
   await p.waitForTimeout(3000);
   let body = await p.locator('body').innerText();
   ok('queue shows entity toggle', body.includes('Facilities') && body.includes('Commodities'), body.slice(0,300));
-  ok('accurate timing copy', body.includes('next read'), body.slice(0,400));
   ok('real candidates', body.includes('FAC-'), body.slice(0,300));
+  ok('sources compared side by side', body.includes('What each source reported'), body.slice(0,400));
 
-  // master detail: click the first suggested-master button
-  await p.click('table.dash tbody tr >> nth=0 >> td >> nth=1 >> button');
+  ok('steward does not see Approvals', !(await p.locator('nav.tab-nav').innerText()).includes('Approvals'));
+
+  // a verdict is a proposal for a second person: open the confirm step, read it,
+  // cancel — never send anything on live
+  await p.click('button:text-is("Same facility")');
+  await p.waitForTimeout(500);
+  body = await p.locator('body').innerText();
+  ok('verdict goes to a second person', body.includes('second person approves') && body.includes('Send for approval'), body.slice(0,400));
+  await p.click('button:text-is("Cancel")');
+
+  // master detail: open the suggested master's record (Explore)
+  await p.click('button:text-is("Open record")');
   await p.waitForTimeout(3500);
   body = await p.locator('body').innerText();
-  ok('master panel opens', /source record|Resolves by/.test(body), body.slice(0,400));
-  ok('master panel shows identifiers', body.includes('Known as'), body.slice(0,600));
-  ok('master panel shows golden attribute', /Name:|Status:|Coordinates:/.test(body), body.slice(0,600));
+  ok('master record opens', body.includes('Record history') && body.includes('Golden record'), body.slice(0,400));
+  ok('master record shows identifiers', body.includes('Known as'), body.slice(0,600));
+  ok('master record shows source members', body.includes('Sources'), body.slice(0,600));
 
   await p.click('aside a:has-text("Column Governance")');
   await p.waitForTimeout(3500);
