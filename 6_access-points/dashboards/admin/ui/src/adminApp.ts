@@ -99,6 +99,9 @@ function adminApp() {
       'roles-permissions': { group: 'Identity and Access',  title: 'Roles and Permissions' }, // catalog page admin/roles-permissions
       sso:                 { group: 'Identity and Access',  title: 'SSO & identity' },
       documentation:       { group: 'Identity and Access',  title: 'Documentation' },     // catalog page admin/documentation (pinned bottom)
+
+      // ── MDM workspace — append-only section ──
+      mdm:                 { group: 'Data',             title: 'MDM Stewardship' },     // catalog page admin/mdm
     },
     get navGroup() { return (this.pageInfo[this.active] || {}).group || 'Admin'; },
     get pageTitle() { return (this.pageInfo[this.active] || {}).title || 'Dashboard'; },
@@ -261,6 +264,9 @@ function adminApp() {
         this.active = 'users-access';   // access requests live on Users and Access now
         setTimeout(() => { this.showLinkedToast = false; }, 9000);
       }
+      // ── MDM workspace — append-only section ──
+      // #mdm/<tab> deep link: open MDM Stewardship; the widget picks the tab.
+      if (!newRid && window.location.hash.startsWith('#mdm')) this.active = 'mdm';
       this.loadAccessRequests();          // real pending queue + resolved history
       this.$nextTick(()=> this.renderActive());
       window.addEventListener('resize', ()=> this.renderActive());

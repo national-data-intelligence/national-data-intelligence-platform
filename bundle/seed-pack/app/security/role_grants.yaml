@@ -623,3 +623,11 @@
 - role: R-SUPER
   dashboards: '*'
   widgets: '*'
+# ── MDM workspace — append-only section ────────────────────────────────
+# R-STEW-APR: ONLY the MDM stewardship page on admin (the Approvals tab).
+- role: R-STEW-APR
+  dashboards:
+  - admin
+  widgets:
+    admin:
+    - adm-mdm-review
