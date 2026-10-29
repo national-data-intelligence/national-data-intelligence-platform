@@ -4,6 +4,9 @@
 # The gateway writes requests into /opt/nhdw-state/swap-requests (its one
 # writable host mount); this service executes the canonical seed scripts and
 # reports stages back through /opt/nhdw-state/swap-status.
+# NHDW_REPO is /opt/nhdw-runtime, a copy of the deployed tree that provisioning
+# and each successful deploy sync. Never the runner work dir: checkout cleans
+# that, and deploy.yml refuses to run while a unit points into it.
 [Unit]
 Description=NHDW profile swap worker (appsec + data layers for the demo console)
 After=network-online.target docker.service
@@ -11,7 +14,7 @@ After=network-online.target docker.service
 [Service]
 Type=simple
 User=biniyam
-Environment=NHDW_REPO=/opt/actions-runner/_work/national-data-intelligence-platform/national-data-intelligence-platform
+Environment=NHDW_REPO=/opt/nhdw-runtime
 Environment=NHDW_PROFILE_STATE_DIR=/opt/nhdw-state
 Environment=NHDW_PROFILE_DIR=/opt/nhdw-profiles
 ExecStart=/usr/bin/env bash ${NHDW_REPO}/bundle/scripts/profile-swap-worker.sh
