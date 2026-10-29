@@ -22,6 +22,7 @@
  */
 import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import * as ml from '../../api/ml';
+import ModelControls from './ModelControls';
 import { useTableKit, TableToolbar, TablePager, SortTh } from '../../kit/tableKit';
 import '../../styles/mlhealth.css';
 
@@ -502,6 +503,7 @@ export default function MLHealth() {
                                 item={it}
                                 det={details[it.model_name] ?? { loading: true, err: null, drift: null, perf: null }}
                               />
+                              <ModelControls model={it.model_name} />
                             </td>
                           </tr>
                         )}

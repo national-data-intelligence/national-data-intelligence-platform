@@ -21,6 +21,16 @@ allow if {
   input.resource.sensitivity in ["default", ""]
 }
 
+# permission[1]: PRG / members=all / gran=aggregate / verbs=['read']
+allow if {
+  input.resource.subject == "PRG"
+  input.action.verb in ["read"]
+  input.resource.granularity == "aggregate"
+  input.context.purpose_of_use in ["public-health"]
+  input.resource.data_class in ["DC.CAT"]
+  input.resource.sensitivity in ["default", ""]
+}
+
 # Top-level decision object — what the PEP gets back.
 decision := {
   "allow":   allow,
