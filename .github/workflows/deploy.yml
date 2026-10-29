@@ -66,6 +66,27 @@ jobs:
       # overlay — Secrets themselves are never applied from CI
       NHDW_SECRETS_FILE: ${{ vars.NHDW_SECRETS_FILE || '/home/biniyam/ethio-nhdw-demo/1_infrastructure/k8s/overlays/dev/secrets.yaml' }}
     steps:
+      # checkout cleans this work dir (git clean -ffdx, then delete-and-recreate
+      # if that fails). On 2026-10-29 that deleted files eight docker stacks had
+      # been started from. Refuse to run while anything on the host lives in the
+      # work dir or checkout cannot clean it. Runs before checkout, so it is
+      # inline; bundle/scripts/predeploy-check.sh is the fuller pre-flight.
+      - name: Guard — the runner work dir must be disposable
+        shell: bash
+        run: |
+          ws="$GITHUB_WORKSPACE"; me="$(id -un)"; bad=0
+          if [ -d "$ws" ]; then
+            m=$(docker ps -aq | xargs -r docker inspect -f '{{.Name}} {{range .Mounts}}{{.Source}} {{end}}' \
+                | grep -F "$ws" | awk '{print $1}' | tr -d / | tr '\n' ' ')
+            [ -n "$m" ] && { echo "::error::containers mount files from $ws: $m"; bad=1; }
+            u=$(grep -lF "$ws" /etc/systemd/system/*.service 2>/dev/null | xargs -r -n1 basename | tr '\n' ' ')
+            [ -n "$u" ] && { echo "::error::systemd units run from $ws: $u"; bad=1; }
+            f=$(find "$ws" -xdev ! -user "$me" -print -quit 2>/dev/null)
+            [ -n "$f" ] && { echo "::error::checkout cannot clean $ws, not owned by $me: $f"; bad=1; }
+          fi
+          [ "$bad" = 0 ] && echo "work dir is disposable: $ws"
+          exit "$bad"
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

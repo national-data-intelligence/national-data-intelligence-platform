@@ -51,7 +51,7 @@ else
 fi
 units=$(grep -lF "$WS" /etc/systemd/system/*.service 2>/dev/null | xargs -r -n1 basename | tr '\n' ' ')
 [ -z "$units" ] && pass "no systemd unit runs from the work dir" \
-                || warn "systemd units run scripts from the work dir (checkout replaces them mid-run): $units"
+                || fail "systemd units run scripts from the work dir (checkout deletes them mid-run): $units"
 if [ -d "$WS" ]; then
   owner=$(stat -c %U "$WS")
   foreign=$(find "$WS" -xdev ! -user "$owner" -print 2>/dev/null | head -3)
@@ -86,7 +86,7 @@ else
   [ "$days" -le 7 ] && pass "CI deployed within the last week" \
                     || warn "no successful CI deploy for $days days; live was changed by other means since"
   if [ -n "$TSHA" ] && git -C "$REPO" cat-file -e "$LSHA^{commit}" 2>/dev/null; then
-    info "this deploy applies $(git -C "$REPO" rev-list --count "$LSHA..$TSHA") commit(s) since then, not only the latest PR"
+    info "$(git -C "$REPO" rev-list --count "$LSHA..$TSHA") commit(s) since then; ci-redeploy rebuilds only components the push touched, but builds them from the whole $TARGET tree"
   fi
   boot=$(uptime -s)
   [ "$(date -d "$boot" +%s)" -gt "$(date -d "$LWHEN" +%s)" ] \
