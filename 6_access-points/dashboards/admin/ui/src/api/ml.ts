@@ -115,6 +115,69 @@ export type PerfRow = {
   computed_at: string | null;
 };
 
+/* ── model controls: schema + ad-hoc run (run-on-inputs) ───────────────
+ * The operator TRIGGERS retrain/promote (role-gated _manage_gate) and may
+ * RUN a model on typed inputs. retrain/promote above are the triggers;
+ * getSchema builds the run form, submitPredict stages the CSV + spawns a
+ * predict-adhoc runner Job, getJob polls it. getSchema/predict/jobs are
+ * PRG/DC.CAT (catalogue metadata + own ad-hoc run) — the operator's DC.CAT
+ * carve-out (r-ops-adm.yaml, 2026-10-23) covers them; a 403 here means that
+ * OPA grant hasn't been deployed yet, surfaced honestly by the caller. */
+
+export type MlSchemaField = {
+  name: string;
+  type: string | null;                      // MLflow signature type (double|long|string…)
+  required: boolean;
+  example?: unknown;                        // input_example value → form placeholder
+};
+
+export type MlSchema = {
+  model: string;
+  version: string | null;
+  published: boolean;                       // false ⇒ no signature logged
+  inputs: MlSchemaField[];
+  outputs: MlSchemaField[];
+  input_example: Record<string, unknown>;
+};
+
+export type MlPredictSubmit = {
+  model: string;
+  job_id: string;
+  namespace: string;
+  status: 'submitted' | string;
+  input_uri: string;
+  output_uri: string;
+  poll: string;
+};
+
+export type MlJobStatus = {
+  job_id: string;
+  model: string;
+  mode: string | null;
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | string;
+  active: number;
+  succeeded: number;
+  failed: number;
+  start_time: string | null;
+  completion_time: string | null;
+  error: string | null;
+  result_uri: string | null;
+  result_url: string | null;               // presigned output-CSV download on success
+};
+
+export const getSchema = (model: string) =>
+    _json<MlSchema>(`/${encodeURIComponent(model)}/schema`);
+export const submitPredict = (
+    model: string,
+    body: { csv: string } | { rows: Record<string, unknown>[] }) =>
+    _json<MlPredictSubmit>(`/${encodeURIComponent(model)}/predict`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+export const getJob = (jobId: string) =>
+    _json<MlJobStatus>(`/jobs/${encodeURIComponent(jobId)}`);
+
 export const getFleet = () =>
     _json<{ items: FleetItem[] }>('/monitoring/fleet');
 export const getDrift = (model: string, limit = 200) =>

@@ -59,6 +59,7 @@
     - rm-statboard
     - rm-stock-heatmap
     - rm-stockout-impact
+    - rm-stockout-risk-kpi
     - rm-wastage
     - rm-workforce
     - st-alert-subs
@@ -125,6 +126,7 @@
     - ct-dispatch
     - rm-statboard
     - rm-stock-heatmap
+    - rm-stockout-risk-kpi
     - rm-workforce
     - st-alert-subs
     - st-display
@@ -188,6 +190,7 @@
     - ct-dispatch
     - rm-statboard
     - rm-stock-heatmap
+    - rm-stockout-risk-kpi
     - rm-workforce
     - st-alert-subs
     - st-display
@@ -305,6 +308,7 @@
     - rm-statboard
     - rm-stock-heatmap
     - rm-stockout-impact
+    - rm-stockout-risk-kpi
     - rm-wastage
     - rm-workforce
     - st-alert-subs

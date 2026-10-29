@@ -37,6 +37,10 @@ CATALOG = REPO / "6_access-points/dashboards/internal-bi/catalog"
 READS_NO_MART = {
     "ex-templates", "ex-sql-editor", "ex-saved-queries", "ex-audit-trail",   # export tools: ad-hoc SQL / ops state
     "st-profile", "st-display", "st-alert-subs", "st-security",              # settings: per-user ops state
+    # ML serving: reads a model's batch predictions (ops_ml.ml_predictions via the
+    # gateway ML route), not a dbt mart; its lineage is the MLflow run, which the
+    # exposures generator does not model yet.
+    "rm-stockout-risk-kpi",
 }
 
 spec = importlib.util.spec_from_file_location("gen_exposures", HERE / "gen-exposures.py")
