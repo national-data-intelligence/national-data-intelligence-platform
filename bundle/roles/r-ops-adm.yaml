@@ -29,10 +29,23 @@ role:
     system the admin runs, not patient or programme health data; the
     admin dashboard's Quality & Lineage section reads them. The deny-all
     on every health data class stands.
+
+    Second carve-out (2026-10-23): DC.CAT — the ML model CATALOGUE (model
+    versions, input/output schema, the operator's own ad-hoc run jobs) that
+    Admin > ML Health > Operator controls reads. Catalogue metadata, no
+    stored predictions and no health data. Granted on the live permission
+    store on 2026-10-23 and written here so a reseed keeps it.
   intentional_deny: true
   permissions:
     - subject: PRG
       data_class: [DC.QLT]
+      members: all
+      granularity: aggregate
+      sensitivity: []
+      verbs: [read]
+      purpose_of_use: [public-health]
+    - subject: PRG
+      data_class: [DC.CAT]
       members: all
       granularity: aggregate
       sensitivity: []
