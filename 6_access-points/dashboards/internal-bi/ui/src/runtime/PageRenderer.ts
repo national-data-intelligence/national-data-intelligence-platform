@@ -38,16 +38,16 @@ import { host } from './host';
 /** Section-id slug → sprite icon (docs/final-mockkups: section markers are icons, not ①②③). */
 const SECTION_ICON: Record<string, string> = {
   // overview
-  headline: 'i-globe', reliability: 'i-shield-check', 'act-now': 'i-megaphone', trust: 'i-shield',
+  reliability: 'i-shield-check', 'act-now': 'i-target', trust: 'i-database',
   // disease
-  'signal-header': 'i-pulse', 'geographic-risk': 'i-map', 'outbreak-operations': 'i-virus',
-  'anomaly-trend': 'i-chart-line', 'climate-drivers': 'i-leaf',
+  'signal-header': 'i-pulse', 'geographic-risk': 'i-map', 'outbreak-operations': 'i-outbreak',
+  'anomaly-trend': 'i-chart-line', 'climate-drivers': 'i-thermo',
   // resource
-  'stockout-headline': 'i-package', 'supply-stress-geography': 'i-map', 'commodity-detail': 'i-pill',
-  'stockout-impact-service': 'i-truck', procurement: 'i-cart',
+  'act-this-week': 'i-calendar', 'stockout-headline': 'i-package', 'supply-stress-geography': 'i-map',
+  'commodity-detail': 'i-pill', 'stockout-impact-service': 'i-hospital', procurement: 'i-cart',
   // service
-  topline: 'i-chart-bar', 'flagship-attainment': 'i-shield-check', 'care-cascades': 'i-users',
-  'reported-vs-recorded': 'i-handshake', 'operational-quality': 'i-check-circle',
+  topline: 'i-chart-bar', 'flagship-attainment': 'i-flag', 'care-cascades': 'i-users',
+  'reported-vs-recorded': 'i-compare', 'operational-quality': 'i-check-circle',
 };
 
 /** Standard empty state — one visual language for "no real data" everywhere.
@@ -222,12 +222,11 @@ function renderSection(section: ResolvedSection, page: ResolvedPage, mount: HTML
     const hdr = document.createElement('div');
     hdr.className = 'ps-hdr';
     const title = (section.title || '').replace(/^[①-⑳]\s*/, '');
-    // Section titles are icon-free (owner 2026-07-13 — no icons on section titles).
-    void SECTION_ICON;
+    const ico = SECTION_ICON[String(section.id).split('/').pop() || ''];
     hdr.innerHTML = `
       <div>
         ${section.eyebrow ? `<div class="ps-eyebrow">${section.eyebrow}</div>` : ''}
-        ${title ? `<h3 class="ps-title">${title}</h3>` : ''}
+        ${title ? `<h3 class="ps-title">${ico ? `<svg class="ico" aria-hidden="true"><use href="#${ico}"/></svg>` : ''}${title}</h3>` : ''}
         ${section.description ? `<p class="ps-sub">${section.description}</p>` : ''}
       </div>`;
     hdr.appendChild(noteEl);   // .ps-hdr is flex space-between → right-aligned

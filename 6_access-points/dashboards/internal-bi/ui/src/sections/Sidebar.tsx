@@ -12,7 +12,7 @@ import { useDashboardSpec } from '../api/spec';
 
 const PAGES = [
   { id: 'overview', ico: 'i-grid',       title: 'Overview',           page_id: 'internal-bi/overview' },
-  { id: 'disease',  ico: 'i-alert',      title: 'Disease Surveillance', page_id: 'internal-bi/disease' },
+  { id: 'disease',  ico: 'i-surveillance',      title: 'Disease Surveillance', page_id: 'internal-bi/disease' },
   { id: 'resource', ico: 'i-package',    title: 'Resource Management', page_id: 'internal-bi/resource' },
   { id: 'control-tower', ico: 'i-truck', title: 'Supply Control Tower', page_id: 'internal-bi/control-tower' },
   { id: 'service',  ico: 'i-chart-line', title: 'Service Performance', page_id: 'internal-bi/service' },
@@ -59,8 +59,9 @@ export default function Sidebar() {
             ? <img src={logoSrc} alt="" className="sidehead-logo" />
             : null}
           <div className="sidehead-text">
-            <div className="title">{platformAbbr}</div>
-            <div className="subtitle">Internal BI</div>
+            {/* The surface name leads the header; the Palladium logo sits in the footer. */}
+            <div className="title">Internal BI</div>
+            {logoSrc ? <div className="subtitle">{platformAbbr}</div> : null}
           </div>
         </a>
       </div>
@@ -76,8 +77,9 @@ export default function Sidebar() {
 
       {/* Static product identity only — no fabricated liveness/build claims. */}
       <div className="bi-sidebar-foot">
-        <strong>Palladium v1.0</strong> · PROD<br />
-        <span>Data Intelligence Platform</span>
+        {logoSrc ? null : <img src="/static/assets/brand/palladium-logo-white.png" alt={platformAbbr} className="sidefoot-brand" />}
+        <strong>National Data Intelligence Platform</strong><br />
+        <span>v 1.0</span>
       </div>
     </aside>
   );

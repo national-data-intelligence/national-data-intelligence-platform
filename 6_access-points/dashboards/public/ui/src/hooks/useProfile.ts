@@ -68,7 +68,7 @@ export const BUNDLED: Profile = {
   label: '',
   country: { name: '', official_name: '', adjective: '', iso2: '', iso3: '' },
   ministry: { abbr: '', name: 'Ministry of Health' },
-  platform: { name: 'National Health Data Warehouse', abbr: 'NHDW' },
+  platform: { name: 'Data Intelligence Platform', abbr: 'Palladium' },
   geography: {
     levels: [
       { code: 'admin1', singular: 'Region', plural: 'Regions' },
@@ -89,14 +89,14 @@ export type Copy = Record<string, any>;
  *  copy/public.json and is merged OVER this. */
 export const BUNDLED_COPY: Copy = {
   govbar: {
-    skip: 'Skip to content', mark_text: 'NHDW',
-    mark_tag: 'National Health Data Warehouse',
+    skip: 'Skip to content', mark_text: 'Palladium',
+    mark_tag: 'Data Intelligence Platform',
     nav: { home: 'Home', data: 'Open data', articles: 'Articles' },
     request_access: 'Request access', dashboards: 'Dashboards',
   },
   hero: {
     strip_volume: 'Vol. 01', strip_series: 'Public Series',
-    strip_owner: 'National Health Data Warehouse',
+    strip_owner: 'Data Intelligence Platform',
     eyebrow: 'Public health information service',
     headline_lead: 'National health data,', headline_accent: 'in one place.',
     headline_native: '',
@@ -109,7 +109,7 @@ export const BUNDLED_COPY: Copy = {
     cta_primary: 'Open the data catalogue', cta_secondary: 'Read the latest bulletins',
   },
   footer: {
-    brand_line: 'National Health Data Warehouse · NHDW',
+    brand_line: 'Data Intelligence Platform · Palladium',
     owner_line: 'Ministry of Health',
     columns: [
       { title: 'About', links: ['Methodology', 'Governance', 'Contact'] },

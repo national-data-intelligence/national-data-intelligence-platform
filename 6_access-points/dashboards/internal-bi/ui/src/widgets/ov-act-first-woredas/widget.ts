@@ -33,7 +33,7 @@ const def: WidgetDef = {
       rank: Number(r.rank ?? 0),
       woreda: r.woreda ?? '-',
       region: regionName(String(r.region ?? '')),
-      p_alarm: Number(r.p_alarm ?? 0),
+      p_alarm: Math.round(Number(r.p_alarm ?? 0) * 100),   // fetcher: 0–1 probability
       readiness: Number(r.readiness_index ?? 0),
       reliability: Number(r.reporting_reliability_pct ?? 0),
       evidence: r.evidence ?? '-',
@@ -55,8 +55,7 @@ const def: WidgetDef = {
     ];
 
     ctx.el.innerHTML = `
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:.6rem">
-        <p style="font-size:.82rem;color:${t.ink[2]};margin:0">Where disease signal meets weak readiness this week</p>
+      <div style="display:flex;align-items:flex-start;justify-content:flex-end;gap:1rem;margin-bottom:.6rem">
         <button type="button" class="ov-af-link" style="flex-shrink:0;background:${t.paper};color:${t.ink[1]};
           border-radius:8px;padding:.3rem .7rem;font-size:.78rem;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.08)">View full action queue</button>
       </div>

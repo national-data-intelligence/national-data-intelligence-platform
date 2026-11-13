@@ -1,5 +1,5 @@
 id: sv-cascade-tb
-title: TB Diagnostic Cascade
+title: TB Cascade
 kind: funnel
 requires:
   subject: PRG

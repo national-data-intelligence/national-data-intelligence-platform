@@ -13,7 +13,6 @@
  * top-3 alert list renders in the statCard body zone.
  */
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
-import { statCard } from '../_shared/charts';
 
 function pctColor(v: number, t: WidgetCtx['theme']): string {
   return v >= 70 ? t.status.alert : v >= 55 ? t.status.watch : t.ink[2];
@@ -44,12 +43,18 @@ const def: WidgetDef = {
       </div>`;
     }).join('');
     const alertCount = Number(r.alert_count ?? 0);
-    return statCard(ctx.el, {
-      subtitle: 'New cases reported this week',
-      value: Number(r.new_cases ?? 0).toLocaleString(),
-      note: `${alertCount} model alert${alertCount === 1 ? '' : 's'}, top 3 by P(alarm)`,
-      body: list,
-    }, t);
+    // The fetcher sums every week on file (not the latest week), so the figure is
+    // labelled as a total until the data side sends the latest week.
+    ctx.el.innerHTML = `
+      <div style="display:flex;flex-direction:column;height:100%;gap:.55rem">
+        <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${t.ink[3]};white-space:nowrap">Total reported cases</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:-.3rem">
+          <div style="font-size:1.95rem;font-weight:800;letter-spacing:-.025em;color:${t.ink[0]};font-variant-numeric:tabular-nums;line-height:1.1">${Number(r.new_cases ?? 0).toLocaleString()}</div>
+          ${alertCount ? `<span style="flex-shrink:0;padding:.2rem .6rem;border-radius:999px;background:var(--alert-50);color:${t.status.alert};font-size:.72rem;font-weight:700">${alertCount} alert${alertCount === 1 ? '' : 's'}</span>` : ''}
+        </div>
+        ${list ? `<div style="margin-top:auto">${list}</div>` : ''}
+      </div>`;
+    return () => { /* pure DOM */ };
   },
 };
 export default def;

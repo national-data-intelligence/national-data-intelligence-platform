@@ -43,7 +43,7 @@ const def: WidgetDef = {
       cases: Number(r.cases_12w ?? 0).toLocaleString(),
       incidence: Number(r.incidence_100k ?? 0),
       cfr: `${Number(r.cfr_pct ?? 0).toFixed(1)}%`,
-      p_alarm: Number(r.p_alarm ?? 0),
+      p_alarm: Math.round(Number(r.p_alarm ?? 0) * 100),   // fetcher: 0–1 probability
       readiness: String(r.readiness ?? '-'),
       reliability: String(r.reliability ?? '-'),
     }));
@@ -60,7 +60,6 @@ const def: WidgetDef = {
     ];
 
     ctx.el.innerHTML = `
-      <p class="widget-lead" style="color:var(--ink-3);font-size:.8rem;margin:0 0 .6rem">Woredas with the heaviest disease burden over the last 12 weeks, ranked worst-first with readiness and reporting reliability so signal meets response.</p>
       <div class="dz-wt-tbl"></div>`;
     const mount = ctx.el.querySelector<HTMLElement>('.dz-wt-tbl')!;
     return paginatedTable(mount, shaped, columns, ctx.theme, { search: true, sort: true });

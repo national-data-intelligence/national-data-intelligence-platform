@@ -1,5 +1,5 @@
 id: rm-statboard
-title: Commodity Status & Facility Integrity
+title: "Commodity Status"
 kind: kpi
 requires:
   subject: PRD

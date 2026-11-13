@@ -1,7 +1,6 @@
 id: internal-bi/resource/stockout-headline
 page_id: internal-bi/resource
 title: Stockout Headline
-eyebrow: Commodity availability
 ordering: 10
 columns: 12
 dense: true

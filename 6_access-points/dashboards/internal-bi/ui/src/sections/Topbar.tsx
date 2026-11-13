@@ -20,11 +20,6 @@ const PAGE_TITLES: Record<string, string> = {
 
 // Per-page masthead subtitle (from the redesign mockups).
 const PAGE_SUBTITLES: Record<string, string> = {
-  overview: 'Key health-system indicators, action priorities, and system trust.',
-  disease:  'Disease trends, risk distribution, response readiness, and active operations.',
-  resource: 'Supply-chain and commodity readiness, and the service impact of stockouts.',
-  'control-tower': 'Orders, delivery runs and stock risk from district stores to facilities.',
-  service:  'Track quality, access, and outcomes across programmes and facilities.',
 };
 
 function initials(name: string): string {
@@ -67,11 +62,6 @@ export default function Topbar() {
   return (
     <header className="bi-topbar">
       <div className="tb-title">
-        <div className="breadcrumb">
-          <span>Palladium</span>
-          <span aria-hidden="true" style={{ opacity: 0.55 }}>›</span>
-          <span>{title}</span>
-        </div>
         <h2 style={{ fontFamily: 'var(--font-sans)', fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1 }}>{title}</h2>
         {subtitle && (
           <p style={{ margin: '0.2rem 0 0', fontSize: '0.92rem', fontWeight: 500, color: 'var(--ink-3)' }}>{subtitle}</p>

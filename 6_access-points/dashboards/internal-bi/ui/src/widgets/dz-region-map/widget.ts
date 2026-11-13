@@ -36,7 +36,7 @@
 import type { WidgetDef, WidgetCtx } from '../../runtime/types';
 import { choropleth, sparklineSvg } from '../_shared/charts';
 import { loadRegionContextGeo } from '../_shared/geo';
-import { regionName, COUNTRY, levelName } from '../_shared/reference';
+import { regionName } from '../_shared/reference';
 
 type Metric = 'burden' | 'readiness' | 'reliability';
 const META: Record<Metric, { col: string; label: string; icon: string; higherWorse: boolean; fmt: (v: number) => string; bands: string[] }> = {
@@ -132,7 +132,7 @@ const def: WidgetDef = {
         .dzm-sub{font-size:.78rem;color:${t.ink[2]};line-height:1.28;max-width:56ch}
         .dzm-seg .ico{margin-right:.32rem}
         /* map narrowed to ~0.9fr, metrics panel widened (ask #5) */
-        .dzm-main{display:grid;grid-template-columns:minmax(0,0.82fr) 384px;gap:.7rem;flex:1;min-height:362px}
+        .dzm-main{display:grid;grid-template-columns:minmax(0,1fr) 384px;gap:.7rem;flex:1;min-height:362px}
         .dzm-mapwrap{position:relative;min-width:0;min-height:350px;border-radius:16px;overflow:hidden;background:${t.paper};box-shadow:0 2px 10px rgba(15,23,42,.07),0 0 0 1px rgba(15,23,42,.04)}
         .dz-map-mount{width:100%;height:100%;min-height:350px}
         /* vertical burden legend, overlaid on the backdrop left of Ethiopia (ask #3) */
@@ -181,7 +181,7 @@ const def: WidgetDef = {
       </style>
       <div class="dzm">
         <div class="dzm-head">
-          <div class="dzm-sub">Explore health burden and system readiness across ${COUNTRY.name ? `${esc(COUNTRY.name)}'s ` : ''}${esc(levelName('admin1', true).toLowerCase())}${focusName ? `, focused on <b>${esc(focusName)}</b>` : ''}.</div>
+          <div class="dzm-sub">${focusName ? `Focused on <b>${esc(focusName)}</b>` : ''}</div>
           <div class="seg dzm-seg">
             <button data-metric="burden" class="active"><svg class="ico ico-sm"><use href="#i-chart-bar"/></svg>Burden</button>
             <button data-metric="readiness"><svg class="ico ico-sm"><use href="#i-shield-check"/></svg>Readiness</button>

@@ -1,7 +1,6 @@
 id: internal-bi/resource/act-this-week
 page_id: internal-bi/resource
 title: Act This Week
-eyebrow: Outbreaks vs response stock
 ordering: 5
 columns: 12
 dense: true

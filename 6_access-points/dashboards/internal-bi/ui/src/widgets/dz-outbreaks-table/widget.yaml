@@ -1,5 +1,5 @@
 id: dz-outbreaks-table
-title: Active Outbreaks
+title: Active
 kind: table
 requires:
   subject: PRG

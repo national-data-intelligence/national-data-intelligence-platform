@@ -160,7 +160,7 @@ function showAuthError() {
     window.location.protocol + '//' +
     window.location.host.replace(/^[^.]+/, 'public');
   document.documentElement.innerHTML = `
-  <head><meta charset="utf-8"><title>Sign-in didn't complete | NHDW</title>
+  <head><meta charset="utf-8"><title>Sign-in didn't complete · National Data Intelligence Platform</title>
   <style>
     body{font-family:Inter,system-ui,sans-serif;background:#f5efe6;color:#3a2c1e;
          display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}

@@ -20,7 +20,7 @@ export default function Footer() {
     <footer className="foot">
       <div className="foot-inner">
         <div>
-          <strong>Community Workshop Portal · {profile.platform?.abbr || 'NHDW'}</strong><br />
+          <strong>Community Workshop Portal · {profile.platform?.abbr || 'Palladium'}</strong><br />
           {owner ? <>{owner}<br /></> : null}
           <span className="foot-byline">For researchers, developers, partners, and the open public</span>
         </div>

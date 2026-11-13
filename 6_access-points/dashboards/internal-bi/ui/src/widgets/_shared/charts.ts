@@ -16,7 +16,7 @@ export const ALARM_RAMP = ['#EAF7F0', '#A7E0C4', '#F5D98A', '#F19A3E', '#EF4444'
 export const alarmBandColor = (p: number): string =>
   p < 0.2 ? '#A7E0C4' : p < 0.5 ? '#F5D98A' : p < 0.8 ? '#F19A3E' : '#EF4444';
 /** Stock ramp — low = red (stockout risk), high = green (healthy). Cool palette. */
-export const STOCK_RAMP = ['#EF4444', '#F19A3E', '#F5D98A', '#A7E0C4', '#22A06B'];
+export const STOCK_RAMP = ['#E39A9F', '#EDBF8F', '#F2E2B0', '#C2DECB', '#86BFA0'];
 
 /** Wire an echarts instance to container resize + return its disposer. */
 function bindResize(chart: echarts.ECharts): () => void {
@@ -184,14 +184,14 @@ export function funnelCascade(el: HTMLElement, data: { name: string; pct: number
     return `<div style="position:relative;height:${segH.toFixed(1)}px">
         <div style="position:absolute;inset:0;background:${col};clip-path:${clip}"></div>
         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
-          <span style="font-size:12px;font-weight:600;color:${ink(col)};white-space:nowrap;font-family:${theme.fontSans}">${d.name} ${Math.round(d.pct)}</span>
+          <span style="font-size:11px;font-weight:600;color:${ink(col)};white-space:nowrap;font-family:${theme.fontSans}">${d.name} ${Math.round(d.pct)}</span>
         </div>
       </div>`;
   }).join('');
 
   el.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:${H + 56}px">
-      <div style="width:74%;display:flex;flex-direction:column;gap:${gap}px">${segs}</div>
+      <div style="width:94%;display:flex;flex-direction:column;gap:${gap}px">${segs}</div>
     </div>`;
   return () => { /* pure DOM */ };
 }
@@ -320,6 +320,27 @@ export function paginatedTable(
   return () => { /* pure DOM, nothing to dispose */ };
 }
 
+// ── Icon card (owner 2026-10-22): title top, value beneath, icon chip right, centred ──
+/** One stand-alone stat card in the house rule, for widgets that lay out their own grid.
+ *  `extra` is optional markup under the value (e.g. a status pill). */
+export function iconCard(theme: Theme, o: { label: string; value: string; icon?: string; color?: string; extra?: string; big?: boolean }): string {
+  const col = o.color || theme.navy['600'];
+  const m = /^#?([0-9a-f]{6})$/i.exec(col); const n = m ? parseInt(m[1], 16) : 0;
+  const tint = m ? `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},0.13)` : col;
+  const isText = !/^[0-9.,\s%+\-/—]+[KMB%a-z ]*$/.test(String(o.value).trim());
+  const val = isText
+    ? `font-size:1.05rem;font-weight:700;line-height:1.2;color:${theme.ink[0]}`
+    : `font-size:${o.big ? '2.2rem' : '1.85rem'};font-weight:800;letter-spacing:-.03em;line-height:1.05;color:${theme.ink[0]};font-variant-numeric:tabular-nums`;
+  return `<div style="background:${theme.paper};border-radius:16px;padding:1rem 1.15rem;box-shadow:var(--shadow-1);display:flex;align-items:center;justify-content:space-between;gap:.75rem;min-width:0;height:100%;box-sizing:border-box">
+    <div style="display:flex;flex-direction:column;gap:.35rem;min-width:0">
+      <div style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;line-height:1.25;color:${theme.ink[3]}">${o.label}</div>
+      <div style="${val}">${o.value}</div>
+      ${o.extra ?? ''}
+    </div>
+    ${o.icon ? `<span style="display:inline-grid;place-items:center;width:42px;height:42px;border-radius:11px;background:${tint};color:${col};flex-shrink:0"><svg class="ico" aria-hidden="true" style="width:22px;height:22px"><use href="#${o.icon}"/></svg></span>` : ''}
+  </div>`;
+}
+
 // ── KPI strip (DOM tiles) ──────────────────────────────────────────────
 export interface KpiCell {
   label: string; value: string;
@@ -330,7 +351,36 @@ export interface KpiCell {
   status?: 'good' | 'watch' | 'alert' | 'info';
   icon?: string;                   // optional sprite id (e.g. 'i-shield-check') → colored chip + label row
   iconColor?: string;              // accent for the chip (defaults to a slate navy)
+  ring?: number;                   // 0–100: draw the value as an animated gradient ring instead of a number
 }
+
+/** Half-circle gauge (fuel-gauge style): track + blue→green arc that sweeps in once,
+ *  value in the bowl, 0 and 100 at the ends. No sweep under prefers-reduced-motion. */
+let gaugeSeq = 0;
+export function gaugeSvg(pct: number, label: string, theme: Theme, bare = false, width = 160): string {
+  if (!document.getElementById('gauge-sweep-css')) {
+    const st = document.createElement('style');
+    st.id = 'gauge-sweep-css';
+    st.textContent = '@keyframes gaugeSweep{from{stroke-dasharray:0 100}}' +
+      '.gauge-arc{animation:gaugeSweep 1.2s cubic-bezier(.4,0,.2,1) both}' +
+      '@media (prefers-reduced-motion: reduce){.gauge-arc{animation:none}}';
+    document.head.appendChild(st);
+  }
+  const p = Math.max(0, Math.min(100, pct)), id = `gaugeg${++gaugeSeq}`;
+  const arc = 'M 22 104 A 78 78 0 0 1 178 104';
+  const num = label.replace(/%$/, '');
+  return `<div style="width:100%;max-width:${width}px;margin:0 auto;flex-shrink:0" role="img" aria-label="${label}">
+    <svg viewBox="0 0 200 ${bare ? 112 : 122}" width="100%" style="display:block;overflow:visible">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1D4ED8"/><stop offset="1" stop-color="${theme.status.good}"/></linearGradient></defs>
+      <path d="${arc}" fill="none" stroke="${theme.navy['50'] || '#EEF2F7'}" stroke-width="16" stroke-linecap="round"/>
+      <path class="gauge-arc" d="${arc}" pathLength="100" fill="none" stroke="url(#${id})" stroke-width="16" stroke-linecap="round" stroke-dasharray="${p.toFixed(1)} 100"/>
+      ${bare ? '' : `<text x="100" y="98" text-anchor="middle" font-size="46" font-weight="800" fill="${theme.ink[0]}" style="font-variant-numeric:tabular-nums;letter-spacing:-.02em">${num}<tspan font-size="24" font-weight="700">${label.endsWith('%') ? '%' : ''}</tspan></text>`}
+      ${bare ? '' : `<text x="22" y="121" text-anchor="middle" font-size="11" font-weight="600" fill="${theme.ink[3]}">0</text>
+      <text x="178" y="121" text-anchor="middle" font-size="11" font-weight="600" fill="${theme.ink[3]}">100</text>`}
+    </svg>
+  </div>`;
+}
+
 export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols = 3): () => void {
   const tint = (hex: string, a: number) => {
     const m = /^#?([0-9a-f]{6})$/i.exec(hex); if (!m) return hex;
@@ -349,28 +399,41 @@ export function kpiStrip(el: HTMLElement, cells: KpiCell[], theme: Theme, cols =
   const hasDelta = cells.some(c => c.delta);
   const hasFoot = cells.some(c => c.foot || c.note);
   el.innerHTML =
-    `<div style="display:grid;grid-template-columns:repeat(${trackCols},1fr);gap:.7rem;height:100%">` +
+    `<div style="display:grid;grid-template-columns:repeat(${trackCols},minmax(0,1fr));gap:.7rem;height:100%">` +
     cells.map(c => {
       const ic = c.iconColor || theme.navy['600'];
-      const head = c.icon
-        ? `<div style="height:30px;display:flex;align-items:center;gap:.5rem">
-             <span style="display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;background:${tint(ic, 0.13)};color:${ic};flex-shrink:0"><svg class="ico" aria-hidden="true"><use href="#${c.icon}"/></svg></span>
-             <span style="font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${theme.ink[3]};${clamp}" title="${escAttr(c.label)}">${c.label}</span>
-           </div>`
-        : `<div class="kpi-lbl" style="height:16px;${clamp}" title="${escAttr(c.label)}">${c.label}</div>`;
+      // Card layout (owner 2026-10-22): title at the top, value beneath it, icon chip on
+      // the right, centred vertically. Every title reserves two lines so the values of a
+      // strip sit on one line whether or not a title wraps.
+      const narrow = trackCols >= 5;
+      const lbl = `<div style="font-size:${narrow ? '.66rem' : '.7rem'};font-weight:600;text-transform:uppercase;letter-spacing:${narrow ? '.02em' : '.06em'};line-height:1.25;min-height:2.5em;color:${theme.ink[3]};display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" title="${escAttr(c.label)}">${c.label}</div>`;
+      const chipBox = c.icon
+        ? `<span style="display:inline-grid;place-items:center;width:${narrow ? 32 : 40}px;height:${narrow ? 32 : 40}px;border-radius:${narrow ? 9 : 10}px;background:${tint(ic, 0.13)};color:${ic};flex-shrink:0"><svg class="ico" aria-hidden="true" style="width:${narrow ? 17 : 21}px;height:${narrow ? 17 : 21}px"><use href="#${c.icon}"/></svg></span>`
+        : '';
       // Normalised value row: numbers keep the large kpi-val size; long TEXT values
       // (e.g. a woreda name) step down and clamp to one line — no giant wrapping text.
       const isText = !/^[0-9.,\s%+\-/]+[KMB%]?$/.test(String(c.value).trim());
       const valStyle = isText
-        ? `font-size:1.12rem;font-weight:700;line-height:34px;${clamp}`
-        : 'line-height:34px';
+        ? 'font-size:.98rem;font-weight:700;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;align-content:center'
+        : narrow ? 'line-height:34px' : 'font-size:2.15rem;font-weight:800;letter-spacing:-.02em;line-height:40px';
+      if (c.ring != null) return `
+      <div class="kpi kpi-${c.status || 'info'}" style="flex-direction:row;align-items:center;justify-content:space-between;gap:.75rem">
+        <div style="display:flex;flex-direction:column;gap:.3rem;min-width:0;flex:1;align-self:flex-start">
+          ${lbl}
+          <div class="kpi-val" style="height:${narrow ? 34 : 40}px;${valStyle}">${c.value}</div>
+        </div>
+        <div style="width:112px;flex-shrink:0">${gaugeSvg(c.ring, c.value, theme, true, 112)}</div>
+      </div>`;
       return `
-      <div class="kpi kpi-${c.status || 'info'}" style="gap:.25rem">
-        ${head}
-        <div class="kpi-val" style="height:34px;${valStyle}" title="${escAttr(String(c.value))}">${c.value}</div>
+      <div class="kpi kpi-${c.status || 'info'}" style="flex-direction:row;align-items:center;justify-content:space-between;gap:${narrow ? '.5rem' : '.75rem'}">
+      <div style="display:flex;flex-direction:column;gap:.3rem;min-width:0;flex:1;align-self:flex-start">
+        ${lbl}
+        <div class="kpi-val" style="height:${narrow ? 34 : 40}px;${valStyle}" title="${escAttr(String(c.value))}">${c.value}</div>
         ${hasSub ? `<div style="height:16px;font-size:.73rem;color:${theme.ink[2]};${clamp}" title="${escAttr(c.sub || '')}">${c.sub || ''}</div>` : ''}
         ${hasDelta ? `<div class="kpi-delta ${c.deltaDir || ''}" style="height:16px;${clamp}">${c.delta || ''}</div>` : ''}
         ${hasFoot ? `<div class="kpi-tgt" style="margin-top:auto;height:24px;${clamp}" title="${escAttr(c.foot || c.note || '')}">${c.foot || c.note || ''}</div>` : ''}
+      </div>
+      ${chipBox}
       </div>`;
     }).join('') + `</div>`;
   return () => {};

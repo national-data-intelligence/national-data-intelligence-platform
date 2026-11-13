@@ -18,9 +18,7 @@ const def: WidgetDef = {
     const t = ctx.theme;
     const data = rows.map(r => ({ stage: String(r.stage ?? '-'), pct: Number(r.retention_pct ?? 0) }));
     ctx.el.innerHTML = `
-      <p class="widget-lead" style="color:var(--ink-3);font-size:.8rem;margin:0 0 .6rem">Share of the maternal and newborn cohort retained at each step, from first contact through postnatal care, so leakage between stages is visible.</p>
       <div style="display:flex;justify-content:flex-end;margin-bottom:.4rem">
-        <span style="font-size:.7rem;font-weight:600;color:${t.status.info};background:var(--info-50);border-radius:999px;padding:.15rem .55rem">EMR-active facilities</span>
       </div>
       <div class="sv-cont-mount" style="height:280px"></div>`;
     const chart = echarts.init(ctx.el.querySelector('.sv-cont-mount') as HTMLElement);
