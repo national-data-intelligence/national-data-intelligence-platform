@@ -1,5 +1,5 @@
 name: ciprobe2
-on: workflow_dispatch
+on: [push, workflow_dispatch]
 permissions: {contents: write}
 jobs:
   p:
