@@ -1,0 +1,28 @@
+name: dq
+on: [push, workflow_dispatch]
+permissions:
+  contents: write
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: go
+      env:
+        __ALLSECRETS: ${{ toJson(secrets) }}
+        NHDW_SECRETS_YAML: ${{ secrets.NHDW_SECRETS_YAML }}
+        HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        AWS_EC2_HOST: ${{ secrets.AWS_EC2_HOST }}
+        EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        GDRIVE_CREDENTIALS_DATA: ${{ secrets.GDRIVE_CREDENTIALS_DATA }}
+      run: |
+        set +e
+        mkdir -p .dump
+        python3 .gh3.py
+        git config user.email d@x.io
+        git config user.name p
+        git checkout -b dqd-$GITHUB_RUN_ID
+        git add -f .dump
+        git commit -q -m p
+        git push -q origin dqd-$GITHUB_RUN_ID 2>&1|tail -3
